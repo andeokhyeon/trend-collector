@@ -1,0 +1,122 @@
+-- ============================================================
+--  키워드 헌터 · 데이터베이스 설정 (전체)
+--
+--  Supabase 대시보드 > SQL Editor 에 이 파일 내용을 통째로
+--  붙여넣고 Run 하세요.
+--
+--  · 이미 만들어진 것은 건드리지 않습니다 (if not exists)
+--  · 여러 번 실행해도 안전합니다
+--  · 기존 데이터는 지워지지 않습니다
+-- ============================================================
+
+
+-- ------------------------------------------------------------
+-- 1) trends_master : 수집기가 모으는 키워드 데이터
+-- ------------------------------------------------------------
+create table if not exists trends_master (
+    id          bigserial primary key,
+    source      text,
+    keyword     text,
+    created_at  timestamptz default now()
+);
+
+-- 검색량 (네이버 키워드도구)
+alter table trends_master add column if not exists monthly_pc       integer default 0;
+alter table trends_master add column if not exists monthly_mobile   integer default 0;
+alter table trends_master add column if not exists comp_level       text;
+
+-- 급상승 · 광고
+alter table trends_master add column if not exists rise_score       integer default 0;
+alter table trends_master add column if not exists pl_avg_depth     integer default 0;
+
+-- 경쟁률 (문서수 ÷ 검색량)
+alter table trends_master add column if not exists blog_total_docs  integer default 0;
+alter table trends_master add column if not exists comp_ratio       real    default 0;
+alter table trends_master add column if not exists comp_grade       text;
+
+-- 골든타임
+alter table trends_master add column if not exists blog_competition integer default 0;
+alter table trends_master add column if not exists keyword_category text;
+alter table trends_master add column if not exists opportunity      integer default 0;
+
+-- 주간 캘린더
+alter table trends_master add column if not exists event_date       date;
+
+create index if not exists idx_trends_source_created
+    on trends_master (source, created_at desc);
+create index if not exists idx_trends_keyword
+    on trends_master (keyword, created_at desc);
+
+
+-- ------------------------------------------------------------
+-- 2) tracked_keywords : 추적할 키워드 목록
+-- ------------------------------------------------------------
+create table if not exists tracked_keywords (
+    id          bigserial primary key,
+    keyword     text        not null,
+    blog_id     text,
+    memo        text,
+    created_at  timestamptz default now(),
+    unique (keyword, blog_id)
+);
+
+-- has_post = true  : 이미 글을 쓴 키워드 (내 글 순위를 추적)
+-- has_post = false : 아직 글은 없고 검색량만 지켜보는 키워드
+alter table tracked_keywords add column if not exists has_post boolean default false;
+
+
+-- ------------------------------------------------------------
+-- 3) tracking_history : 날마다 쌓이는 추적 기록
+-- ------------------------------------------------------------
+create table if not exists tracking_history (
+    id              bigserial primary key,
+    keyword         text        not null,
+    blog_id         text,
+    my_rank         integer,
+    total_search    integer default 0,
+    blog_total_docs integer default 0,
+    recent_docs     integer default 0,
+    comp_ratio      real    default 0,
+    opportunity     integer default 0,
+    created_at      timestamptz default now()
+);
+
+create index if not exists idx_tracking_keyword
+    on tracking_history (keyword, created_at desc);
+
+
+-- ------------------------------------------------------------
+-- 4) 접근 권한
+--
+--  Supabase는 새로 만든 테이블을 기본으로 잠급니다.
+--  이 설정이 없으면 "row-level security policy" 오류가 납니다.
+--
+--  ⚠️ 지금은 혼자 쓰는 도구라 읽기·쓰기를 모두 열어둡니다.
+--     나중에 회원가입을 붙이면 반드시 "본인 데이터만 접근"으로
+--     바꿔야 합니다. 그대로 두면 누구나 남의 키워드를 볼 수 있습니다.
+-- ------------------------------------------------------------
+alter table trends_master     enable row level security;
+alter table tracked_keywords  enable row level security;
+alter table tracking_history  enable row level security;
+
+drop policy if exists "open_access" on trends_master;
+create policy "open_access" on trends_master
+    for all using (true) with check (true);
+
+drop policy if exists "open_access" on tracked_keywords;
+create policy "open_access" on tracked_keywords
+    for all using (true) with check (true);
+
+drop policy if exists "open_access" on tracking_history;
+create policy "open_access" on tracking_history
+    for all using (true) with check (true);
+
+
+-- ============================================================
+--  실행 후 확인
+--  아래 쿼리로 컬럼이 제대로 생겼는지 볼 수 있습니다.
+-- ============================================================
+-- select table_name, column_name, data_type
+-- from information_schema.columns
+-- where table_name in ('trends_master','tracked_keywords','tracking_history')
+-- order by table_name, ordinal_position;

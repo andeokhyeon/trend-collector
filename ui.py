@@ -1,0 +1,1619 @@
+"""
+디자인 시스템 및 공용 UI 컴포넌트.
+
+컨셉: '정밀 계측기(instrument panel)'
+이 제품이 하는 일은 키워드를 재는 것이므로, 계기판처럼 보이게 만든다.
+ - 모든 수치는 등폭(mono) 서체로 자릿수를 맞춰 읽기 쉽게
+ - 골드는 오직 '기회 신호'에만 쓰고, 나머지는 절제
+ - 등급은 어디서나 같은 색 칩으로 표시해서 학습 비용을 없앤다
+"""
+
+import streamlit as st
+
+# --- 토큰 ---------------------------------------------------
+INK = "#14161A"        # 본문
+MUTED = "#6B7280"      # 보조 텍스트
+LINE = "#E4E4DF"       # 경계선
+BASE = "#FAFAF7"       # 배경
+SURFACE = "#FFFFFF"    # 카드
+DEEP = "#1B3A4B"       # 딥 틸네이비 (구조/헤더)
+GOLD = "#C8963E"       # 기회 신호 (골든타임)
+GOOD = "#2E7D6B"       # 좋음
+WARN = "#B8873B"       # 주의
+BAD = "#C4553D"        # 나쁨
+
+GRADE_COLORS = {
+    # 누적 경쟁률
+    "최고": GOOD, "좋음": GOOD,
+    "보통": WARN,
+    "나쁨": BAD, "최악": BAD,
+    # 최근 30일 발행 강도
+    "매우한산": GOOD, "한산": GOOD,
+    "붐빔": BAD, "과열": BAD,
+    # 종합 진단
+    "비어 있는 자리": GOOD, "오래된 글만 많음": GOOD, "해볼 만함": GOOD,
+    "오래된 글이 1등": GOOD,
+    "지금 몰리는 중": WARN, "누적만 반영": WARN, "새 글 옛 글 섞임": WARN,
+    "이미 꽉 참": BAD, "어려움": BAD, "최신 글 경쟁": BAD,
+    "정보없음": MUTED, "검색량없음": MUTED,
+}
+
+LEVEL_COLORS = {
+    "매우활발": GOOD, "활발": GOOD,
+    "보통": WARN,
+    "저조": BAD, "휴면": BAD,
+    "정보없음": MUTED,
+}
+
+
+def inject_css():
+    st.markdown(f"""<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html, body, [class*="css"], .stApp {{
+font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+}}
+.stApp {{ background: {BASE}; }}
+/* Streamlit 기본 툴바 숨김
+   우상단 ⋮ 메뉴에는 'Clear caches', 'Deploy' 등 사용자가 알 필요 없는
+   개발자용 항목이 들어 있다. 잘못 누르면 캐시가 날아가 API를 다시 쓰게 된다. */
+#MainMenu, footer, header {{ visibility: hidden !important; }}
+[data-testid="stToolbar"],
+[data-testid="stMainMenu"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+[data-testid="stDeployButton"],
+.stAppDeployButton,
+[data-testid="stToolbarActions"],
+[data-testid="stAppViewBlockContainer"] > div:first-child:empty {{
+display: none !important;
+}}
+[data-testid="stHeader"] {{
+display: none !important; height: 0 !important;
+}}
+.block-container {{ padding-top: 2.2rem; max-width: 1240px; }}
+/* 수치는 전부 등폭으로 — 계측기 감각의 핵심 */
+.mono, .metric-val, .kpi-val {{
+font-family: 'IBM Plex Mono', monospace;
+font-variant-numeric: tabular-nums;
+}}
+/* 마스트헤드 */
+.masthead {{
+background: {DEEP};
+border-radius: 14px;
+padding: 22px 26px;
+margin-bottom: 18px;
+color: #fff;
+}}
+.masthead h1 {{
+font-size: 1.7rem; font-weight: 800; margin: 0;
+letter-spacing: -0.02em; color: #fff;
+}}
+.masthead p {{
+margin: 8px 0 0; font-size: .96rem;
+color: rgba(255,255,255,.62); line-height: 1.5;
+}}
+.masthead .rule {{
+height: 3px; width: 46px; background: {GOLD};
+margin-bottom: 10px; border-radius: 2px;
+}}
+.mast-head-row {{ display: flex; align-items: center; gap: 15px; }}
+.mast-head-row svg {{ flex-shrink: 0; }}
+/* 탭 */
+/* 탭 - 버튼 느낌 (표준 ARIA 속성으로 잡아 버전 무관하게 적용) */
+[role="tablist"] {{
+gap: 9px !important; border-bottom: none !important;
+padding: 6px 0 16px !important; flex-wrap: wrap !important;
+background: transparent !important; box-shadow: none !important;
+}}
+[role="tab"] {{
+height: auto !important; min-height: 44px !important;
+padding: 10px 20px !important; margin: 0 !important;
+background: {SURFACE} !important;
+border: 1.5px solid {LINE} !important;
+border-radius: 999px !important;
+color: #4A5560 !important;
+transition: all .16s ease !important;
+box-shadow: 0 1px 3px rgba(20,22,26,.05) !important;
+opacity: 1 !important;
+}}
+[role="tab"] *, [role="tab"] p, [role="tab"] div, [role="tab"] span {{
+font-size: 1rem !important; font-weight: 700 !important;
+color: inherit !important; margin: 0 !important;
+}}
+[role="tab"]:hover {{
+background: #FDF4E3 !important;
+border-color: {GOLD} !important;
+color: {DEEP} !important;
+transform: translateY(-1px);
+box-shadow: 0 4px 10px rgba(200,150,62,.22) !important;
+}}
+[role="tab"][aria-selected="true"] {{
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+color: #FFFFFF !important;
+box-shadow: 0 4px 12px rgba(27,58,75,.30) !important;
+}}
+[role="tab"][aria-selected="true"] *, [role="tab"][aria-selected="true"] p {{
+color: #FFFFFF !important;
+}}
+[role="tab"][aria-selected="true"]:hover {{
+background: #24506A !important; border-color: {GOLD} !important;
+}}
+/* Streamlit 기본 밑줄/하이라이트 완전 제거 */
+[data-baseweb="tab-highlight"], [data-baseweb="tab-border"],
+[role="tablist"] [class*="highlight"],
+[role="tablist"] > div:not([role="tab"]),
+[role="tablist"]::after, [role="tablist"]::before {{
+display: none !important; background: transparent !important;
+height: 0 !important; width: 0 !important;
+border: none !important; opacity: 0 !important;
+content: none !important;
+}}
+[role="tab"] {{ border-bottom: 1.5px solid {LINE} !important; }}
+[role="tab"][aria-selected="true"] {{ border-bottom-color: {DEEP} !important; }}
+[role="tab"]:hover {{ border-bottom-color: {GOLD} !important; }}
+[role="tab"][aria-selected="true"]:hover {{ border-bottom-color: {GOLD} !important; }}
+/* 하위 탭 - 상위 탭보다 작고 가볍게, 선택 시 골드 */
+[role="tabpanel"] [role="tab"] {{
+min-height: 36px !important; padding: 6px 15px !important;
+background: #F4F4EF !important; border-color: transparent !important;
+box-shadow: none !important; color: #5A6570 !important;
+}}
+[role="tabpanel"] [role="tab"] * {{ font-size: .92rem !important; font-weight: 600 !important; }}
+[role="tabpanel"] [role="tab"]:hover {{
+background: #FDF4E3 !important; border-color: {GOLD} !important;
+transform: none !important; box-shadow: none !important;
+}}
+[role="tabpanel"] [role="tab"][aria-selected="true"] {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+color: #fff !important; box-shadow: 0 2px 6px rgba(200,150,62,.30) !important;
+}}
+[role="tabpanel"] [role="tab"][aria-selected="true"] * {{ color: #fff !important; }}
+[role="tabpanel"] [role="tab"][aria-selected="true"]:hover {{
+background: #B8873B !important; border-color: #B8873B !important;
+}}
+[role="tabpanel"] [role="tablist"] {{ padding: 2px 0 12px !important; }}
+/* 3단계(골든타임 안 상품/서비스)는 더 작게 */
+[role="tabpanel"] [role="tabpanel"] [role="tab"] {{
+min-height: 32px !important; padding: 5px 13px !important;
+}}
+[role="tabpanel"] [role="tabpanel"] [role="tab"] * {{ font-size: .86rem !important; }}
+/* KPI 카드 */
+.kpi {{
+background: {SURFACE}; border: 1.5px solid {LINE};
+border-radius: 12px; padding: 17px 19px; height: 100%;
+}}
+.kpi-label {{
+font-size: .82rem; font-weight: 600; color: {MUTED};
+letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px;
+}}
+.kpi-val {{
+font-size: 1.85rem; font-weight: 600; color: {INK}; line-height: 1.15;
+white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+letter-spacing: -0.01em;
+}}
+.kpi-sub {{ font-size: .86rem; color: {MUTED}; margin-top: 4px; }}
+/* 등급 칩 */
+.chip {{
+display: inline-block; padding: 5px 14px; border-radius: 999px;
+font-size: .92rem; font-weight: 700; color: #fff;
+}}
+/* 기회 게이지 — 시그니처 요소 */
+.gauge-wrap {{
+background: {SURFACE}; border: 1px solid {LINE};
+border-radius: 12px; padding: 16px 18px; margin: 4px 0 2px;
+}}
+.gauge-top {{
+display: flex; justify-content: space-between;
+align-items: baseline; margin-bottom: 10px;
+}}
+.gauge-title {{ font-size: .96rem; font-weight: 700; color: {INK}; }}
+.gauge-num {{
+font-family: 'IBM Plex Mono', monospace; font-size: 1.6rem;
+font-weight: 600; color: {DEEP};
+}}
+.gauge-track {{
+height: 8px; background: #EFEFEA; border-radius: 999px; overflow: hidden;
+}}
+.gauge-fill {{ height: 100%; border-radius: 999px; }}
+.gauge-scale {{
+display: flex; justify-content: space-between;
+font-size: .78rem; color: {MUTED}; margin-top: 7px;
+font-family: 'IBM Plex Mono', monospace;
+}}
+/* 섹션 라벨 */
+.eyebrow {{
+font-size: .78rem; font-weight: 700; letter-spacing: .1em;
+text-transform: uppercase; color: {GOLD}; margin-bottom: 2px;
+}}
+.section-title {{
+font-size: 1.25rem; font-weight: 700; color: {INK}; margin-bottom: 10px;
+}}
+/* 안내 박스 */
+.note {{
+background: {SURFACE}; border: 1px solid {LINE};
+border-left: 3px solid {DEEP};
+border-radius: 8px; padding: 11px 14px;
+font-size: .94rem; color: #40454C; line-height: 1.65;
+}}
+.note-gold {{ border-left-color: {GOLD}; }}
+/* 사이드바 - 딥네이비 다크 */
+section[data-testid="stSidebar"] {{
+background: linear-gradient(180deg, {DEEP} 0%, #16303E 100%);
+border-right: 1px solid #0F2531;
+}}
+section[data-testid="stSidebar"] * {{ color: #DCE3E8; }}
+section[data-testid="stSidebar"] .stMarkdown p,
+section[data-testid="stSidebar"] label {{ color: #C3CED6 !important; }}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+section[data-testid="stSidebar"] .stCaption {{ color: #8FA3AF !important; }}
+section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,.13) !important; }}
+section[data-testid="stSidebar"] code {{
+background: rgba(200,150,62,.22) !important; color: #F0C77E !important;
+padding: 3px 8px; border-radius: 5px; font-weight: 700 !important;
+font-size: .88rem !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
+color: #A9BAC5 !important; font-size: .84rem !important;
+}}
+.side-brand {{
+display: flex; align-items: center; gap: 10px;
+font-size: 1.3rem; font-weight: 800; color: #fff !important;
+letter-spacing: -0.02em; margin-bottom: 2px;
+}}
+.side-brand span {{ color: {GOLD} !important; }}
+.side-brand svg {{ flex-shrink: 0; }}
+.side-tagline {{
+font-size: .84rem; color: #8FA3AF !important;
+margin: 0 0 4px 44px; letter-spacing: .01em;
+}}
+.side-label {{
+font-size: .78rem; font-weight: 700; letter-spacing: .1em;
+text-transform: uppercase; color: {GOLD} !important; margin-bottom: 8px;
+}}
+.plan-box {{
+border: 1px solid rgba(200,150,62,.35);
+background: rgba(200,150,62,.09);
+border-radius: 10px;
+padding: 14px 16px; font-size: .88rem; color: #C3CED6 !important; line-height: 1.65;
+}}
+.plan-box b {{ color: {GOLD} !important; }}
+/* 입력창 - 눈에 띄게 */
+.stTextInput input {{
+border: 2px solid {LINE} !important;
+border-radius: 10px !important;
+background: {SURFACE} !important;
+font-size: 1rem !important;
+padding: 11px 14px !important;
+color: {INK} !important;
+}}
+.stTextInput input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 3px rgba(27,58,75,.10) !important;
+}}
+.stTextInput input::placeholder {{ color: #A8AEB6 !important; }}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 사이드바 입력창
+   어두운 배경에 어두운 입력창을 얹으면 글자가 안 보이거나 클릭 지점이 헷갈린다.
+   흰 입력창으로 두는 편이 대비도 확실하고 오작동 여지도 없다. */
+section[data-testid="stSidebar"] [data-baseweb="input"],
+section[data-testid="stSidebar"] [data-baseweb="base-input"],
+section[data-testid="stSidebar"] .stTextInput > div,
+section[data-testid="stSidebar"] .stTextInput > div > div {{
+background: #FFFFFF !important;
+background-color: #FFFFFF !important;
+border-radius: 10px !important;
+}}
+section[data-testid="stSidebar"] .stTextInput input {{
+background: #FFFFFF !important;
+background-color: #FFFFFF !important;
+color: #14161A !important;
+-webkit-text-fill-color: #14161A !important;
+border: 2px solid #FFFFFF !important;
+border-radius: 10px !important;
+caret-color: {DEEP} !important;
+font-weight: 600 !important;
+font-size: .98rem !important;
+padding: 11px 13px !important;
+}}
+section[data-testid="stSidebar"] .stTextInput input::placeholder {{
+color: #9AA3AC !important;
+-webkit-text-fill-color: #9AA3AC !important;
+font-weight: 500 !important;
+}}
+section[data-testid="stSidebar"] .stTextInput input:focus {{
+border-color: {GOLD} !important;
+box-shadow: 0 0 0 3px rgba(200,150,62,.35) !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 상위노출 글 목록 */
+.serp-box {{ padding: 6px 10px; }}
+.serp-row {{
+display: flex; align-items: center; gap: 12px;
+padding: 9px 8px; border-bottom: 1px solid {LINE};
+font-size: .92rem; border-radius: 6px;
+}}
+.serp-row:last-child {{ border-bottom: none; }}
+.serp-head {{
+font-size: .78rem; font-weight: 700; color: {MUTED};
+letter-spacing: .05em; text-transform: uppercase;
+border-bottom: 2px solid #D6DDE3;
+}}
+.serp-rank {{
+flex: 0 0 34px; text-align: center; font-weight: 800;
+font-family: 'IBM Plex Mono', monospace; font-size: 1rem;
+}}
+.serp-head .serp-rank {{ font-size: .78rem; }}
+.serp-title {{
+flex: 1 1 auto; color: {INK}; overflow: hidden;
+text-overflow: ellipsis; white-space: nowrap;
+}}
+.serp-blogger {{
+flex: 0 0 130px; color: {MUTED}; font-size: .84rem;
+overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+.serp-age {{
+flex: 0 0 74px; text-align: right; font-weight: 700; font-size: .85rem;
+font-family: 'IBM Plex Mono', monospace;
+}}
+.mine-tag {{
+background: {GOLD}; color: #fff; font-size: .72rem; font-weight: 700;
+padding: 2px 7px; border-radius: 999px; margin-left: 6px;
+}}
+/* 제목 단어 칩 - 자주 나올수록 진하게 */
+.wchip {{
+display: inline-flex; align-items: center; gap: 6px;
+padding: 6px 13px; border-radius: 999px; margin: 3px;
+font-size: .92rem; font-weight: 700; color: #fff;
+}}
+.wchip b {{
+font-family: 'IBM Plex Mono', monospace; font-size: .8rem;
+background: rgba(255,255,255,.28); padding: 1px 6px; border-radius: 999px;
+}}
+/* 개요 항목 */
+.outline-item {{
+display: flex; gap: 12px; padding: 10px 0;
+border-bottom: 1px dashed {LINE};
+}}
+.outline-item:last-child {{ border-bottom: none; }}
+.outline-num {{
+flex: 0 0 auto; min-width: 46px; height: 26px; border-radius: 999px;
+background: {DEEP}; color: #fff; font-size: .76rem; font-weight: 700;
+display: flex; align-items: center; justify-content: center;
+padding: 0 10px;
+}}
+.outline-h {{ font-size: .98rem; font-weight: 700; color: {INK}; }}
+.outline-w {{ font-size: .82rem; color: {MUTED}; margin-top: 2px; }}
+/* AI 판단 브리핑 */
+.brief-box {{
+background: {SURFACE}; border: 2px solid {LINE}; border-radius: 12px;
+padding: 16px 19px; margin: 8px 0 12px;
+}}
+.brief-top {{ display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }}
+.brief-tag {{
+color: #fff; font-size: .8rem; font-weight: 800;
+padding: 4px 12px; border-radius: 999px;
+}}
+.brief-title {{
+font-size: .78rem; font-weight: 700; letter-spacing: .1em;
+text-transform: uppercase; color: {MUTED};
+}}
+.brief-head {{
+font-size: 1.18rem; font-weight: 800; color: {INK};
+line-height: 1.45; margin-bottom: 10px;
+}}
+.brief-reasons {{
+margin: 0 0 11px; padding-left: 19px;
+font-size: .94rem; color: #40454C; line-height: 1.75;
+}}
+.brief-action {{
+background: #F6F7F4; border-radius: 9px; padding: 11px 14px;
+font-size: .94rem; color: #2A2F35; line-height: 1.6;
+}}
+.brief-action b {{ color: {DEEP}; font-size: .82rem; }}
+.brief-watch {{
+margin-top: 8px; font-size: .86rem; color: {BAD}; font-weight: 600;
+}}
+/* 추적 키워드 카드 */
+.track-grid {{
+display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+gap: 10px; margin-bottom: 6px;
+}}
+/* 카드 높이를 고정한다.
+   내용 길이에 따라 카드가 들쭉날쭉하면 줄이 어긋나 읽기 어렵다.
+   내용은 위에서부터 채우고, 남는 공간은 아래에 둔다. */
+.track-card {{
+background: {SURFACE}; border: 2px solid #D8DDE2; border-radius: 12px;
+padding: 12px 15px 14px;
+min-height: 214px;
+display: flex; flex-direction: column;
+box-shadow: 0 1px 3px rgba(20,22,26,.05);
+}}
+.track-card:hover {{ border-color: {DEEP}; }}
+/* 내가 쓴 키워드 — 두꺼운 테두리 + 다른 배경으로 확실히 구분 */
+.track-card.mine {{
+border: 3px solid {DEEP};
+background: linear-gradient(180deg, #F4F8FA 0%, {SURFACE} 55%);
+box-shadow: 0 2px 8px rgba(27,58,75,.14);
+}}
+.track-card.watching {{
+background: {SURFACE};
+border-style: dashed;
+}}
+.tc-head {{ margin-bottom: 6px; }}
+.tc-tag {{
+display: inline-block; font-size: .7rem; font-weight: 800;
+padding: 2px 9px; border-radius: 999px;
+background: {DEEP}; color: #fff; letter-spacing: -.01em;
+}}
+.tc-tag.watch {{
+background: transparent; color: {MUTED};
+border: 1px dashed #C6CCD2; font-weight: 700;
+}}
+.tc-kw {{
+font-size: .98rem; font-weight: 800; color: {INK};
+margin-bottom: 8px; padding-bottom: 8px;
+border-bottom: 1px solid {LINE};
+overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+.tc-rank {{
+font-family: 'IBM Plex Mono', monospace;
+font-size: 1.6rem; font-weight: 600; line-height: 1.1;
+}}
+.tc-chg {{ font-size: .86rem; font-weight: 700; margin-top: 3px; }}
+.tc-up {{ color: {GOOD}; }}
+.tc-down {{ color: {BAD}; }}
+.tc-flat {{ color: {MUTED}; font-weight: 600; }}
+.tc-meta {{
+display: flex; align-items: center; gap: 7px;
+margin-top: auto; padding-top: 9px; border-top: 1px solid {LINE};
+flex-wrap: wrap;
+}}
+.tc-pill {{
+color: #fff; font-size: .74rem; font-weight: 700;
+padding: 2px 9px; border-radius: 999px;
+}}
+.tc-rec {{ font-size: .76rem; color: {MUTED}; font-family: 'IBM Plex Mono', monospace; }}
+.tc-since {{ color: {MUTED}; font-weight: 500; font-size: .78rem; }}
+.track-card {{ margin-bottom: 6px; }}
+.tc-pill {{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+/* 5열이라 칸이 좁다 — 카드 안 버튼은 작게 */
+.track-card + div .stButton button {{
+padding: 7px 6px !important; font-size: .84rem !important;
+border-radius: 8px !important;
+}}
+/* 중간 폭에서는 3열, 좁으면 2열로 자연스럽게 접히도록
+   (Streamlit 컬럼은 고정이라, 폭이 좁아지면 카드 안쪽을 줄여 대응) */
+@media (max-width: 1100px) {{
+.track-card {{ min-height: 196px; padding: 12px 12px; }}
+.tc-kw {{ font-size: .9rem; }}
+.tc-rank {{ font-size: 1.4rem; }}
+.tc-sub, .tc-chg {{ font-size: .76rem; }}
+.tc-pill {{ font-size: .7rem; padding: 2px 7px; }}
+.tc-rec {{ font-size: .7rem; }}
+}}
+/* 등록 당시와 비교 */
+.sc-top {{
+display: flex; justify-content: space-between; align-items: center;
+margin-bottom: 3px;
+}}
+.sc-top .chart-title {{ margin-bottom: 0; }}
+.sc-verdict {{
+color: #fff; font-size: .8rem; font-weight: 800;
+padding: 3px 11px; border-radius: 999px;
+}}
+.sc-since {{ font-size: .78rem; color: {MUTED}; margin-bottom: 11px; }}
+.sc-row {{
+display: flex; align-items: center; gap: 9px;
+padding: 8px 0; border-bottom: 1px solid {LINE};
+font-family: 'IBM Plex Mono', monospace; font-size: .92rem;
+}}
+.sc-label {{
+flex: 0 0 66px; font-family: 'Pretendard', sans-serif;
+font-size: .88rem; font-weight: 700; color: {INK};
+}}
+.sc-from {{ flex: 1 1 0; text-align: right; color: {MUTED}; }}
+.sc-arrow {{ flex: 0 0 16px; text-align: center; color: {MUTED}; }}
+.sc-to {{ flex: 1 1 0; text-align: right; font-weight: 600; color: {INK}; }}
+.sc-pct {{ flex: 0 0 74px; text-align: right; font-weight: 700; font-size: .85rem; }}
+.sc-foot {{
+font-size: .84rem; color: {MUTED}; padding-top: 9px;
+font-family: 'Pretendard', sans-serif;
+}}
+.sc-foot b {{ color: {BAD}; }}
+.sc-note {{
+margin-top: 8px; padding-top: 9px; border-top: 1px solid {LINE};
+font-size: .9rem; color: #40454C; line-height: 1.6;
+}}
+/* 진단 2x2 매트릭스 */
+.diag-grid {{
+display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;
+}}
+.diag-cell {{
+border: 1.5px solid; border-radius: 10px; padding: 13px 15px;
+position: relative; min-height: 74px;
+}}
+.diag-name {{ font-size: 1rem; font-weight: 800; margin-bottom: 3px; }}
+.diag-desc {{ font-size: .82rem; opacity: .88; }}
+.diag-mark {{
+position: absolute; top: -9px; right: 11px;
+background: {INK}; color: #fff; font-size: .7rem; font-weight: 700;
+padding: 2px 9px; border-radius: 999px;
+}}
+.diag-axis {{
+display: flex; justify-content: space-between;
+font-size: .76rem; color: {MUTED}; padding: 2px 2px 8px;
+}}
+.diag-note {{
+border-top: 1px solid {LINE}; padding-top: 9px;
+font-size: .9rem; color: #40454C; line-height: 1.6;
+}}
+.diag-note b {{ color: {INK}; }}
+/* 진행률 바 */
+.prog-label {{
+font-size: .92rem; color: {DEEP}; font-weight: 600;
+margin-bottom: 4px;
+}}
+.prog-label b {{
+font-family: 'IBM Plex Mono', monospace; color: {GOLD};
+}}
+.stProgress > div > div > div > div {{
+background: linear-gradient(90deg, {DEEP}, {GOLD}) !important;
+}}
+.stProgress > div > div > div {{
+background: #EFEFEA !important; height: 10px !important; border-radius: 999px !important;
+}}
+/* 차트 */
+.chart-box {{
+background: {SURFACE}; border: 1.5px solid {LINE};
+border-radius: 12px; padding: 16px 18px; margin: 6px 0 10px;
+}}
+/* 사냥 지도 점 - 마우스 올리면 강조 */
+.chart-box g.pt {{ cursor: pointer; }}
+.chart-box g.pt circle {{ transition: r .12s ease, opacity .12s ease; }}
+.chart-box g.pt:hover circle:last-child {{
+r: 8; opacity: 1; stroke-width: 2.2;
+}}
+.chart-title {{
+font-size: .92rem; font-weight: 700; color: {INK};
+display: block; margin-bottom: 10px;
+}}
+.donut-box {{ text-align: center; }}
+.donut-box .legend {{ margin-top: 10px; }}
+.legend .lg {{
+display: inline-flex; align-items: center; gap: 5px;
+font-size: .84rem; color: #4A5560; margin: 0 8px;
+}}
+.legend .lg i {{
+width: 10px; height: 10px; border-radius: 3px; display: inline-block;
+}}
+.legend .lg b {{ font-family: 'IBM Plex Mono', monospace; color: {INK}; }}
+.fresh-top {{
+display: flex; justify-content: space-between; align-items: baseline;
+}}
+.fresh-top .chart-title {{ margin-bottom: 0; }}
+.fresh-num {{
+font-family: 'IBM Plex Mono', monospace; font-size: 1.5rem;
+font-weight: 600; color: {DEEP};
+}}
+.fresh-num small {{ font-size: .9rem; color: {MUTED}; margin-left: 2px; }}
+.fresh-track {{
+height: 10px; background: #EFEFEA; border-radius: 999px;
+overflow: hidden; margin: 10px 0 8px;
+}}
+.fresh-fill {{ height: 100%; border-radius: 999px; }}
+.fresh-foot {{ font-size: .84rem; color: {MUTED}; }}
+/* 표 - 글자 크기 및 테두리 */
+.stDataFrame {{ border: 1.5px solid {LINE}; border-radius: 10px; overflow: hidden; }}
+.stDataFrame [data-testid="stTable"] {{ font-size: .95rem; }}
+div[data-testid="stDataFrameResizable"] {{ font-size: .95rem; }}
+/* 셀 여백을 줄여 행이 뜨지 않게 */
+.stDataFrame [role="gridcell"], .stDataFrame [role="columnheader"] {{
+padding-top: 6px !important; padding-bottom: 6px !important;
+}}
+/* 헤더 - 네이비 톤으로 본문과 확실히 구분 */
+.stDataFrame [role="columnheader"] {{
+background: #EDF0F3 !important; font-weight: 700 !important;
+color: {DEEP} !important; font-size: .89rem !important;
+border-bottom: 2px solid #D6DDE3 !important;
+}}
+.stDataFrame [role="row"]:hover [role="gridcell"] {{
+background: rgba(200,150,62,.07) !important;
+}}
+/* 라디오 버튼 */
+.stRadio label {{ font-size: .95rem !important; }}
+div[role="radiogroup"] {{
+background: {SURFACE}; border: 1px solid {LINE};
+border-radius: 10px; padding: 8px 14px;
+}}
+/* 본문 기본 크기 상향 */
+.stMarkdown p, .stCheckbox label {{ font-size: .96rem; }}
+div[data-testid="stMetricValue"] {{ font-family: 'IBM Plex Mono', monospace; }}
+/* 점수 구성 막대 */
+.sb-top {{
+display: flex; justify-content: space-between; align-items: baseline;
+margin-bottom: 12px;
+}}
+.sb-top .chart-title {{ margin-bottom: 0; }}
+.sb-total {{
+font-family: 'IBM Plex Mono', monospace; font-size: 1.7rem;
+font-weight: 600; color: {DEEP};
+}}
+.sb-row {{ display: flex; align-items: center; gap: 12px; padding: 7px 0; }}
+.sb-name {{ flex: 0 0 74px; font-size: .9rem; font-weight: 700; color: {INK}; }}
+.sb-track {{
+flex: 1 1 auto; height: 9px; background: #EFEFEA;
+border-radius: 999px; overflow: hidden;
+}}
+.sb-fill {{ height: 100%; border-radius: 999px; }}
+.sb-val {{ flex: 0 0 108px; text-align: right; font-size: .88rem; font-weight: 700; }}
+.sb-none {{ color: {MUTED} !important; font-weight: 500; }}
+/* 검색 버튼 */
+.stButton button {{
+background: {DEEP} !important; color: #fff !important;
+border: 1.5px solid {DEEP} !important; border-radius: 10px !important;
+font-weight: 700 !important; font-size: .98rem !important;
+padding: 11px 18px !important; transition: all .15s ease;
+}}
+.stButton button:hover {{
+background: #24506A !important; border-color: {GOLD} !important;
+transform: translateY(-1px);
+box-shadow: 0 3px 9px rgba(27,58,75,.24) !important;
+}}
+.stButton button:active {{ transform: translateY(0); }}
+/* 검색 버튼을 입력창 라벨 높이만큼 내려서 나란히 맞춘다 */
+.search-btn-pad {{ height: 30px; }}
+.st-key-research_go button {{
+height: 48px; font-size: 1.02rem !important;
+}}
+/* ============================================================
+   모바일 최적화
+   좁은 화면에서는 여백을 줄이고, 가로로 넘치는 요소를 접는다.
+   ============================================================ */
+@media (max-width: 640px) {{
+.block-container {{ padding: 1rem .7rem 3rem !important; }}
+.masthead {{ padding: 16px 17px; border-radius: 12px; }}
+.masthead h1 {{ font-size: 1.28rem; }}
+.masthead p {{ font-size: .88rem; }}
+.mast-head-row {{ gap: 11px; }}
+.mast-head-row svg {{ width: 34px; height: 34px; }}
+/* 탭 - 좁은 화면에선 가로 스크롤로 */
+[role="tablist"] {{
+flex-wrap: nowrap !important; overflow-x: auto !important;
+gap: 6px !important; padding-bottom: 10px !important;
+-webkit-overflow-scrolling: touch;
+scrollbar-width: none;
+}}
+[role="tablist"]::-webkit-scrollbar {{ display: none; }}
+[role="tab"] {{
+min-height: 40px !important; padding: 8px 14px !important;
+flex-shrink: 0 !important; white-space: nowrap !important;
+}}
+[role="tab"] *, [role="tab"] p {{ font-size: .92rem !important; }}
+[role="tabpanel"] [role="tab"] {{ min-height: 34px !important; padding: 6px 12px !important; }}
+[role="tabpanel"] [role="tab"] * {{ font-size: .86rem !important; }}
+/* KPI - 세로로 쌓일 때 여백 축소 */
+.kpi {{ padding: 13px 14px; }}
+.kpi-val {{ font-size: 1.5rem; }}
+.kpi-label {{ font-size: .76rem; }}
+.kpi-sub {{ font-size: .8rem; }}
+/* 진단 매트릭스는 1열로 */
+.diag-grid {{ grid-template-columns: 1fr !important; }}
+.diag-cell {{ min-height: 0; padding: 11px 13px; }}
+.diag-axis {{ flex-direction: column; gap: 3px; }}
+/* 추적 카드 1열 */
+.track-grid {{ grid-template-columns: 1fr !important; }}
+.track-card {{ min-height: 0 !important; }}
+/* 상위노출 목록 - 블로그명 숨기고 제목 우선 */
+.serp-row {{ gap: 8px; padding: 8px 5px; font-size: .88rem; }}
+.serp-rank {{ flex: 0 0 26px; font-size: .9rem; }}
+.serp-age {{ flex: 0 0 62px; font-size: .78rem; }}
+/* 점수 구성 - 라벨 폭 축소 */
+.sb-name {{ flex: 0 0 58px; font-size: .84rem; }}
+.sb-val {{ flex: 0 0 78px; font-size: .8rem; }}
+.sb-total {{ font-size: 1.4rem; }}
+/* 차트 여백 축소 + 가로 넘침 방지 */
+.chart-box {{ padding: 13px 13px; overflow-x: auto; -webkit-overflow-scrolling: touch; }}
+.chart-box svg {{ min-width: 0; }}
+.gauge-wrap {{ padding: 13px 14px; }}
+/* 사냥 지도는 좁으면 읽기 어려우니 최소 폭을 주고 가로 스크롤 */
+.chart-box svg[viewBox^="0 0 760"] {{ min-width: 560px; }}
+.donut-box svg {{ min-width: 0 !important; }}
+/* 안내문 */
+.note {{ font-size: .88rem; padding: 10px 12px; }}
+.section-title {{ font-size: 1.1rem; }}
+/* 브리핑 */
+.brief-box {{ padding: 14px 15px; }}
+.brief-head {{ font-size: 1.05rem; }}
+.brief-reasons {{ font-size: .88rem; padding-left: 17px; }}
+/* 입력창 - 모바일에서 확대 방지를 위해 16px 이상 유지 */
+.stTextInput input {{ font-size: 16px !important; }}
+.st-key-kw_main input, .st-key-blog_input_tab input {{
+font-size: 17px !important; padding: 14px 16px !important;
+}}
+/* 표 */
+.stDataFrame [data-testid="stTable"] {{ font-size: .86rem; }}
+div[data-testid="stDataFrameResizable"] {{ font-size: .86rem; }}
+/* 라디오 */
+div[role="radiogroup"] {{ padding: 6px 10px; flex-wrap: wrap; }}
+.stRadio label {{ font-size: .88rem !important; }}
+/* 버튼 전체폭 */
+.stButton button {{ width: 100%; padding: 12px 16px !important; }}
+/* 좁은 화면에선 컬럼이 세로로 쌓이므로 정렬용 여백을 없앤다 */
+.search-btn-pad {{ height: 0 !important; }}
+.st-key-research_go button {{ height: 50px; margin-top: 2px; }}
+}}
+/* 아주 좁은 화면 */
+@media (max-width: 400px) {{
+.masthead h1 {{ font-size: 1.15rem; }}
+.kpi-val {{ font-size: 1.32rem; }}
+.serp-age {{ display: none; }}
+}}
+</style>""", unsafe_allow_html=True)
+
+
+def hunter_icon(size=34):
+    """
+    헌터 캐릭터 — 사파리햇을 쓰고 망원경으로 키워드를 조준하는 사냥꾼.
+    이미지 파일 없이 SVG로 직접 그려서 어디서든 깨지지 않는다.
+    """
+    return f"""<svg width="{size}" height="{size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"> <circle cx="32" cy="32" r="31" fill="#24506A"/> <circle cx="32" cy="32" r="31" stroke="{GOLD}" stroke-width="2"/> <path d="M14 27c0-9.4 8-16 18-16s18 6.6 18 16" fill="#2E7D6B"/> <ellipse cx="32" cy="27.5" rx="23" ry="4.2" fill="#256556"/> <path d="M14 27h36" stroke="{GOLD}" stroke-width="2.4" stroke-linecap="round"/> <path d="M20 33c0-6.6 5.4-11 12-11s12 4.4 12 11v9c0 6.6-5.4 11-12 11s-12-4.4-12-11z" fill="#F0C9A4"/> <circle cx="26.5" cy="38" r="5.6" fill="#14161A" opacity=".9"/> <circle cx="41.5" cy="38" r="5.6" fill="#14161A" opacity=".9"/> <path d="M32.1 37.6h-.2" stroke="#14161A" stroke-width="2.4" stroke-linecap="round"/> <circle cx="26.5" cy="38" r="3.6" fill="#7FD4E8"/> <circle cx="41.5" cy="38" r="3.6" fill="#7FD4E8"/> <circle cx="27.9" cy="36.4" r="1.35" fill="#fff"/> <circle cx="42.9" cy="36.4" r="1.35" fill="#fff"/> <path d="M28 47.5c2.4 1.9 5.6 1.9 8 0" stroke="#B5715A" stroke-width="2.2" stroke-linecap="round"/> </svg>"""
+
+
+def side_brand(name="키워드", accent="헌터", tagline="뚫을 수 있는 키워드를 사냥합니다"):
+    st.markdown(f"""<div class="side-brand">{hunter_icon()}<div>{name}<span>{accent}</span></div></div>
+<div class="side-tagline">{tagline}</div>""", unsafe_allow_html=True)
+
+
+def side_label(text):
+    st.markdown(f'<div class="side-label">{text}</div>', unsafe_allow_html=True)
+
+
+def masthead(title, subtitle):
+    st.markdown(f"""<div class="masthead">
+<div class="mast-head-row">{hunter_icon(44)}<div><div class="rule"></div><h1>{title}</h1></div></div>
+<p>{subtitle}</p>
+</div>""", unsafe_allow_html=True)
+
+
+def kpi(label, value, sub=""):
+    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+    st.markdown(f"""<div class="kpi">
+<div class="kpi-label">{label}</div>
+<div class="kpi-val">{value}</div>
+{sub_html}
+</div>""", unsafe_allow_html=True)
+
+
+def chip(text, color):
+    return f'<span class="chip" style="background:{color}">{text}</span>'
+
+
+def grade_chip_html(grade):
+    return chip(grade, GRADE_COLORS.get(grade, MUTED))
+
+
+def gauge(title, score, scale_labels=("0", "50", "100"), color=None):
+    """시그니처 요소: 기회/승산을 한눈에 읽는 가로 게이지."""
+    score = max(0, min(100, int(score or 0)))
+    if color is None:
+        color = GOOD if score >= 70 else (WARN if score >= 40 else BAD)
+    st.markdown(f"""<div class="gauge-wrap">
+<div class="gauge-top">
+<span class="gauge-title">{title}</span>
+<span class="gauge-num">{score}</span>
+</div>
+<div class="gauge-track">
+<div class="gauge-fill" style="width:{score}%;background:{color}"></div>
+</div>
+<div class="gauge-scale">
+<span>{scale_labels[0]}</span><span>{scale_labels[1]}</span><span>{scale_labels[2]}</span>
+</div>
+</div>""", unsafe_allow_html=True)
+
+
+def section(eyebrow, title):
+    st.markdown(f"""<div class="eyebrow">{eyebrow}</div>
+<div class="section-title">{title}</div>""", unsafe_allow_html=True)
+
+
+def note(text, gold=False):
+    cls = "note note-gold" if gold else "note"
+    st.markdown(f'<div class="{cls}">{text}</div>', unsafe_allow_html=True)
+
+
+# ============================================================
+# 차트 — 전부 손으로 그린 SVG (외부 차트 라이브러리 없음)
+# 계측기 컨셉이라 눈금, 기준선, 영역 구분을 직접 통제한다.
+# ============================================================
+
+import math
+
+
+def _log(v):
+    """0을 허용하는 로그 스케일. 검색량/문서수는 자릿수 차이가 커서 로그가 맞다."""
+    return math.log10(max(v, 0) + 1)
+
+
+def hunting_map(points, main=None, height=380, focus=None):
+    """
+    🏹 사냥 지도 — 이 제품의 시그니처 차트.
+
+    가로축 검색량, 세로축 문서수. 대각선은 '문서수 ÷ 검색량 = 경쟁률'의 등고선이다.
+    같은 대각선 위의 키워드는 경쟁률이 같고, 오른쪽 아래로 갈수록
+    '찾는 사람은 많은데 쓰인 글은 적은' 사냥터가 된다.
+    표로는 절대 보이지 않는 배치가 한눈에 들어온다.
+
+    points: [{"keyword","search","docs"}], main: 강조할 중심 키워드 dict
+    """
+    data = [p for p in (points or []) if p.get("search", 0) > 0]
+    if main and main.get("search", 0) > 0:
+        data = [p for p in data if p["keyword"] != main["keyword"]] + [main]
+    if not data:
+        return
+
+    W, H = 760, height
+    L, R, T, B = 62, 22, 22, 46
+    pw, ph = W - L - R, H - T - B
+
+    xs = [_log(p["search"]) for p in data]
+    ys = [_log(p.get("docs", 0)) for p in data]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    x0, x1 = math.floor(x0), math.ceil(max(x1, x0 + 1))
+    y0, y1 = math.floor(y0), math.ceil(max(y1, y0 + 1))
+
+    def px(v):
+        return L + (_log(v) - x0) / (x1 - x0) * pw
+
+    def py(v):
+        return T + ph - (_log(v) - y0) / (y1 - y0) * ph
+
+    parts = []
+
+    steps = 28
+
+    def band(k_lo, k_hi, fill, opacity):
+        """경쟁률 k_lo ~ k_hi 사이의 띠를 칠한다 (로그 평면에서 대각 띠).
+        k가 None이면 그쪽은 그래프 경계까지 채운다."""
+        upper, lower = [], []
+        for i in range(steps + 1):
+            lx = x0 + (x1 - x0) * i / steps
+            sx = L + (lx - x0) / (x1 - x0) * pw
+
+            ly_hi = y1 if k_hi is None else max(y0, min(y1, lx + math.log10(k_hi)))
+            ly_lo = y0 if k_lo is None else max(y0, min(y1, lx + math.log10(k_lo)))
+
+            upper.append((sx, T + ph - (ly_hi - y0) / (y1 - y0) * ph))
+            lower.append((sx, T + ph - (ly_lo - y0) / (y1 - y0) * ph))
+
+        pts = upper + list(reversed(lower))
+        poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+        parts.append(f'<polygon points="{poly}" fill="{fill}" opacity="{opacity}"/>')
+
+    # 구역 3단계 — 아래(문서 적음)부터 위로
+    band(None, 0.1, GOLD, ".20")    # 당장 사냥
+    band(0.1, 2.0, GOOD, ".11")     # 추천
+    band(2.0, None, BAD, ".08")     # 비추천
+
+    # 경계선 + 구역 이름
+    for k, name, color in ((0.1, "당장 사냥 구역", GOLD), (2.0, "추천 구역", GOOD)):
+        pts = []
+        for i in range(steps + 1):
+            lx = x0 + (x1 - x0) * i / steps
+            sx = L + (lx - x0) / (x1 - x0) * pw
+            ly = lx + math.log10(k)
+            if ly < y0 or ly > y1:
+                continue
+            sy = T + ph - (ly - y0) / (y1 - y0) * ph
+            pts.append(f"{sx:.1f},{sy:.1f}")
+        if len(pts) > 1:
+            parts.append(f'<polyline points="{" ".join(pts)}" fill="none" '
+                         f'stroke="{color}" stroke-width="1.6" stroke-dasharray="6 4" opacity=".75"/>')
+
+    # 구역 라벨을 모서리에 배치
+    parts.append(f'<text x="{L + pw - 14}" y="{T + ph - 16}" text-anchor="end" '
+                 f'font-size="13" font-weight="800" fill="{GOLD}">당장 사냥 구역</text>')
+    parts.append(f'<text x="{L + pw - 14}" y="{T + ph - 34}" text-anchor="end" '
+                 f'font-size="11.5" fill="{MUTED}">경쟁률 0.1 미만</text>')
+    parts.append(f'<text x="{L + 14}" y="{T + 22}" font-size="13" '
+                 f'font-weight="800" fill="{BAD}" opacity=".8">비추천 구역</text>')
+    parts.append(f'<text x="{L + 14}" y="{T + 39}" font-size="11.5" fill="{MUTED}">경쟁률 2 이상</text>')
+
+    # 축 눈금
+    for i in range(int(x0), int(x1) + 1):
+        sx = L + (i - x0) / (x1 - x0) * pw
+        parts.append(f'<line x1="{sx:.1f}" y1="{T}" x2="{sx:.1f}" y2="{T + ph}" '
+                     f'stroke="{LINE}" stroke-width="1" opacity=".7"/>')
+        parts.append(f'<text x="{sx:.1f}" y="{T + ph + 18}" text-anchor="middle" '
+                     f'font-size="10.5" fill="{MUTED}" font-family="IBM Plex Mono,monospace">'
+                     f'{_si(10 ** i)}</text>')
+    for i in range(int(y0), int(y1) + 1):
+        sy = T + ph - (i - y0) / (y1 - y0) * ph
+        parts.append(f'<line x1="{L}" y1="{sy:.1f}" x2="{L + pw}" y2="{sy:.1f}" '
+                     f'stroke="{LINE}" stroke-width="1" opacity=".7"/>')
+        parts.append(f'<text x="{L - 9}" y="{sy + 3.5:.1f}" text-anchor="end" '
+                     f'font-size="10.5" fill="{MUTED}" font-family="IBM Plex Mono,monospace">'
+                     f'{_si(10 ** i)}</text>')
+
+    # 점 — <title>을 넣으면 마우스를 올렸을 때 브라우저가 툴팁을 띄운다
+    for p in data:
+        is_main = main and p["keyword"] == main["keyword"]
+        s_, d_ = p["search"], p.get("docs", 0)
+        ratio = d_ / s_ if s_ else 999
+        if ratio < 0.1:
+            color, zone_name = GOLD, "당장 사냥"
+        elif ratio < 2:
+            color, zone_name = GOOD, "추천"
+        else:
+            color, zone_name = BAD, "비추천"
+        cx, cy = px(s_), py(d_)
+        tip = (f'{p["keyword"]}\n검색량 {s_:,} · 문서수 {d_:,}\n'
+               f'경쟁률 {ratio:.2f} · {zone_name} 구역')
+
+        is_focus = focus and p["keyword"] == focus and not is_main
+        if is_focus:
+            # 4번: 목록에서 고른 키워드를 지도에서 바로 찾을 수 있게 강조한다.
+            # (모바일에서는 점에 마우스를 올릴 수 없어 툴팁이 무용지물이다)
+            parts.append(
+                f'<g><title>{_esc(tip)}</title>'
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="16" fill="{GOLD}" opacity=".25"/>'
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="9" fill="{GOLD}" '
+                f'stroke="{INK}" stroke-width="2.5"/></g>')
+            parts.append(f'<text x="{cx:.1f}" y="{cy - 22:.1f}" text-anchor="middle" '
+                         f'font-size="12.5" font-weight="800" fill="{INK}" '
+                         f'paint-order="stroke" stroke="#fff" stroke-width="3.5">'
+                         f'{_esc(p["keyword"])}</text>')
+        elif is_main:
+            parts.append(
+                f'<g><title>{_esc(tip)}</title>'
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="14" fill="{DEEP}" opacity=".18"/>'
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="8" fill="{DEEP}" '
+                f'stroke="#fff" stroke-width="2.5"/></g>')
+            parts.append(f'<text x="{cx:.1f}" y="{cy - 21:.1f}" text-anchor="middle" '
+                         f'font-size="12.5" font-weight="700" fill="{DEEP}" '
+                         f'paint-order="stroke" stroke="#fff" stroke-width="3.5">'
+                         f'{_esc(p["keyword"])}</text>')
+        else:
+            parts.append(
+                f'<g class="pt"><title>{_esc(tip)}</title>'
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="10" fill="transparent"/>'
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5.5" fill="{color}" '
+                f'opacity=".85" stroke="#fff" stroke-width="1.4"/></g>')
+
+    # 축 이름 + 사냥터 라벨
+    parts.append(f'<text x="{L + pw / 2:.0f}" y="{H - 8}" text-anchor="middle" '
+                 f'font-size="11.5" font-weight="700" fill="{MUTED}">월 검색량 →</text>')
+    parts.append(f'<text x="14" y="{T + ph / 2:.0f}" text-anchor="middle" font-size="11.5" '
+                 f'font-weight="700" fill="{MUTED}" transform="rotate(-90 14 {T + ph / 2:.0f})">'
+                 f'← 누적 문서수</text>')
+
+    svg = (f'<svg viewBox="0 0 {W} {H}" width="100%" xmlns="http://www.w3.org/2000/svg" '
+           f'style="max-width:100%;height:auto">'
+           f'<rect x="{L}" y="{T}" width="{pw}" height="{ph}" fill="{SURFACE}" '
+           f'stroke="{LINE}" stroke-width="1.5" rx="8"/>' + "".join(parts) + '</svg>')
+    st.markdown(f'<div class="chart-box">{svg}</div>', unsafe_allow_html=True)
+
+
+def _si(v):
+    """축 눈금을 짧게 (1000 → 1K)"""
+    v = int(v)
+    if v >= 1_000_000:
+        return f"{v // 1_000_000}M"
+    if v >= 1000:
+        return f"{v // 1000}K"
+    return str(v)
+
+
+def _esc(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def donut(segments, center_top="", center_bottom="", size=170):
+    """
+    도넛 차트. segments: [(라벨, 값, 색)]
+    PC/모바일 검색 비중처럼 '구성비'를 보여줄 때 쓴다.
+    """
+    total = sum(v for _, v, _ in segments) or 1
+    r, sw = size / 2 - 14, 20
+    cx = cy = size / 2
+    parts, angle = [], -90.0
+
+    for label, value, color in segments:
+        sweep = value / total * 360
+        if sweep <= 0:
+            continue
+        a1, a2 = math.radians(angle), math.radians(angle + sweep)
+        x1, y1 = cx + r * math.cos(a1), cy + r * math.sin(a1)
+        x2, y2 = cx + r * math.cos(a2), cy + r * math.sin(a2)
+        large = 1 if sweep > 180 else 0
+        if sweep >= 359.9:
+            parts.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" '
+                         f'stroke="{color}" stroke-width="{sw}"/>')
+        else:
+            parts.append(f'<path d="M {x1:.2f} {y1:.2f} A {r} {r} 0 {large} 1 {x2:.2f} {y2:.2f}" '
+                         f'fill="none" stroke="{color}" stroke-width="{sw}" stroke-linecap="butt"/>')
+        angle += sweep
+
+    parts.append(f'<text x="{cx}" y="{cy - 3}" text-anchor="middle" font-size="13" '
+                 f'font-weight="700" fill="{INK}">{_esc(center_top)}</text>')
+    parts.append(f'<text x="{cx}" y="{cy + 15}" text-anchor="middle" font-size="11.5" '
+                 f'fill="{MUTED}" font-family="IBM Plex Mono,monospace">{_esc(center_bottom)}</text>')
+
+    legend = "".join(
+        f'<span class="lg"><i style="background:{c}"></i>{_esc(l)} '
+        f'<b>{v / total * 100:.0f}%</b></span>'
+        for l, v, c in segments if v > 0)
+
+    svg = (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
+           f'xmlns="http://www.w3.org/2000/svg">' + "".join(parts) + '</svg>')
+    st.markdown(f'<div class="chart-box donut-box">{svg}<div class="legend">{legend}</div></div>',
+                unsafe_allow_html=True)
+
+
+def bar_series(items, title="", height=150, accent=None, show_pct=False):
+    """
+    막대 시계열. items: [(라벨, 값)]
+    show_pct=True 면 전체 대비 비율도 함께 표시한다.
+    값이 0인 구간도 옅은 바닥선을 남겨서 '데이터가 빠진 것'처럼 보이지 않게 한다.
+    """
+    if not items:
+        return
+    accent = accent or DEEP
+    W, H = 720, height
+    T, B, L, R = 20, 34, 10, 10
+    ph = H - T - B
+    n = len(items)
+    gap = 7
+    bw = max(6, (W - L - R - gap * (n - 1)) / n)
+    vals = [v for _, v in items]
+    top = max(vals) or 1
+    total = sum(vals) or 1
+
+    parts = []
+    for i, (label, v) in enumerate(items):
+        x = L + i * (bw + gap)
+        if v > 0:
+            bh = max(3, v / top * ph)
+            y = T + ph - bh
+            opacity = .45 + .55 * (v / top)
+            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{bh:.1f}" '
+                         f'rx="4" fill="{accent}" opacity="{opacity:.2f}"/>')
+            cap = f"{v}" + (f" ({v / total * 100:.0f}%)" if show_pct else "")
+            parts.append(f'<text x="{x + bw / 2:.1f}" y="{y - 6:.1f}" text-anchor="middle" '
+                         f'font-size="11.5" font-weight="700" fill="{INK}" '
+                         f'font-family="IBM Plex Mono,monospace">{cap}</text>')
+        else:
+            # 값이 0이어도 자리를 표시해 데이터 누락처럼 보이지 않게
+            parts.append(f'<rect x="{x:.1f}" y="{T + ph - 3:.1f}" width="{bw:.1f}" height="3" '
+                         f'rx="1.5" fill="{LINE}"/>')
+            parts.append(f'<text x="{x + bw / 2:.1f}" y="{T + ph - 8:.1f}" text-anchor="middle" '
+                         f'font-size="10.5" fill="{MUTED}" '
+                         f'font-family="IBM Plex Mono,monospace">0</text>')
+        parts.append(f'<text x="{x + bw / 2:.1f}" y="{H - 10}" text-anchor="middle" '
+                     f'font-size="10.5" fill="{MUTED}">{_esc(label)}</text>')
+
+    parts.append(f'<line x1="{L}" y1="{T + ph:.1f}" x2="{W - R}" y2="{T + ph:.1f}" '
+                 f'stroke="{LINE}" stroke-width="1.5"/>')
+    svg = (f'<svg viewBox="0 0 {W} {H}" width="100%" xmlns="http://www.w3.org/2000/svg" '
+           f'style="max-width:100%;height:auto">' + "".join(parts) + '</svg>')
+    head = f'<div class="chart-title">{_esc(title)}</div>' if title else ""
+    st.markdown(f'<div class="chart-box">{head}{svg}</div>', unsafe_allow_html=True)
+
+
+def scale_gauge(value, stops, title="", unit="", note="", height=118):
+    """
+    눈금 위에 현재 값이 어디쯤인지 표시하는 게이지.
+
+    '시장 신선도'(최근 발행 ÷ 누적 문서)는 누적이 수백만이면 늘 0.00%가 나와
+    지표 구실을 못했다. 대신 경쟁률처럼 '구간별 의미가 정해진 값'을
+    눈금 위에 얹어 보여주는 편이 훨씬 잘 읽힌다.
+
+    stops: [(경계값, 구간이름, 색)] — 경계값 오름차순
+    """
+    if value is None:
+        return
+    W, H = 720, height
+    L, R, T = 16, 16, 44
+    pw = W - L - R
+    bar_y, bar_h = T, 16
+    n = len(stops)
+
+    parts, seg_w = [], pw / n
+    cur_name, cur_color = stops[-1][1], stops[-1][2]
+    for i, (bound, name, color) in enumerate(stops):
+        x = L + i * seg_w
+        r1 = "8" if i == 0 else "0"
+        r2 = "8" if i == n - 1 else "0"
+        parts.append(f'<path d="M {x + float(r1):.1f} {bar_y} h {seg_w - float(r1) - float(r2):.1f} '
+                     f'a {r2} {r2} 0 0 1 {r2} {r2} v {bar_h - 2 * float(r2)} '
+                     f'a {r2} {r2} 0 0 1 -{r2} {r2} h -{seg_w - float(r1) - float(r2):.1f} '
+                     f'a {r1} {r1} 0 0 1 -{r1} -{r1} v -{bar_h - 2 * float(r1)} '
+                     f'a {r1} {r1} 0 0 1 {r1} -{r1} z" fill="{color}" opacity=".82"/>')
+        parts.append(f'<text x="{x + seg_w / 2:.1f}" y="{bar_y + bar_h + 17}" '
+                     f'text-anchor="middle" font-size="11.5" font-weight="700" '
+                     f'fill="{color}">{_esc(name)}</text>')
+        if bound is not None:
+            parts.append(f'<text x="{x + seg_w:.1f}" y="{bar_y - 7}" text-anchor="middle" '
+                         f'font-size="10" fill="{MUTED}" '
+                         f'font-family="IBM Plex Mono,monospace">{bound}</text>')
+
+    # 값이 속한 구간 찾기 → 그 구간 안에서의 위치 계산
+    idx = n - 1
+    for i, (bound, name, color) in enumerate(stops):
+        if bound is not None and value < bound:
+            idx, cur_name, cur_color = i, name, color
+            break
+    lo = 0 if idx == 0 else stops[idx - 1][0]
+    hi = stops[idx][0] if stops[idx][0] is not None else max(value, lo * 2 or 1)
+    frac = 0.5 if hi == lo else min(1, max(0, (value - lo) / (hi - lo)))
+    mx = L + idx * seg_w + frac * seg_w
+
+    parts.append(f'<polygon points="{mx:.1f},{bar_y - 4} {mx - 6:.1f},{bar_y - 13} '
+                 f'{mx + 6:.1f},{bar_y - 13}" fill="{INK}"/>')
+    parts.append(f'<line x1="{mx:.1f}" y1="{bar_y - 2}" x2="{mx:.1f}" '
+                 f'y2="{bar_y + bar_h + 2}" stroke="{INK}" stroke-width="2.5"/>')
+
+    val_txt = f"{value:g}{unit}"
+    parts.append(f'<text x="{L}" y="20" font-size="13" font-weight="700" fill="{INK}">'
+                 f'{_esc(title)}</text>')
+    parts.append(f'<text x="{W - R}" y="22" text-anchor="end" font-size="19" '
+                 f'font-weight="700" fill="{cur_color}" '
+                 f'font-family="IBM Plex Mono,monospace">{val_txt}</text>')
+    parts.append(f'<text x="{W - R}" y="{H - 4}" text-anchor="end" font-size="11.5" '
+                 f'fill="{MUTED}">{_esc(note)}</text>')
+
+    svg = (f'<svg viewBox="0 0 {W} {H}" width="100%" xmlns="http://www.w3.org/2000/svg" '
+           f'style="max-width:100%;height:auto">' + "".join(parts) + '</svg>')
+    st.markdown(f'<div class="chart-box">{svg}</div>', unsafe_allow_html=True)
+
+
+def diagnosis_matrix(total_grade, recent_grade, label, note):
+    """
+    진단을 2×2 표로 보여준다.
+    가로축 = 누적 문서가 많은가, 세로축 = 요즘도 쓰이는가.
+    지금 키워드가 어느 칸에 있는지 색으로 칠해 한눈에 알 수 있게 한다.
+    """
+    saturated = total_grade in ("나쁨", "최악")
+    busy = recent_grade in ("붐빔", "과열")
+
+    cells = [
+        (False, False, "비어 있는 자리", "글도 적고 요즘도 조용함", GOOD),
+        (False, True, "지금 몰리는 중", "글은 적은데 요즘 많이 씀", WARN),
+        (True, False, "오래된 글만 많음", "글은 많은데 요즘은 조용함", GOLD),
+        (True, True, "이미 꽉 참", "글도 많고 요즘도 많이 씀", BAD),
+    ]
+
+    html = ['<div class="chart-box"><div class="chart-title">진단 · 지금 이 키워드의 자리</div>',
+            '<div class="diag-grid">']
+    for sat, bz, name, desc, color in cells:
+        on = (sat == saturated and bz == busy)
+        style = (f'background:{color};color:#fff;border-color:{color}'
+                 if on else f'background:{SURFACE};color:{MUTED};border-color:{LINE}')
+        mark = '<div class="diag-mark">지금 여기</div>' if on else ''
+        html.append(f'<div class="diag-cell" style="{style}">{mark}'
+                    f'<div class="diag-name">{name}</div>'
+                    f'<div class="diag-desc">{desc}</div></div>')
+    html.append('</div>')
+    html.append('<div class="diag-axis"><span>← 누적 문서 적음 / 많음 →</span>'
+                '<span>위: 요즘 조용함 · 아래: 요즘 활발함</span></div>')
+    html.append(f'<div class="diag-note"><b>{_esc(label)}</b> — {_esc(note)}</div>')
+    html.append('</div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def rank_trend(points, height=200, title="순위 추이"):
+    """
+    📈 순위 꺾은선 — 추적기의 핵심 시각화.
+    순위는 낮을수록 좋으므로 y축을 뒤집는다(1위가 맨 위).
+    points: [(라벨, 순위 or None)]  None은 순위권 밖.
+    """
+    if not points:
+        return
+    ranked = [(i, r) for i, (_, r) in enumerate(points) if r is not None]
+    if not ranked:
+        st.markdown(f'<div class="chart-box"><div class="chart-title">{_esc(title)}</div>'
+                    f'<div class="fresh-foot">아직 순위권(30위) 안에 든 기록이 없습니다.</div>'
+                    f'</div>', unsafe_allow_html=True)
+        return
+
+    W, H = 720, height
+    L, R, T, B = 44, 18, 20, 34
+    pw, ph = W - L - R, H - T - B
+    n = len(points)
+    worst = max(r for _, r in ranked)
+    best = min(r for _, r in ranked)
+    lo, hi = max(1, best - 2), worst + 2
+
+    def sx(i):
+        return L + (pw if n == 1 else pw * i / (n - 1))
+
+    def sy(r):
+        return T + (r - lo) / (hi - lo) * ph      # 순위가 클수록 아래로
+
+    parts = []
+    for gr in (lo, (lo + hi) // 2, hi):
+        y = sy(gr)
+        parts.append(f'<line x1="{L}" y1="{y:.1f}" x2="{L + pw}" y2="{y:.1f}" '
+                     f'stroke="{LINE}" stroke-width="1"/>')
+        parts.append(f'<text x="{L - 8}" y="{y + 3.5:.1f}" text-anchor="end" font-size="10.5" '
+                     f'fill="{MUTED}" font-family="IBM Plex Mono,monospace">{int(gr)}위</text>')
+
+    # 상위 10위 구간을 초록으로 강조
+    if lo <= 10 <= hi:
+        y10 = sy(10)
+        parts.insert(0, f'<rect x="{L}" y="{T}" width="{pw}" height="{max(0, y10 - T):.1f}" '
+                        f'fill="{GOOD}" opacity=".08"/>')
+        parts.append(f'<text x="{L + pw - 6}" y="{T + 13}" text-anchor="end" font-size="10.5" '
+                     f'fill="{GOOD}" font-weight="700">상위 10위</text>')
+
+    # 선 (순위권 밖 구간은 끊어서 그린다)
+    seg = []
+    for i, (_, r) in enumerate(points):
+        if r is None:
+            if len(seg) > 1:
+                parts.append(f'<polyline points="{" ".join(seg)}" fill="none" '
+                             f'stroke="{DEEP}" stroke-width="2.4" stroke-linejoin="round"/>')
+            seg = []
+        else:
+            seg.append(f"{sx(i):.1f},{sy(r):.1f}")
+    if len(seg) > 1:
+        parts.append(f'<polyline points="{" ".join(seg)}" fill="none" '
+                     f'stroke="{DEEP}" stroke-width="2.4" stroke-linejoin="round"/>')
+
+    # 점 + 라벨
+    step = max(1, n // 8)
+    for i, (label, r) in enumerate(points):
+        if r is not None:
+            c = GOOD if r <= 10 else (WARN if r <= 20 else BAD)
+            parts.append(f'<g><title>{_esc(label)} · {r}위</title>'
+                         f'<circle cx="{sx(i):.1f}" cy="{sy(r):.1f}" r="4.5" fill="{c}" '
+                         f'stroke="#fff" stroke-width="1.6"/></g>')
+        if i % step == 0 or i == n - 1:
+            parts.append(f'<text x="{sx(i):.1f}" y="{H - 10}" text-anchor="middle" '
+                         f'font-size="10" fill="{MUTED}">{_esc(label)}</text>')
+
+    # 마지막 순위 강조
+    last_i, last_r = ranked[-1]
+    parts.append(f'<circle cx="{sx(last_i):.1f}" cy="{sy(last_r):.1f}" r="8" '
+                 f'fill="{GOLD}" opacity=".28"/>')
+    parts.append(f'<text x="{sx(last_i):.1f}" y="{sy(last_r) - 13:.1f}" text-anchor="middle" '
+                 f'font-size="12" font-weight="800" fill="{DEEP}" paint-order="stroke" '
+                 f'stroke="#fff" stroke-width="3">{last_r}위</text>')
+
+    svg = (f'<svg viewBox="0 0 {W} {H}" width="100%" xmlns="http://www.w3.org/2000/svg" '
+           f'style="max-width:100%;height:auto">' + "".join(parts) + '</svg>')
+    st.markdown(f'<div class="chart-box"><div class="chart-title">{_esc(title)}</div>{svg}</div>',
+                unsafe_allow_html=True)
+
+
+def serp_row(item, my_blog_id=""):
+    """
+    상위노출 글 한 줄 — 순위, 제목, 나이.
+    ⚠️ 남의 블로그 이름은 표시하지 않는다. 어떤 글이 상위에 있는지가 중요하지,
+    누가 썼는지를 노출할 이유는 없다. 내 글일 때만 따로 표시한다.
+    """
+    age = item.get("age_days")
+    if age is None:
+        age_txt, age_color = "—", MUTED
+    elif age <= 90:
+        age_txt, age_color = f"{age}일 전", BAD
+    elif age <= 365:
+        age_txt, age_color = f"{age // 30}개월 전", WARN
+    else:
+        age_txt, age_color = f"{age // 365}년 전", GOOD
+
+    mine = my_blog_id and item.get("blog_id", "").lower() == my_blog_id.lower()
+    bg = "background:rgba(200,150,62,.15);" if mine else ""
+    badge = ' <span class="mine-tag">내 글</span>' if mine else ""
+    r = item["rank"]
+    rank_color = GOOD if r <= 3 else (DEEP if r <= 10 else MUTED)
+
+    return (f'<div class="serp-row" style="{bg}">'
+            f'<span class="serp-rank" style="color:{rank_color}">{r}</span>'
+            f'<span class="serp-title">{_esc(item.get("title", ""))}{badge}</span>'
+            f'<span class="serp-age" style="color:{age_color}">{age_txt}</span>'
+            f'</div>')
+
+
+def serp_list(items, my_blog_id="", limit=10):
+    rows = "".join(serp_row(i, my_blog_id) for i in items[:limit])
+    st.markdown(
+        f'<div class="chart-box serp-box">'
+        f'<div class="serp-row serp-head"><span class="serp-rank">순위</span>'
+        f'<span class="serp-title">제목</span>'
+        f'<span class="serp-age">발행</span></div>{rows}</div>',
+        unsafe_allow_html=True)
+
+
+VERDICT_STYLE = {
+    "쓰세요": (GOOD, "쓰세요"),
+    "조건부": (WARN, "조건부"),
+    "피하세요": (BAD, "피하세요"),
+}
+
+
+def brief_card(data, title="AI 판단"):
+    """
+    AI 브리핑 카드.
+    숫자를 늘어놓는 대신 '그래서 어떻게 하라'는 결론을 앞세운다.
+    """
+    if not data:
+        return
+    verdict = data.get("verdict", "조건부")
+    color, label = VERDICT_STYLE.get(verdict, (WARN, verdict))
+
+    reasons = "".join(
+        f'<li>{_esc(r)}</li>' for r in (data.get("reasons") or []))
+    action = data.get("action", "")
+    watch = data.get("watch_out", "")
+
+    html = [f'<div class="brief-box" style="border-color:{color}">']
+    html.append(f'<div class="brief-top">'
+                f'<span class="brief-tag" style="background:{color}">{_esc(label)}</span>'
+                f'<span class="brief-title">{_esc(title)}</span></div>')
+    html.append(f'<div class="brief-head">{_esc(data.get("headline", ""))}</div>')
+    if reasons:
+        html.append(f'<ul class="brief-reasons">{reasons}</ul>')
+    if action:
+        html.append(f'<div class="brief-action"><b>이렇게 하세요</b><br>{_esc(action)}</div>')
+    if watch:
+        html.append(f'<div class="brief-watch">주의 · {_esc(watch)}</div>')
+    html.append('</div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def tracked_cards(items, key_prefix="tc"):
+    """
+    추적 중인 키워드를 박스로 늘어놓아 한눈에 들어오게 한다.
+    순위만 보면 실속을 알 수 없어서, 검색량 추세와 예상 방문자를 함께 보여준다.
+    반환: (중단 요청 키워드, 자세히 보기 요청 키워드) — 없으면 각각 None
+    """
+    if not items:
+        return None, None
+
+    stopped, detail = None, None
+    cols_per_row = 5
+
+    # ⚠️ st.columns(len(chunk))로 만들면 마지막 줄의 칸 수가 달라져서
+    # 카드 폭이 제각각이 된다. 항상 같은 수의 칸을 만들고 남는 칸은 비워둔다.
+    for row_start in range(0, len(items), cols_per_row):
+        chunk = items[row_start:row_start + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for idx in range(cols_per_row):
+            with cols[idx]:
+                if idx >= len(chunk):
+                    continue          # 빈 칸은 아무것도 그리지 않는다
+                it = chunk[idx]
+                _one_track_card(it)
+                b1, b2 = st.columns(2)
+                with b1:
+                    if st.button("자세히", key=f"{key_prefix}_view_{it['keyword']}",
+                                 use_container_width=True):
+                        detail = it["keyword"]
+                with b2:
+                    if st.button("중단", key=f"{key_prefix}_stop_{it['keyword']}",
+                                 use_container_width=True):
+                        stopped = it["keyword"]
+    return stopped, detail
+
+
+def _one_track_card(it):
+    """
+    추적 카드. 두 종류를 다르게 그린다.
+
+    · 글을 쓴 키워드  → 순위를 크게. 실제로 오르내리는 걸 봐야 하니까
+    · 지켜보는 키워드 → 검색량 추세를 크게. 순위는 잴 대상이 아직 없으니
+      '순위 밖'이라고 크게 띄우면 문제가 생긴 것처럼 보인다
+    """
+    mine = bool(it.get("has_post"))
+    cls = "track-card mine" if mine else "track-card watching"
+
+    tag = ('<span class="tc-tag">내가 쓴 키워드</span>' if mine
+           else '<span class="tc-tag watch">지켜보는 중</span>')
+
+    cp = it.get("change_pct")
+    since = it.get("since")
+    if cp is None:
+        trend_html = '<span class="tc-flat">추세 계산 중</span>'
+    elif cp >= 10:
+        trend_html = f'<span class="tc-up">검색 ↑ {cp:+.0f}%</span>'
+    elif cp <= -10:
+        trend_html = f'<span class="tc-down">검색 ↓ {cp:+.0f}%</span>'
+    else:
+        trend_html = f'<span class="tc-flat">검색 {cp:+.0f}%</span>'
+    since_html = (f'<div class="tc-sub tc-since">{since} 최초 추적일부터</div>'
+                  if since and cp is not None else "")
+
+    # 등록 이후 글이 얼마나 늘었는지 — 남들이 몰려들었는지가 여기서 드러난다
+    cmp_ = it.get("compare") or {}
+    dp = cmp_.get("docs_pct")
+    if dp is None:
+        docs_html = ""
+    elif dp >= 10:
+        docs_html = f'<div class="tc-sub"><span class="tc-down">글 ↑ {dp:+.0f}%</span></div>'
+    elif dp <= -10:
+        docs_html = f'<div class="tc-sub"><span class="tc-up">글 ↓ {dp:+.0f}%</span></div>'
+    else:
+        docs_html = f'<div class="tc-sub tc-flat">글 {dp:+.0f}%</div>'
+
+    label = it.get("opp_label") or it.get("grade", "정보없음")
+    lcolor = GRADE_COLORS.get(label, MUTED)
+    meta = (f'<div class="tc-meta">'
+            f'<span class="tc-pill" style="background:{lcolor}">{_esc(label)}</span>'
+            f'<span class="tc-rec">기록 {it.get("records", 0)}회</span></div>')
+
+    if mine:
+        # --- 글을 쓴 키워드: 순위가 주인공 -----------------
+        rank = it.get("rank")
+        chg = it.get("change")
+        if rank is None:
+            main_html = ('<div class="tc-rank" style="color:#C4553D">순위 밖</div>'
+                         '<div class="tc-chg tc-flat">아직 100위 안에 없음</div>')
+        else:
+            color = GOOD if rank <= 10 else (WARN if rank <= 20 else BAD)
+            if chg is None:
+                chg_html = '<span class="tc-flat">기록 쌓는 중</span>'
+            elif chg > 0:
+                chg_html = f'<span class="tc-up">▲ {chg}계단</span>'
+            elif chg < 0:
+                chg_html = f'<span class="tc-down">▼ {abs(chg)}계단</span>'
+            else:
+                chg_html = '<span class="tc-flat">변화 없음</span>'
+            main_html = (f'<div class="tc-rank" style="color:{color}">{rank}위</div>'
+                         f'<div class="tc-chg">{chg_html}</div>')
+
+        # 예상 방문자 — 왜 없는지까지 알려준다.
+        # 그냥 '유입 미미'라고만 하면 뭐가 문제인지 알 수 없다.
+        visits = it.get("visits")
+        if visits:
+            sub = f'<div class="tc-sub tc-visit">월 <b>{visits:,}</b>명 예상</div>'
+        elif it.get("rank"):
+            sub = '<div class="tc-sub tc-flat">방문자 거의 없음</div>'
+        else:
+            sub = '<div class="tc-sub tc-flat">내 글 상위노출 없음</div>' 
+        body = (main_html + sub
+                + f'<div class="tc-sub">{trend_html}</div>' + docs_html)
+    else:
+        # --- 지켜보는 키워드: 검색량 추세가 주인공 ---------
+        search = it.get("search")
+        big = (f'<div class="tc-rank" style="color:{DEEP}">'
+               f'{_compact(search)}</div>' if search
+               else '<div class="tc-rank tc-flat">—</div>')
+        body = (big
+                + '<div class="tc-chg tc-flat">월 검색량</div>'
+                + f'<div class="tc-sub">{trend_html}</div>'
+                + docs_html + since_html)
+
+    st.markdown(
+        f'<div class="{cls}">'
+        f'<div class="tc-head">{tag}</div>'
+        f'<div class="tc-kw">{_esc(it["keyword"])}</div>'
+        f'{body}{meta}</div>', unsafe_allow_html=True)
+
+
+def _compact(v):
+    """카드 안에 들어갈 만큼 숫자를 줄인다."""
+    if not v:
+        return "—"
+    v = int(v)
+    if v >= 100_000_000:
+        return f"{v / 100_000_000:.1f}억"
+    if v >= 10_000:
+        return f"{v / 10_000:.1f}만"
+    return f"{v:,}"
+
+
+def score_breakdown(breakdown, total_score, title="기회 점수 구성"):
+    """
+    점수가 어떤 축에서 나왔는지 펼쳐 보여준다.
+    종합 점수만 보면 '왜 이 점수인지' 알 수 없어서 신뢰가 안 간다.
+    """
+    if not breakdown:
+        return
+    rows = []
+    for name, (val, label) in breakdown.items():
+        if val is None:
+            rows.append(
+                f'<div class="sb-row"><span class="sb-name">{_esc(name)}</span>'
+                f'<div class="sb-track"><div class="sb-fill" '
+                f'style="width:0%;background:{LINE}"></div></div>'
+                f'<span class="sb-val sb-none">{_esc(label)}</span></div>')
+            continue
+        color = GOOD if val >= 70 else (WARN if val >= 40 else BAD)
+        rows.append(
+            f'<div class="sb-row"><span class="sb-name">{_esc(name)}</span>'
+            f'<div class="sb-track"><div class="sb-fill" '
+            f'style="width:{val}%;background:{color}"></div></div>'
+            f'<span class="sb-val" style="color:{color}">{_esc(label)}</span></div>')
+
+    st.markdown(
+        f'<div class="chart-box">'
+        f'<div class="sb-top"><span class="chart-title">{_esc(title)}</span>'
+        f'<span class="sb-total">{total_score}</span></div>'
+        f'{"".join(rows)}</div>', unsafe_allow_html=True)
+
+
+SINCE_COLORS = {
+    "지금이 기회": GOOD, "같이 커지는 중": GOOD,
+    "경쟁 붙는 중": WARN, "큰 변화 없음": MUTED, "비교 준비 중": MUTED,
+    "비교 어려움": MUTED,
+    "불리해짐": BAD, "빠져나올 때": BAD, "식는 중": BAD,
+}
+
+
+def since_compare(data, since_label=""):
+    """
+    등록 당시와 지금을 나란히 보여준다.
+
+    검색량만으로는 '남들이 몰려들었는지'를 알 수 없다.
+    글 수를 함께 놓아야 '등록할 땐 비어 있었는데 그새 붐볐다'가 드러난다.
+    """
+    if not data:
+        return
+    color = SINCE_COLORS.get(data["verdict"], MUTED)
+
+    def row(label, a, b, pct, invert=False):
+        """invert=True면 늘어나는 게 나쁜 항목(글 수)."""
+        if pct is None:
+            arrow, c = "—", MUTED
+        elif pct >= 10:
+            arrow, c = f"▲ {pct:+.0f}%", (BAD if invert else GOOD)
+        elif pct <= -10:
+            arrow, c = f"▼ {pct:+.0f}%", (GOOD if invert else BAD)
+        else:
+            arrow, c = f"{pct:+.0f}%", MUTED
+        return (f'<div class="sc-row">'
+                f'<span class="sc-label">{_esc(label)}</span>'
+                f'<span class="sc-from">{a:,}</span>'
+                f'<span class="sc-arrow">→</span>'
+                f'<span class="sc-to">{b:,}</span>'
+                f'<span class="sc-pct" style="color:{c}">{arrow}</span>'
+                f'</div>')
+
+    added = data.get("docs_added")
+    added_txt = (f'<div class="sc-foot">등록 이후 글이 <b>{added:,}편</b> 늘었습니다.</div>'
+                 if added and added > 0 else "")
+
+    st.markdown(
+        f'<div class="chart-box">'
+        f'<div class="sc-top"><span class="chart-title">등록 당시와 비교</span>'
+        f'<span class="sc-verdict" style="background:{color}">'
+        f'{_esc(data["verdict"])}</span></div>'
+        f'<div class="sc-since">{_esc(since_label)}</div>'
+        + row("찾는 사람", data["search_from"], data["search_to"], data["search_pct"])
+        + row("쓰인 글", data["docs_from"], data["docs_to"], data["docs_pct"], invert=True)
+        + added_txt
+        + f'<div class="sc-note">{_esc(data["note"])}</div>'
+        f'</div>', unsafe_allow_html=True)
