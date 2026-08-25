@@ -55,24 +55,38 @@ html, body, [class*="css"], .stApp {{
 font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
 }}
 .stApp {{ background: {BASE}; }}
-/* Streamlit 기본 툴바 숨김
-   우상단 ⋮ 메뉴에는 'Clear caches', 'Deploy' 등 사용자가 알 필요 없는
-   개발자용 항목이 들어 있다. 잘못 누르면 캐시가 날아가 API를 다시 쓰게 된다. */
-#MainMenu, footer, header {{ visibility: hidden !important; }}
-[data-testid="stToolbar"],
+/* Streamlit 기본 메뉴 정리
+   ⚠️ 헤더를 통째로 숨기면 안 된다.
+   사이드바를 여는 버튼이 헤더 안에 있어서, 한 번 닫으면 다시 못 연다.
+   그래서 헤더는 남기고 '⋮ 메뉴'와 'Deploy' 버튼만 없앤다. */
+#MainMenu, footer {{ display: none !important; }}
 [data-testid="stMainMenu"],
-[data-testid="stDecoration"],
-[data-testid="stStatusWidget"],
 [data-testid="stDeployButton"],
 .stAppDeployButton,
-[data-testid="stToolbarActions"],
-[data-testid="stAppViewBlockContainer"] > div:first-child:empty {{
+[data-testid="stStatusWidget"],
+[data-testid="stDecoration"] {{
 display: none !important;
 }}
+/* 헤더는 투명하게 두되 자리는 남긴다 (사이드바 버튼이 여기 있다) */
 [data-testid="stHeader"] {{
-display: none !important; height: 0 !important;
+background: transparent !important;
+height: 2.6rem !important;
 }}
-.block-container {{ padding-top: 2.2rem; max-width: 1240px; }}
+/* 사이드바 여는 버튼은 항상 보이게 */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {{
+display: block !important; visibility: visible !important;
+opacity: 1 !important; z-index: 999 !important;
+}}
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="collapsedControl"] button {{
+background: {SURFACE} !important;
+border: 1.5px solid {LINE} !important;
+border-radius: 8px !important;
+color: {DEEP} !important;
+box-shadow: 0 1px 4px rgba(20,22,26,.10) !important;
+}}
+.block-container {{ padding-top: 1.4rem; max-width: 1240px; }}
 /* 수치는 전부 등폭으로 — 계측기 감각의 핵심 */
 .mono, .metric-val, .kpi-val {{
 font-family: 'IBM Plex Mono', monospace;
@@ -701,7 +715,9 @@ height: 48px; font-size: 1.02rem !important;
    좁은 화면에서는 여백을 줄이고, 가로로 넘치는 요소를 접는다.
    ============================================================ */
 @media (max-width: 640px) {{
-.block-container {{ padding: 1rem .7rem 3rem !important; }}
+.block-container {{ padding: 2.6rem .7rem 3rem !important; }}
+/* 모바일에서도 사이드바 버튼이 가려지지 않게 위쪽 여백 확보 */
+[data-testid="stHeader"] {{ height: 2.8rem !important; }}
 .masthead {{ padding: 16px 17px; border-radius: 12px; }}
 .masthead h1 {{ font-size: 1.28rem; }}
 .masthead p {{ font-size: .88rem; }}

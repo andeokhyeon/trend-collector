@@ -427,18 +427,34 @@ def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
 #
 # 평소에는 탭 자체가 없어서 남이 볼 수 없고,
 # 열쇠말로 들어가도 비밀번호를 한 번 더 물어본다.
-def _admin_requested():
-    if not config.ADMIN_PASSWORD or not config.ADMIN_KEY:
-        return False
+def _get_query_params():
+    """Streamlit 버전에 따라 주소 파라미터를 가져온다."""
     try:
-        qp = st.query_params            # 최신 Streamlit
-        return config.ADMIN_KEY in qp
-    except AttributeError:
-        try:
-            qp = st.experimental_get_query_params()   # 구버전
-            return config.ADMIN_KEY in qp
-        except Exception:
-            return False
+        return dict(st.query_params)
+    except Exception:
+        pass
+    try:
+        return st.experimental_get_query_params()
+    except Exception:
+        return {}
+
+
+def _admin_requested():
+    qp = _get_query_params()
+    if not config.ADMIN_KEY or config.ADMIN_KEY not in qp:
+        return False
+    # 열쇠말은 맞는데 비밀번호가 서버에 없으면 이유를 알려준다.
+    # (Streamlit Cloud의 Secrets에 ADMIN_PASSWORD를 안 넣은 경우가 대부분)
+    if not config.ADMIN_PASSWORD:
+        st.warning(
+            "관리 탭을 열려면 **ADMIN_PASSWORD** 가 필요합니다.\n\n"
+            "Streamlit Cloud라면 **Manage app → Settings → Secrets** 에 "
+            "아래 두 줄을 넣고 저장해주세요.\n\n"
+            "```\nADMIN_PASSWORD = \"원하는비밀번호\"\n"
+            "ADMIN_KEY = \"dog11286575\"\n```"
+        )
+        return False
+    return True
 
 
 _tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
