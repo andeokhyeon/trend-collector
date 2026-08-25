@@ -248,6 +248,53 @@ with st.expander(
                 st.session_state.pop("blog_id", None)
             st.rerun()
 
+# 관리 탭은 주소 뒤에 열쇠말을 붙였을 때만 나타난다.
+#
+#   https://내주소.streamlit.app/?dog11286575=1
+#
+# 평소에는 탭 자체가 없어서 남이 볼 수 없고,
+# 열쇠말로 들어가도 비밀번호를 한 번 더 물어본다.
+def _get_query_params():
+    """Streamlit 버전에 따라 주소 파라미터를 가져온다."""
+    try:
+        return dict(st.query_params)
+    except Exception:
+        pass
+    try:
+        return st.experimental_get_query_params()
+    except Exception:
+        return {}
+
+
+def _admin_requested():
+    qp = _get_query_params()
+    if not config.ADMIN_KEY or config.ADMIN_KEY not in qp:
+        return False
+    # 열쇠말은 맞는데 비밀번호가 서버에 없으면 이유를 알려준다.
+    if not config.ADMIN_PASSWORD:
+        st.warning(
+            "관리 탭을 열려면 **ADMIN_PASSWORD** 가 필요합니다.\n\n"
+            "Streamlit Cloud라면 **Manage app → Settings → Secrets** 에 "
+            "아래 두 줄을 넣고 저장해주세요.\n\n"
+            "```\nADMIN_PASSWORD = \"원하는비밀번호\"\n"
+            "ADMIN_KEY = \"dog11286575\"\n```"
+        )
+        return False
+    return True
+
+
+# 주소에 ?debug=1 을 붙이면 무엇 때문에 관리 탭이 안 뜨는지 알려준다.
+if "debug" in _get_query_params():
+    _qp = _get_query_params()
+    st.info(
+        f"**진단**\n\n"
+        f"- 주소 파라미터: `{list(_qp.keys()) or '없음'}`\n"
+        f"- 찾는 열쇠말: `{config.ADMIN_KEY or '(설정 안 됨)'}`\n"
+        f"- 열쇠말 일치: `{config.ADMIN_KEY in _qp if config.ADMIN_KEY else False}`\n"
+        f"- 비밀번호 설정됨: `{bool(config.ADMIN_PASSWORD)}`\n"
+        f"- 모듈 버전: `{__import__('naver_api').MODULE_VERSION}`"
+    )
+
 _tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
 # 한 번 들어오면 조작하는 동안 유지된다 (주소가 지워져도 탭이 사라지지 않게)
 if _admin_requested():
