@@ -851,6 +851,10 @@ def main():
     if COLLECT["weekly_event"] and _should_run("weekly_event"):
         save("주별 추천키워드(공휴일/축제 등)", fetch_weekly_event_keywords())
 
+    # 오래된 캐시 정리 (쌓이면 조회가 느려진다)
+    if cache:
+        cache.cleanup()
+
     if COLLECT["tracking"] and _should_run("tracking"):
         print("\n📌 추적 중인 키워드 기록...")
         rows = track_saved_keywords()

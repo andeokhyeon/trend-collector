@@ -204,7 +204,10 @@ def pool_get(keyword, fresh_days=POOL_FRESH_DAYS):
         return None
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=fresh_days)).isoformat()
-        res = (_supabase.table("keyword_pool").select("*")
+        # 필요한 컬럼만 가져온다. select("*")는 쓸데없이 무겁다.
+        res = (_supabase.table("keyword_pool")
+               .select("keyword, monthly_pc, monthly_mobile, "
+                       "comp_level, pl_avg_depth")
                .eq("keyword", keyword.strip())
                .gte("updated_at", cutoff).limit(1).execute())
         return res.data[0] if res.data else None
@@ -289,7 +292,7 @@ def pool_size():
         return 0
     try:
         res = _supabase.table("keyword_pool").select(
-            "keyword", count="exact").limit(1).execute()
+            "keyword", count="estimated").limit(1).execute()
         return res.count or 0
     except Exception:
         return 0
@@ -335,22 +338,32 @@ def pool_top(limit=50):
 
 def pool_stats():
     """
-    풀 요약. 전체 개수, 문서수까지 확인된 개수, 오늘 늘어난 개수.
+    풀 요약.
+
+    ⚠️ count="exact"는 테이블 전체를 훑어서, 수십만 행이 쌓이면 매우 느리다.
+    정확한 숫자가 필요한 화면이 아니므로 estimated(추정치)를 쓴다.
+    Supabase가 통계 정보로 즉시 답해준다.
     """
     out = {"total": 0, "with_docs": 0, "today": 0}
     if _supabase is None:
         return out
     try:
         r = _supabase.table("keyword_pool").select(
-            "keyword", count="exact").limit(1).execute()
+            "keyword", count="estimated").limit(1).execute()
         out["total"] = r.count or 0
-
-        r = (_supabase.table("keyword_pool").select("keyword", count="exact")
+    except Exception:
+        pass
+    try:
+        # 문서수가 채워진 것과 오늘 늘어난 것은 상대적으로 적어서
+        # planned(계획 단계 추정)로도 충분히 빠르고 정확하다
+        r = (_supabase.table("keyword_pool").select("keyword", count="planned")
              .not_.is_("docs_checked_at", "null").limit(1).execute())
         out["with_docs"] = r.count or 0
-
+    except Exception:
+        pass
+    try:
         today = datetime.now(timezone.utc).date().isoformat()
-        r = (_supabase.table("keyword_pool").select("keyword", count="exact")
+        r = (_supabase.table("keyword_pool").select("keyword", count="planned")
              .gte("updated_at", today).limit(1).execute())
         out["today"] = r.count or 0
     except Exception:
@@ -375,3 +388,25 @@ def usage_history(days=7):
 # 이게 없으면 수집기가 끝날 때 마지막 몇 회가 기록되지 않는다.
 import atexit
 atexit.register(lambda: flush_calls() if _supabase is not None else None)
+
+
+def cleanup(days=2):
+    """
+    오래된 캐시를 지운다.
+
+    api_cache는 조회할 때마다 한 줄씩 쌓이는데 지우는 코드가 없었다.
+    만료된 항목은 어차피 안 쓰이면서 검색 대상에만 포함되어
+    시간이 지날수록 조회가 느려진다. 수집기가 돌 때 함께 정리한다.
+    """
+    if _supabase is None:
+        return 0
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        res = (_supabase.table("api_cache").delete()
+               .lt("created_at", cutoff).execute())
+        n = len(res.data or [])
+        if n:
+            print(f"   (오래된 캐시 {n:,}건 정리)")
+        return n
+    except Exception:
+        return 0

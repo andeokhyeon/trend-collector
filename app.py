@@ -1584,16 +1584,20 @@ if admin_tab is not None:
                         ui.kpi("쌓인 키워드", compact_num(stats["total"]),
                                f"오늘 +{stats['today']:,}개")
                     with c2:
-                        ratio = (stats["with_docs"] / stats["total"] * 100
-                                 if stats["total"] else 0)
-                        ui.kpi("문서수 확인됨", compact_num(stats["with_docs"]),
-                               f"전체의 {ratio:.0f}%")
+                        # 문서수는 미리 안 쌓는다. 조회된 것만 채워지므로
+                        # '전체의 0%'로 보이면 잘못된 것처럼 오해하기 쉽다.
+                        ui.kpi("문서수 잰 키워드", compact_num(stats["with_docs"]),
+                               "조회된 것만 채워집니다")
                     with c3:
                         ui.kpi("오늘 API 호출", f"{u['calls']:,}",
                                f"한도 {u['limit']:,}회의 {u['pct']}%")
                     with c4:
                         ui.kpi("남은 조회", f"{u['remaining']:,}",
                                f"{cache.reset_time()} 초기화")
+
+                    ui.note("<b>검색량</b>은 한 번 호출에 연관어 20개가 딸려와 빠르게 쌓입니다. "
+                            "<b>문서수</b>는 키워드마다 따로 불러야 해서, "
+                            "실제로 조회된 것만 채워집니다. 두 숫자가 크게 차이나는 건 정상입니다.")
 
                     st.write("")
                     ui.gauge("오늘 사용량", min(100, int(u["pct"])),
