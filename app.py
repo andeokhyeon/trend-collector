@@ -1422,7 +1422,11 @@ with tabs[2]:
                         "키워드": row['keyword'],
                         "월 검색량": int(row['총 검색량']),
                         "경쟁률": row.get('comp_grade', '정보없음'),
-                        "내 승산": win["score"] if win["score"] is not None else "—",
+                        # ⚠️ 숫자와 문자열을 한 컬럼에 섞으면 표 변환이 실패한다.
+                        # (Arrow 변환 시 "Expected bytes, got a 'int' object")
+                        # 전부 문자열로 통일한다.
+                        "내 승산": (f"{win['score']}점"
+                                  if win["score"] is not None else "—"),
                         "판단": win["verdict"],
                     })
                 wdf = pd.DataFrame(rows)
