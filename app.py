@@ -786,6 +786,17 @@ with sub_research[0]:
             st.write("")
             ui.section("연관 키워드 전체", f"{len(all_rel)}개")
 
+            # 어떤 조각으로 물어봤는지 보여준다.
+            # 네이버는 띄어쓰기에 민감해서 '반딧불축제'와 '반딧불 축제'가
+            # 다른 결과를 준다. 그래서 여러 형태로 나눠 묻는다.
+            _hints = r.get("hints") or []
+            if len(_hints) > 1:
+                chips = " ".join(
+                    f'<span class="hint-chip">{h}</span>' for h in _hints)
+                st.markdown(
+                    f'<div class="hint-row">이렇게 나눠서 찾았습니다 {chips}</div>',
+                    unsafe_allow_html=True)
+
             fc1, fc2 = st.columns([1, 1])
             with fc1:
                 only_has = st.checkbox(f"'{r['keyword']}' 포함한 것만",
@@ -1289,24 +1300,22 @@ with tabs[1]:
             if info.get("opp_note"):
                 ui.note(f"<b>{info.get('opp_label','')}</b> — {info['opp_note']}")
 
-        target_kw = st.session_state.get("track_detail")
+        # ⚠️ Streamlit은 어느 탭에서 무엇을 누르든 스크립트 전체를 다시 실행한다.
+        # 그래서 세션에 남은 값으로 팝업을 띄우면, 다른 탭에서 라디오 버튼 하나만
+        # 눌러도 추적기 팝업이 계속 따라 나온다.
+        # '한 번만 보여주고 지우는' 방식으로 바꿔서 그걸 막는다.
+        target_kw = st.session_state.pop("track_detail", None)
         if target_kw and any(x["keyword"] == target_kw for x in summary):
             try:
                 @st.dialog(f"{target_kw} · 추이", width="large")
                 def _detail_dialog():
                     _render_detail(target_kw)
-                    if st.button("닫기", use_container_width=True):
-                        st.session_state.pop("track_detail", None)
-                        st.rerun()
                 _detail_dialog()
             except AttributeError:
                 # 구버전 Streamlit에는 st.dialog가 없다 — 아래에 펼쳐서 보여준다
                 st.divider()
                 ui.section("키워드별 추이", target_kw)
                 _render_detail(target_kw)
-                if st.button("닫기"):
-                    st.session_state.pop("track_detail", None)
-                    st.rerun()
 
 # ------------------------------------------------------------
 # 2. 내 블로그

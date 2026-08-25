@@ -270,6 +270,57 @@ def _quota_ok(n=1):
     return _shared.can_call(n) if _shared is not None else True
 
 
+def _build_hints(keyword, max_hints=5):
+    """
+    검색어 하나로 여러 힌트를 만든다.
+
+    ⚠️ 네이버 키워드도구는 두 가지 특성이 있다.
+      1) 공백에 민감하다. '반딧불축제'와 '반딧불 축제'가 다른 결과를 준다.
+         hintKeywords는 공백을 뺀 형태로 보내는 것이 표준이다.
+      2) 쉼표로 최대 5개까지 한 번에 물을 수 있다. 호출은 여전히 1회다.
+
+    '반딧불 축제'를 그대로 물으면 얻는 게 적지만,
+    '반딧불축제,반딧불,축제'로 물으면 훨씬 넓게 받아온다.
+    (경쟁 서비스가 '전체 200개 / 반딧불 102 / 축제 91' 식으로
+     조각별 개수를 보여주는 것도 같은 방식이기 때문이다)
+    """
+    raw = (keyword or "").strip()
+    if not raw:
+        return []
+
+    hints, seen = [], set()
+
+    def add(h):
+        h = h.strip()
+        if h and h not in seen and len(hints) < max_hints:
+            seen.add(h)
+            hints.append(h)
+
+    joined = raw.replace(" ", "")
+    add(joined)                         # 공백 뺀 원형 (가장 중요)
+
+    if " " in raw:
+        add(raw)                        # 띄어쓴 형태도 함께
+        for part in raw.split():        # 조각별로도 물어본다
+            if len(part) >= 2:
+                add(part)
+    elif len(joined) >= 4:
+        # 붙여 쓴 말은 쪼갤 단서가 없다. 흔한 꼬리말을 떼어보고,
+        # 그래도 안 되면 앞뒤로 잘라서 힌트를 늘린다.
+        # ('반딧불축제' → '축제', '반딧불')
+        for tail in ("축제", "박람회", "페스티벌", "추천", "후기", "가격",
+                     "예약", "숙소", "맛집", "여행", "행사", "대회"):
+            if joined.endswith(tail) and len(joined) > len(tail) + 1:
+                add(tail)
+                add(joined[:-len(tail)])
+                break
+        else:
+            half = len(joined) // 2
+            add(joined[:half + 1])
+            add(joined[half:])
+    return hints
+
+
 def get_keyword_data(keyword, related_limit=200):
     """
     /keywordstool 한 번으로 '이 키워드의 통계'와 '연관 키워드'를 함께 얻는다.
@@ -297,14 +348,18 @@ def get_keyword_data(keyword, related_limit=200):
 
     empty = {"stat": {"monthly_pc": 0, "monthly_mobile": 0,
                       "comp_level": "-", "pl_avg_depth": 0},
-             "related": []}
+             "related": [], "hints": []}
     if not _quota_ok():
         return empty
     path = "/keywordstool"
+    hints = _build_hints(keyword)
+    if not hints:
+        return _cache_put(ck, empty)
     try:
         _count_call()
         res = requests.get(NAVER_BASE_URL + path,
-                           params={"hintKeywords": keyword.strip(), "showDetail": "1"},
+                           params={"hintKeywords": ",".join(hints),
+                                   "showDetail": "1"},
                            headers=get_naver_headers("GET", path), timeout=10)
         if res.status_code != 200:
             return _cache_put(ck, empty)
@@ -369,7 +424,8 @@ def get_keyword_data(keyword, related_limit=200):
                     "comp_level": r["comp_level"], "pl_avg_depth": 0}
                    for r in rel_all])
 
-        return _cache_put(ck, {"stat": stat, "related": related})
+        return _cache_put(ck, {"stat": stat, "related": related,
+                               "hints": hints})
     except Exception:
         return _cache_put(ck, empty)
 
@@ -487,6 +543,7 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
         "opportunity": opportunity,
         "pl_avg_depth": stat["pl_avg_depth"],
         "related": data["related"] if with_related else [],
+        "hints": data.get("hints", []),
     }
 
 

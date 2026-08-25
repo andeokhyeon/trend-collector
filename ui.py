@@ -800,6 +800,16 @@ font-family: 'Pretendard', sans-serif;
 margin-top: 8px; padding-top: 9px; border-top: 1px solid {LINE};
 font-size: .9rem; color: #40454C; line-height: 1.6;
 }}
+/* 조회에 쓴 힌트 표시 */
+.hint-row {{
+font-size: .82rem; color: {MUTED}; margin: -4px 0 10px;
+display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+}}
+.hint-chip {{
+background: #F1F6F8; color: {DEEP}; border: 1px solid #D6E2E8;
+padding: 2px 9px; border-radius: 999px;
+font-size: .78rem; font-weight: 700;
+}}
 /* 상단 정보 줄 */
 .topbar {{
 display: flex; flex-wrap: wrap; gap: 7px;
