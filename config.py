@@ -83,6 +83,17 @@ SUPABASE_KEY = get("SUPABASE_KEY")
 # --- 한국관광공사 TourAPI (축제/행사) ---
 TOUR_API_SERVICE_KEY = get("TOUR_API_SERVICE_KEY")
 
+# --- 자동완성 연관어 (선택) ---
+#
+# 네이버 검색창 자동완성에서 연관 검색어를 추가로 모을지 여부.
+# 키워드도구는 광고 데이터만 있어서 '현대노조 파업' 같은 이슈성 키워드가
+# 거의 안 나온다. 자동완성은 '사람들이 실제로 친 검색어'라 그걸 채워준다.
+#
+# ⚠️ 공식 API가 아니라 예고 없이 막힐 수 있다.
+#    문제가 생기면 .env에서 USE_AUTOCOMPLETE=0 으로 끄면 된다.
+#    (끄면 그 기능만 빠지고 나머지는 정상 동작한다)
+USE_AUTOCOMPLETE = get("USE_AUTOCOMPLETE", "1") not in ("0", "false", "False", "no")
+
 # --- 관리자 화면 ---
 #
 # 관리 탭은 평소에 아예 보이지 않는다.

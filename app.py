@@ -193,6 +193,7 @@ COL_WIDTH = {
     '발행일': ("small", None),
     '경과': ("small", None),
     '직전 글과 간격': ("small", None),
+    '출처': ("small", None),
 }
 
 
@@ -790,6 +791,12 @@ with sub_research[0]:
             # 네이버는 띄어쓰기에 민감해서 '반딧불축제'와 '반딧불 축제'가
             # 다른 결과를 준다. 그래서 여러 형태로 나눠 묻는다.
             _hints = r.get("hints") or []
+            _ac_count = sum(1 for i in all_rel if i.get("source") == "자동완성")
+            if _ac_count:
+                ui.note(f"이 중 <b>{_ac_count}개</b>는 네이버 검색창 자동완성에서 "
+                        "가져왔습니다. 검색광고 데이터에 없는 이슈·뉴스 키워드까지 "
+                        "찾기 위해서입니다. 검색량은 그 키워드를 직접 조회해야 나옵니다.")
+
             if len(_hints) > 1:
                 chips = " ".join(
                     f'<span class="hint-chip">{h}</span>' for h in _hints)
@@ -808,17 +815,23 @@ with sub_research[0]:
 
             rows_all = [{
                 "키워드": i["keyword"],
-                "월 검색량": i["monthly_pc"] + i["monthly_mobile"],
+                # 자동완성으로 온 것은 검색량을 아직 모른다.
+                # 0으로 표시하면 '아무도 안 찾는다'로 오해하므로 구분한다.
+                "월 검색량": (i["monthly_pc"] + i["monthly_mobile"]
+                            if i.get("source") != "자동완성" else None),
                 "경쟁": i.get("comp_level") or "-",
+                "출처": i.get("source", "검색광고"),
             } for i in all_rel
                 if (i.get("contains", True) or not only_has)
-                and (i["monthly_pc"] + i["monthly_mobile"]) >= min_vol]
+                and (i.get("source") == "자동완성"
+                     or (i["monthly_pc"] + i["monthly_mobile"]) >= min_vol)]
 
             if not rows_all:
                 ui.note("조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요.")
             else:
                 adf = pd.DataFrame(rows_all).sort_values(
-                    "월 검색량", ascending=False).reset_index(drop=True)
+                    "월 검색량", ascending=False,
+                    na_position="last").reset_index(drop=True)
                 adf.index = adf.index + 1
                 st.dataframe(adf, use_container_width=True, height=440,
                              column_config=col_config(adf.columns) or None)
@@ -1477,15 +1490,23 @@ else:
         if golden.empty:
             ui.note("골든타임 데이터가 없습니다. collector.py 실행 후 다시 확인해주세요.")
         else:
-            sub = st.tabs(["상품", "서비스"])
+            # ⚠️ 시드 키워드를 없애면서 분류 기준이 바뀌었다.
+            # 예전엔 '상품/서비스'였지만, 이제는 어디서 나왔는지로 나눈다.
+            #   트렌드 — 오늘 구글 트렌드에 뜬 키워드 그 자체
+            #   세부   — 그 트렌드에서 파생된 연관 검색어
+            sub = st.tabs(["🔥 오늘 트렌드", "🔍 파생 키워드", "전체"])
+            _extra = [('blog_competition', '최근 30일 글')]
             with sub[0]:
-                render_table(golden[golden['keyword_category'] == '상품'],
+                render_table(golden[golden['keyword_category'] == '트렌드'],
                              sort_col='rise_score', show_docs=False,
-                             extra_cols=[('blog_competition', '최근 30일 글')])
+                             extra_cols=_extra)
             with sub[1]:
-                render_table(golden[golden['keyword_category'] == '서비스'],
+                render_table(golden[golden['keyword_category'] == '세부'],
                              sort_col='rise_score', show_docs=False,
-                             extra_cols=[('blog_competition', '최근 30일 글')])
+                             extra_cols=_extra)
+            with sub[2]:
+                render_table(golden, sort_col='rise_score', show_docs=False,
+                             extra_cols=_extra)
 
     with sub_discover[2]:
         ui.section("주간 캘린더", "미리 써두면 유리한 앞으로 4주")

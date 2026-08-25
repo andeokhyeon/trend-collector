@@ -314,8 +314,10 @@ def fetch_golden_time_keywords():
         opp = calc_opportunity(ratio, (recent / total) if total else None,
                                total_search=total)
 
-        # 최근 글이 적고, 종합 판단도 나쁘지 않은 것만
-        if recent <= 30 and opp["score"] >= 45:
+        # 최근 글이 적고, 종합 판단도 나쁘지 않은 것만.
+        # ⚠️ 기준이 빡빡하면 하루에 서너 건밖에 안 나와 화면이 비어 보인다.
+        # 최근 글 30개 → 50개, 점수 45 → 40으로 조금 넓혔다.
+        if recent <= 50 and opp["score"] >= 40:
             results.append({
                 "keyword": kw,
                 "source": "golden_time",

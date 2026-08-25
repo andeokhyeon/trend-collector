@@ -19,6 +19,7 @@ MODULE_VERSION = "2026-08-25-admin"
 from config import (
     NAVER_API_KEY, NAVER_SECRET_KEY, NAVER_CUSTOMER_ID, NAVER_BASE_URL,
     NAVER_HUB_CLIENT_ID, NAVER_HUB_CLIENT_SECRET, NAVER_HUB_BLOG_URL,
+    USE_AUTOCOMPLETE,
 )
 
 
@@ -270,19 +271,30 @@ def _quota_ok(n=1):
     return _shared.can_call(n) if _shared is not None else True
 
 
+# 붙여 쓴 말을 쪼갤 때 쓰는 꼬리말.
+# ⚠️ 예전에는 단서가 없으면 글자 수 절반으로 잘랐는데,
+# '현대노조' → '현대노' 같은 말이 안 되는 조각이 나왔다.
+# 사전에 있는 꼬리말만 떼고, 없으면 쪼개지 않는다.
+_TAIL_WORDS = (
+    "축제", "박람회", "페스티벌", "행사", "대회", "전시회", "콘서트",
+    "추천", "후기", "리뷰", "순위", "비교", "가격", "최저가", "할인",
+    "예약", "숙소", "맛집", "카페", "여행", "코스", "일정",
+    "방법", "사용법", "설치", "수리", "청소", "관리",
+    "효능", "부작용", "증상", "치료", "병원",
+    "파업", "노조", "채용", "연봉", "주가", "배당",
+)
+
+
 def _build_hints(keyword, max_hints=5):
     """
     검색어 하나로 여러 힌트를 만든다.
 
     ⚠️ 네이버 키워드도구는 두 가지 특성이 있다.
       1) 공백에 민감하다. '반딧불축제'와 '반딧불 축제'가 다른 결과를 준다.
-         hintKeywords는 공백을 뺀 형태로 보내는 것이 표준이다.
       2) 쉼표로 최대 5개까지 한 번에 물을 수 있다. 호출은 여전히 1회다.
 
-    '반딧불 축제'를 그대로 물으면 얻는 게 적지만,
-    '반딧불축제,반딧불,축제'로 물으면 훨씬 넓게 받아온다.
-    (경쟁 서비스가 '전체 200개 / 반딧불 102 / 축제 91' 식으로
-     조각별 개수를 보여주는 것도 같은 방식이기 때문이다)
+    다만 억지로 쪼개지는 않는다. 뜻이 없는 조각을 보내면
+    엉뚱한 연관어가 섞이거나 아무것도 안 나온다.
     """
     raw = (keyword or "").strip()
     if not raw:
@@ -304,20 +316,16 @@ def _build_hints(keyword, max_hints=5):
         for part in raw.split():        # 조각별로도 물어본다
             if len(part) >= 2:
                 add(part)
-    elif len(joined) >= 4:
-        # 붙여 쓴 말은 쪼갤 단서가 없다. 흔한 꼬리말을 떼어보고,
-        # 그래도 안 되면 앞뒤로 잘라서 힌트를 늘린다.
-        # ('반딧불축제' → '축제', '반딧불')
-        for tail in ("축제", "박람회", "페스티벌", "추천", "후기", "가격",
-                     "예약", "숙소", "맛집", "여행", "행사", "대회"):
-            if joined.endswith(tail) and len(joined) > len(tail) + 1:
-                add(tail)
-                add(joined[:-len(tail)])
-                break
-        else:
-            half = len(joined) // 2
-            add(joined[:half + 1])
-            add(joined[half:])
+        return hints
+
+    # 붙여 쓴 말은 사전에 있는 꼬리말만 떼어본다.
+    # 앞부분이 2글자 이상 남을 때만 유효한 조각으로 본다.
+    for tail in _TAIL_WORDS:
+        if joined.endswith(tail) and len(joined) - len(tail) >= 2:
+            add(joined[:-len(tail)])
+            add(tail)
+            break
+
     return hints
 
 
@@ -528,6 +536,31 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
     ratio, grade = calc_competition(total_search, doc_count)
     opportunity = calc_opportunity(ratio, recent_ratio, total_search=total_search)
 
+    related = data["related"] if with_related else []
+
+    # 자동완성으로 빈틈을 메운다.
+    # 키워드도구는 광고 데이터라 이슈성 키워드가 비어 있는데,
+    # 자동완성은 실제 검색어라 그런 것까지 잡힌다.
+    if with_related and USE_AUTOCOMPLETE:
+        have = {r["keyword"].replace(" ", "") for r in related}
+        for t in autocomplete_keywords(keyword):
+            if t.replace(" ", "") in have:
+                continue
+            have.add(t.replace(" ", ""))
+            related.append({
+                "keyword": t,
+                "monthly_pc": 0,
+                "monthly_mobile": 0,
+                "comp_level": "-",
+                "contains": keyword.replace(" ", "") in t.replace(" ", ""),
+                "source": "자동완성",     # 검색량은 아직 모른다
+            })
+        # 검색량이 있는 것(광고 데이터)을 앞에, 자동완성을 뒤에
+        related.sort(key=lambda x: (
+            x.get("source") == "자동완성",
+            not x.get("contains", True),
+            -(x["monthly_pc"] + x["monthly_mobile"])))
+
     return {
         "keyword": keyword,
         "monthly_pc": stat["monthly_pc"],
@@ -542,7 +575,7 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
         "recent_grade": recent_grade,
         "opportunity": opportunity,
         "pl_avg_depth": stat["pl_avg_depth"],
-        "related": data["related"] if with_related else [],
+        "related": related,
         "hints": data.get("hints", []),
     }
 
@@ -1454,3 +1487,115 @@ def _judge_since(search_pct, docs_pct):
                 "note": "등록할 때보다 찾는 사람이 줄었습니다."}
     return {"verdict": "큰 변화 없음",
             "note": "등록 이후 검색량과 글 수 모두 비슷합니다."}
+
+
+# ============================================================
+# 자동완성 기반 연관어 (선택 기능)
+#
+# ⚠️ 왜 필요한가
+# 키워드도구는 '광고 도구'다. 광고주가 입찰하는 키워드만 데이터가 있어서
+# '현대노조 파업' 같은 이슈성 키워드는 거의 안 나온다.
+# 검색창 자동완성은 '사람들이 실제로 친 검색어'라 그런 것까지 잡힌다.
+#
+# ⚠️ 알아둘 점
+# 이건 네이버가 공식 문서로 제공하는 API가 아니다.
+# 예고 없이 형식이 바뀌거나 막힐 수 있어서, 실패해도 앱이 죽지 않게
+# 만들었다. config의 USE_AUTOCOMPLETE를 끄면 통째로 비활성화된다.
+# 유료 서비스로 갈 때는 이 부분을 빼거나 다른 소스로 갈아끼우면 된다.
+# ============================================================
+
+AC_URL = "https://ac.search.naver.com/nx/ac"
+
+
+def _ac_fetch(query):
+    """자동완성 한 번 조회. 실패하면 빈 리스트."""
+    try:
+        res = requests.get(
+            AC_URL,
+            params={"q": query, "st": "100", "r_format": "json",
+                    "r_enc": "UTF-8", "r_unicode": "0", "t_koreng": "1",
+                    "q_enc": "UTF-8", "ans": "2"},
+            headers={"User-Agent": "Mozilla/5.0",
+                     "Referer": "https://search.naver.com/"},
+            timeout=5)
+        if res.status_code != 200:
+            return []
+        return _ac_parse(res.json())
+    except Exception:
+        return []
+
+
+def _ac_parse(data):
+    """
+    응답에서 문자열만 긁어낸다.
+
+    구조가 items > [[["키워드", ...], ...], ...] 형태로 중첩돼 있는데,
+    형식이 바뀔 수 있으므로 구조를 가정하지 않고 재귀로 훑는다.
+    """
+    out = []
+
+    def walk(node, depth=0):
+        if depth > 6:
+            return
+        if isinstance(node, str):
+            t = node.strip()
+            # 숫자나 내부 코드가 섞여 들어오므로 걸러낸다
+            if t and not t.isdigit() and len(t) >= 2 and len(t) <= 40:
+                out.append(t)
+        elif isinstance(node, (list, tuple)):
+            for x in node:
+                walk(x, depth + 1)
+        elif isinstance(node, dict):
+            for k in ("items", "answer", "list"):
+                if k in node:
+                    walk(node[k], depth + 1)
+
+    walk(data.get("items") if isinstance(data, dict) else data)
+
+    # 중복 제거하면서 순서 유지
+    seen, uniq = set(), []
+    for t in out:
+        if t not in seen:
+            seen.add(t)
+            uniq.append(t)
+    return uniq
+
+
+def autocomplete_keywords(keyword, expand=True, limit=60):
+    """
+    자동완성으로 연관 검색어를 모은다.
+
+    expand=True면 뒤에 자모를 붙여 더 넓게 훑는다.
+    ('현대노조' → '현대노조ㄱ', '현대노조ㄴ' ... 식으로 물어보면
+     자동완성이 더 다양한 결과를 준다)
+    """
+    ck = ("ac", keyword.strip(), expand, limit)
+    cached = _cache_get(ck)
+    if cached is not None:
+        return cached
+
+    base = keyword.strip()
+    if not base:
+        return []
+
+    found = list(_ac_fetch(base))
+
+    if expand and len(found) < limit:
+        # 자모를 붙여 가지치기. 호출이 늘지만 네이버 광고 API 한도와는
+        # 무관하고, 응답도 가벼워서 부담이 적다.
+        for ch in "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ":
+            if len(found) >= limit:
+                break
+            found += _ac_fetch(f"{base} {ch}")
+            time.sleep(0.05)
+
+    # 원본과 무관한 것, 원본 자체는 제외
+    norm = base.replace(" ", "")
+    out, seen = [], set()
+    for t in found:
+        if t in seen or t.replace(" ", "") == norm:
+            continue
+        seen.add(t)
+        out.append(t)
+
+    return _cache_put(ck, out[:limit])
