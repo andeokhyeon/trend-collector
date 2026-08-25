@@ -40,7 +40,10 @@ import config
 SUPABASE_URL = config.SUPABASE_URL
 SUPABASE_KEY = config.SUPABASE_KEY
 
-st.set_page_config(page_title="키워드 헌터", page_icon="🎯", layout="wide")
+# initial_sidebar_state를 지정하지 않으면 화면 폭에 따라 사이드바가 접힌 채로 뜬다.
+# 접힌 상태에서 여는 버튼까지 안 보이면 사용자가 손쓸 방법이 없다.
+st.set_page_config(page_title="키워드 헌터", page_icon="🎯",
+                   layout="wide", initial_sidebar_state="expanded")
 ui.inject_css()
 
 
@@ -456,6 +459,18 @@ def _admin_requested():
         return False
     return True
 
+
+# 주소에 ?debug=1 을 붙이면 무엇 때문에 관리 탭이 안 뜨는지 알려준다.
+if "debug" in _get_query_params():
+    _qp = _get_query_params()
+    st.info(
+        f"**진단**\n\n"
+        f"- 주소 파라미터: `{list(_qp.keys()) or '없음'}`\n"
+        f"- 찾는 열쇠말: `{config.ADMIN_KEY or '(설정 안 됨)'}`\n"
+        f"- 열쇠말 일치: `{config.ADMIN_KEY in _qp if config.ADMIN_KEY else False}`\n"
+        f"- 비밀번호 설정됨: `{bool(config.ADMIN_PASSWORD)}`\n"
+        f"- 모듈 버전: `{__import__('naver_api').MODULE_VERSION}`"
+    )
 
 _tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
 # 한 번 들어오면 조작하는 동안 유지된다 (주소가 지워져도 탭이 사라지지 않게)

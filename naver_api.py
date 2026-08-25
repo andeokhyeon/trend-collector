@@ -13,7 +13,7 @@ import hmac
 import hashlib
 import requests
 
-MODULE_VERSION = "2026-08-21-a"
+MODULE_VERSION = "2026-08-25-admin"
 
 # --- 설정은 config.py 한 곳에서 읽는다 (키를 코드에 두지 않는다) ---
 from config import (
