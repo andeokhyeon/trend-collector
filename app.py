@@ -153,6 +153,183 @@ def latest_snapshot(df_source, hours=None):
     return d.sort_values('created_at_dt', ascending=False).drop_duplicates(subset='keyword', keep='first')
 
 
+def compact_num(v):
+    """
+    3억 같은 큰 수는 카드 폭을 넘쳐 줄바꿈되므로 축약한다.
+    (예: 304,890,403 → 3.0억)
+    """
+    if v is None:
+        return "—"
+    v = int(v)
+    if v >= 100_000_000:
+        return f"{v / 100_000_000:.1f}억"
+    if v >= 10_000:
+        return f"{v / 10_000:,.1f}만"
+    return f"{v:,}"
+
+
+COL_WIDTH = {
+    # 이름 : (폭, 표시형식)
+    '키워드': ("large", None),
+    '이벤트': ("large", None),
+    '제목': ("large", None),
+    '세부 주제': ("large", None),
+    '진단': ("medium", None),
+    '판단': ("medium", None),
+    '월 검색량': ("small", "%d"),
+    '검색량': ("small", None),
+    '문서수': ("small", "%d"),
+    '누적 문서수': ("small", "%d"),
+    '최근 30일': ("small", None),
+    '경쟁률': ("small", None),
+    '경쟁': ("small", None),
+    '기회 점수': ("small", "%d"),
+    '내 승산': ("small", None),
+    '광고 경쟁도': ("small", "%d"),
+    '최근 30일 글': ("small", "%d"),
+    '날짜': ("small", None),
+    '요일': ("small", None),
+    '종류': ("small", None),
+    '발행일': ("small", None),
+    '경과': ("small", None),
+    '직전 글과 간격': ("small", None),
+}
+
+
+def col_config(columns):
+    """
+    표의 컬럼 폭을 내용에 맞게 지정한다.
+    기본값은 남는 공간을 컬럼끼리 균등 분배해서
+    숫자 한 칸짜리 컬럼도 불필요하게 넓어진다.
+    """
+    cfg = {}
+    try:
+        for name in columns:
+            width, fmt = COL_WIDTH.get(name, ("small", None))
+            if fmt:
+                cfg[name] = st.column_config.NumberColumn(name, width=width, format=fmt)
+            else:
+                cfg[name] = st.column_config.Column(name, width=width)
+    except AttributeError:
+        return None
+    return cfg
+
+
+# 등급 라벨별 옅은 배경색 (표 안에서 한눈에 구분되게)
+GRADE_TINT = {
+    '최고': ('#E8F4F0', '#1F6354'), '좋음': ('#E8F4F0', '#1F6354'),
+    '매우한산': ('#E8F4F0', '#1F6354'), '한산': ('#E8F4F0', '#1F6354'),
+    '비어 있는 자리': ('#DCEFE9', '#175247'), '오래된 글만 많음': ('#E8F4F0', '#1F6354'),
+    '해볼 만함': ('#E8F4F0', '#1F6354'), '오래된 글이 1등': ('#DCEFE9', '#175247'),
+    '보통': ('#FBF2E1', '#8A6420'),
+    '지금 몰리는 중': ('#FBF2E1', '#8A6420'), '누적만 반영': ('#FBF2E1', '#8A6420'),
+    '새 글 옛 글 섞임': ('#FBF2E1', '#8A6420'),
+    '나쁨': ('#FAEAE5', '#9E3E28'), '최악': ('#FAEAE5', '#9E3E28'),
+    '붐빔': ('#FAEAE5', '#9E3E28'), '과열': ('#FAEAE5', '#9E3E28'),
+    '이미 꽉 참': ('#F7E1DB', '#8C3520'), '어려움': ('#FAEAE5', '#9E3E28'),
+    '최신 글 경쟁': ('#FAEAE5', '#9E3E28'),
+    '정보없음': ('#F1F1EC', '#6B7280'), '검색량없음': ('#F1F1EC', '#6B7280'),
+    '이슈': ('#ECEFF3', '#4A5560'),
+    '매우낮음': ('#F1F1EC', '#6B7280'),
+    '높음': ('#EDF1F4', '#2E5468'), '매우높음': ('#E3EAEF', '#1B3A4B'),
+    '낮음': ('#FBF2E1', '#8A6420'),
+}
+
+TINT_COLS = {'검색량', '경쟁률', '진단', '판단', '등급', '종류', '경쟁'}
+
+
+def style_table(frame):
+    """
+    표에 옅은 색을 입힌다.
+    등급 계열은 의미별 색, 수치는 값이 클수록 진해지는 옅은 네이비.
+    """
+    def tint_cell(val):
+        bg, fg = GRADE_TINT.get(str(val), (None, None))
+        if bg:
+            return f'background-color:{bg};color:{fg};font-weight:600'
+        return ''
+
+    sty = frame.style
+    tint_targets = [c for c in frame.columns if c in TINT_COLS]
+    if tint_targets:
+        sty = sty.map(tint_cell, subset=tint_targets)
+
+    num_cols = [c for c in ('월 검색량', '기회 점수', '내 승산', '광고 경쟁도',
+                            '문서수', '누적 문서수', '최근 30일 글')
+                if c in frame.columns and pd.api.types.is_numeric_dtype(frame[c])]
+    for c in num_cols:
+        col = frame[c]
+        lo, hi = col.min(), col.max()
+        if pd.isna(lo) or pd.isna(hi) or hi == lo:
+            continue
+
+        def shade(v, lo=lo, hi=hi):
+            if pd.isna(v):
+                return ''
+            t = (v - lo) / (hi - lo)
+            return f'background-color:rgba(27,58,75,{0.06 + t * 0.26:.3f})'
+
+        sty = sty.map(shade, subset=[c])
+    return sty
+
+
+def show_table(frame, height=None):
+    """
+    모든 표를 같은 규칙으로 그린다.
+    스타일이나 컬럼 설정이 버전 문제로 실패해도 표는 반드시 보이게 물러난다.
+    """
+    kwargs = {"use_container_width": True}
+    if height is not None:
+        kwargs["height"] = height
+    cfg = col_config(frame.columns)
+    if cfg is not None:
+        kwargs["column_config"] = cfg
+    try:
+        st.dataframe(style_table(frame), **kwargs)
+        return
+    except Exception:
+        pass
+    try:
+        st.dataframe(frame, **kwargs)
+        return
+    except Exception:
+        pass
+    st.dataframe(frame, use_container_width=True)
+
+
+def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
+                 show_docs=True, show_volume=True):
+    """
+    show_docs   : 문서수/경쟁률 컬럼 표시 여부
+    show_volume : 월 검색량/검색량 등급 컬럼 표시 여부
+    """
+    if data.empty:
+        ui.note("아직 이 항목에 수집된 데이터가 없습니다. collector.py를 실행하면 채워집니다.")
+        return
+
+    d = data.sort_values(by=sort_col, ascending=False).head(limit).reset_index(drop=True)
+
+    cols = ['keyword']
+    names = ['키워드']
+    if show_volume:
+        cols += ['총 검색량', '검색량 등급']
+        names += ['월 검색량', '검색량']
+    if show_docs:
+        for c, label in [('blog_total_docs', '문서수'), ('comp_grade', '경쟁률')]:
+            if c in d.columns:
+                cols.append(c)
+                names.append(label)
+    for c, label in (extra_cols or []):
+        if c in d.columns:
+            cols.append(c)
+            names.append(label)
+
+    out = d[cols].copy()
+    out.columns = names
+    out.index = out.index + 1
+    show_table(out)
+
+
 df = load_data()
 
 SEASONAL_CALENDAR = {
