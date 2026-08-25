@@ -182,8 +182,8 @@ my_blog_id = st.session_state.get("blog_id", "")
 
 ui.masthead(
     "키워드 헌터",
-    "검색량만으로는 경쟁을 알 수 없습니다. 이미 쓰인 글이 몇 개인지까지 재서, "
-    "지금 뛰어들어 이길 수 있는 키워드를 찾습니다."
+    "검색량만 보면 경쟁을 알 수 없습니다. 이미 쓰인 글까지 재서 "
+    "지금 이길 수 있는 키워드를 찾습니다."
 )
 
 # --- 상단 정보 줄 (사이드바에 있던 것들) ---
@@ -201,13 +201,37 @@ except Exception:
 
 ui.topbar(st.session_state.get("blog_id", ""), _fresh, _ver)
 
-# --- 내 블로그 등록 (접어둔다) ---
-# 한 번 등록하면 다시 열 일이 거의 없어서, 펼침으로 두면 자리만 차지한다.
+# --- 검색창 (항상 최상단) ---
+# 어느 탭에 있든 바로 검색할 수 있게 탭 위에 둔다.
+# 도구의 핵심 동작이 화면에 들어오자마자 보여야 한다.
+with st.container(border=True):
+    kc1, kc2 = st.columns([5, 1])
+    with kc1:
+        kw_input = st.text_input(
+            "조사할 키워드",
+            placeholder="분석할 키워드를 입력하세요",
+            key="research_kw",
+            label_visibility="collapsed")
+    with kc2:
+        searched = st.button("🔍 분석", use_container_width=True,
+                             key="research_go", type="primary")
+
+if searched and kw_input.strip():
+    st.session_state["active_kw"] = kw_input.strip()
+elif kw_input.strip():
+    st.session_state["active_kw"] = kw_input.strip()
+elif not kw_input:
+    st.session_state.pop("active_kw", None)
+
+research_kw = st.session_state.get("active_kw", "")
+
+# --- 내 블로그 등록 ---
+# 한 번 등록하면 다시 열 일이 없어서 접어둔다.
 _registered = bool(st.session_state.get("blog_id"))
 with st.expander(
         f"🏠 내 블로그  ·  {st.session_state['blog_id']}" if _registered
-        else "🏠 내 블로그 등록하기  ·  키워드마다 내 승산을 함께 계산합니다",
-        expanded=not _registered):
+        else "🏠 내 블로그를 등록하면 '내가 뚫을 수 있는지'까지 계산합니다",
+        expanded=False):
     bc1, bc2 = st.columns([4, 1])
     with bc1:
         blog_input = st.text_input(
@@ -220,250 +244,9 @@ with st.expander(
         if st.button("등록", use_container_width=True, key="blog_save_main"):
             if blog_input.strip():
                 st.session_state["blog_id"] = extract_blog_id(blog_input)
-                st.rerun()
             else:
                 st.session_state.pop("blog_id", None)
-                st.rerun()
-    if not _registered:
-        st.caption("등록하면 키워드마다 '내 블로그로 뚫을 수 있는지'까지 계산합니다.")
-
-
-def compact_num(v):
-    """
-    3억 같은 큰 수는 카드 폭을 넘쳐 줄바꿈되므로 축약한다.
-    (예: 304,890,403 → 3.0억)
-    """
-    if v is None:
-        return "—"
-    v = int(v)
-    if v >= 100_000_000:
-        return f"{v / 100_000_000:.1f}억"
-    if v >= 10_000:
-        return f"{v / 10_000:,.1f}만"
-    return f"{v:,}"
-
-
-COL_WIDTH = {
-    # 이름 : (폭, 표시형식)
-    '키워드': ("large", None),
-    '이벤트': ("large", None),
-    '제목': ("large", None),
-    '진단': ("medium", None),
-    '판단': ("medium", None),
-    '월 검색량': ("small", "%d"),
-    '검색량': ("small", None),
-    '문서수': ("small", "%d"),
-    '누적 문서수': ("small", "%d"),
-    '최근 30일': ("small", None),
-    '경쟁률': ("small", None),
-    '기회 점수': ("small", "%d"),
-    '내 승산': ("small", None),
-    '광고 경쟁도': ("small", "%d"),
-    '최근 30일 글': ("small", "%d"),
-    '날짜': ("small", None),
-    '요일': ("small", None),
-    '종류': ("small", None),
-    '발행일': ("small", None),
-}
-
-
-def col_config(columns):
-    """
-    표의 컬럼 폭을 내용에 맞게 지정한다.
-    기본값(use_container_width)은 남는 공간을 컬럼끼리 균등 분배해서
-    숫자 한 칸짜리 컬럼도 불필요하게 넓어진다. 키워드는 넓게, 수치는 좁게.
-    """
-    cfg = {}
-    try:
-        for name in columns:
-            width, fmt = COL_WIDTH.get(name, ("small", None))
-            if fmt:
-                cfg[name] = st.column_config.NumberColumn(name, width=width, format=fmt)
-            else:
-                cfg[name] = st.column_config.Column(name, width=width)
-    except AttributeError:
-        # 구버전 Streamlit에는 column_config가 없다 — 폭 지정 없이 기본 표로
-        return None
-    return cfg
-
-
-# 등급 라벨별 옅은 배경색 (표 안에서 한눈에 구분되게)
-GRADE_TINT = {
-    # 좋음 계열 — 옅은 민트
-    '최고': ('#E8F4F0', '#1F6354'), '좋음': ('#E8F4F0', '#1F6354'),
-    '매우한산': ('#E8F4F0', '#1F6354'), '한산': ('#E8F4F0', '#1F6354'),
-    '비어 있는 자리': ('#DCEFE9', '#175247'), '오래된 글만 많음': ('#E8F4F0', '#1F6354'),
-    '해볼 만함': ('#E8F4F0', '#1F6354'), '오래된 글이 1등': ('#DCEFE9', '#175247'),
-    '충분히 노려볼 만함': ('#DCEFE9', '#175247'), '해볼 만함': ('#E8F4F0', '#1F6354'),
-    '매우활발': ('#E8F4F0', '#1F6354'), '활발': ('#E8F4F0', '#1F6354'),
-    # 보통 계열 — 옅은 모래
-    '보통': ('#FBF2E1', '#8A6420'),
-    '지금 몰리는 중': ('#FBF2E1', '#8A6420'), '누적만 반영': ('#FBF2E1', '#8A6420'),
-    '새 글 옛 글 섞임': ('#FBF2E1', '#8A6420'),
-    '낮음': ('#FBF2E1', '#8A6420'),
-    # 나쁨 계열 — 옅은 코랄
-    '나쁨': ('#FAEAE5', '#9E3E28'), '최악': ('#FAEAE5', '#9E3E28'),
-    '붐빔': ('#FAEAE5', '#9E3E28'), '과열': ('#FAEAE5', '#9E3E28'),
-    '이미 꽉 참': ('#F7E1DB', '#8C3520'), '어려움': ('#FAEAE5', '#9E3E28'),
-    '최신 글 경쟁': ('#FAEAE5', '#9E3E28'),
-    '쉽지 않음': ('#FBF2E1', '#8A6420'), '지금은 비추천': ('#FAEAE5', '#9E3E28'),
-    '저조': ('#FAEAE5', '#9E3E28'), '휴면': ('#FAEAE5', '#9E3E28'),
-    # 중립
-    '정보없음': ('#F1F1EC', '#6B7280'), '검색량없음': ('#F1F1EC', '#6B7280'),
-    '이슈': ('#ECEFF3', '#4A5560'),
-    '매우낮음': ('#F1F1EC', '#6B7280'),
-    '높음': ('#EDF1F4', '#2E5468'), '매우높음': ('#E3EAEF', '#1B3A4B'),
-}
-
-TINT_COLS = {'검색량', '경쟁률', '진단', '판단', '등급', '종류', '최근 30일 발행'}
-
-
-def style_table(frame):
-    """
-    표에 옅은 색을 입힌다.
-    - 등급 계열 컬럼: 좋음(민트) / 보통(모래) / 나쁨(코랄)
-    - 수치 컬럼: 값이 클수록 진해지는 옅은 네이비 그라데이션
-    """
-    def tint_cell(val):
-        bg, fg = GRADE_TINT.get(str(val), (None, None))
-        if bg:
-            return f'background-color:{bg};color:{fg};font-weight:600'
-        return ''
-
-    sty = frame.style
-    tint_targets = [c for c in frame.columns if c in TINT_COLS]
-    if tint_targets:
-        sty = sty.map(tint_cell, subset=tint_targets)
-
-    # 수치 컬럼은 값이 클수록 진해지는 옅은 네이비 (matplotlib 없이 직접 계산)
-    num_cols = [c for c in ('월 검색량', '기회 점수', '내 승산', '광고 경쟁도',
-                            '문서수', '누적 문서수', '최근 30일 글')
-                if c in frame.columns and pd.api.types.is_numeric_dtype(frame[c])]
-    for c in num_cols:
-        col = frame[c]
-        lo, hi = col.min(), col.max()
-        if pd.isna(lo) or pd.isna(hi) or hi == lo:
-            continue
-
-        def shade(v, lo=lo, hi=hi):
-            if pd.isna(v):
-                return ''
-            t = (v - lo) / (hi - lo)          # 0~1
-            alpha = 0.06 + t * 0.26           # 너무 진해지지 않게 상한을 낮게
-            return f'background-color:rgba(27,58,75,{alpha:.3f})'
-
-        sty = sty.map(shade, subset=[c])
-    return sty
-
-
-def show_table(frame, height=None):
-    """
-    모든 표를 같은 규칙으로 그린다.
-    ⚠️ 최신 Streamlit은 height=None을 거부하므로, 값이 있을 때만 넘긴다.
-    스타일이나 컬럼 설정이 버전 문제로 실패해도 표 자체는 반드시 보이게 단계적으로 물러난다.
-    """
-    kwargs = {"use_container_width": True}
-    if height is not None:
-        kwargs["height"] = height
-    cfg = col_config(frame.columns)
-    if cfg is not None:
-        kwargs["column_config"] = cfg
-
-    try:
-        st.dataframe(style_table(frame), **kwargs)
-        return
-    except Exception:
-        pass
-    try:
-        st.dataframe(frame, **kwargs)
-        return
-    except Exception:
-        pass
-    st.dataframe(frame, use_container_width=True)
-
-
-def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
-                 show_docs=True, show_volume=True):
-    """
-    show_docs   : 문서수/경쟁률 컬럼 표시 여부
-    show_volume : 월 검색량/검색량 등급 컬럼 표시 여부
-    """
-    if data.empty:
-        ui.note("아직 이 항목에 수집된 데이터가 없습니다. collector.py를 실행하면 채워집니다.")
-        return
-
-    d = data.sort_values(by=sort_col, ascending=False).head(limit).reset_index(drop=True)
-
-    cols = ['keyword']
-    names = ['키워드']
-    if show_volume:
-        cols += ['총 검색량', '검색량 등급']
-        names += ['월 검색량', '검색량']
-    if show_docs:
-        for c, label in [('blog_total_docs', '문서수'), ('comp_grade', '경쟁률')]:
-            if c in d.columns:
-                cols.append(c)
-                names.append(label)
-    for c, label in (extra_cols or []):
-        if c in d.columns:
-            cols.append(c)
-            names.append(label)
-
-    out = d[cols].copy()
-    out.columns = names
-    out.index = out.index + 1
-    show_table(out)
-
-
-# 최상위는 '무엇을 하려는가' 기준 4개로만 나눈다.
-# 세부 항목은 각 탭 안에서 하위 탭으로 들어간다.
-# 관리 탭은 주소 뒤에 열쇠말을 붙였을 때만 나타난다.
-#
-#   https://내주소.streamlit.app/?dog11286575=1
-#
-# 평소에는 탭 자체가 없어서 남이 볼 수 없고,
-# 열쇠말로 들어가도 비밀번호를 한 번 더 물어본다.
-def _get_query_params():
-    """Streamlit 버전에 따라 주소 파라미터를 가져온다."""
-    try:
-        return dict(st.query_params)
-    except Exception:
-        pass
-    try:
-        return st.experimental_get_query_params()
-    except Exception:
-        return {}
-
-
-def _admin_requested():
-    qp = _get_query_params()
-    if not config.ADMIN_KEY or config.ADMIN_KEY not in qp:
-        return False
-    # 열쇠말은 맞는데 비밀번호가 서버에 없으면 이유를 알려준다.
-    # (Streamlit Cloud의 Secrets에 ADMIN_PASSWORD를 안 넣은 경우가 대부분)
-    if not config.ADMIN_PASSWORD:
-        st.warning(
-            "관리 탭을 열려면 **ADMIN_PASSWORD** 가 필요합니다.\n\n"
-            "Streamlit Cloud라면 **Manage app → Settings → Secrets** 에 "
-            "아래 두 줄을 넣고 저장해주세요.\n\n"
-            "```\nADMIN_PASSWORD = \"원하는비밀번호\"\n"
-            "ADMIN_KEY = \"dog11286575\"\n```"
-        )
-        return False
-    return True
-
-
-# 주소에 ?debug=1 을 붙이면 무엇 때문에 관리 탭이 안 뜨는지 알려준다.
-if "debug" in _get_query_params():
-    _qp = _get_query_params()
-    st.info(
-        f"**진단**\n\n"
-        f"- 주소 파라미터: `{list(_qp.keys()) or '없음'}`\n"
-        f"- 찾는 열쇠말: `{config.ADMIN_KEY or '(설정 안 됨)'}`\n"
-        f"- 열쇠말 일치: `{config.ADMIN_KEY in _qp if config.ADMIN_KEY else False}`\n"
-        f"- 비밀번호 설정됨: `{bool(config.ADMIN_PASSWORD)}`\n"
-        f"- 모듈 버전: `{__import__('naver_api').MODULE_VERSION}`"
-    )
+            st.rerun()
 
 _tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
 # 한 번 들어오면 조작하는 동안 유지된다 (주소가 지워져도 탭이 사라지지 않게)
@@ -478,30 +261,6 @@ tabs = _all_tabs[:4]
 admin_tab = _all_tabs[4] if _has_admin else None
 
 with tabs[0]:
-    # 키워드를 한 번만 입력하면 아래 세 탭이 모두 같은 키워드로 동작한다.
-    # 입력창 + 검색 버튼.
-    # Enter로도 되지만 모바일에서는 누를 버튼이 있는 편이 훨씬 편하다.
-    # 9번: 입력 영역 전체를 테두리로 감싸 눈에 띄게
-    with st.container(border=True):
-        kc1, kc2 = st.columns([5, 1])
-        with kc1:
-            kw_input = st.text_input(
-                "조사할 키워드",
-                placeholder="키워드를 입력하세요   예) 제습기 추천",
-                key="research_kw")
-        with kc2:
-            st.markdown('<div class="search-btn-pad"></div>', unsafe_allow_html=True)
-            searched = st.button("검색", use_container_width=True, key="research_go")
-
-    # 버튼을 누르거나 Enter를 치면 그 값을 계속 유지한다
-    if searched and kw_input.strip():
-        st.session_state["active_kw"] = kw_input.strip()
-    elif kw_input.strip():
-        st.session_state["active_kw"] = kw_input.strip()
-    elif not kw_input:
-        st.session_state.pop("active_kw", None)
-
-    research_kw = st.session_state.get("active_kw", "")
     sub_research = st.tabs(["키워드 분석", "상위노출 해부", "글감 만들기"])
 with tabs[3]:
     sub_discover = st.tabs(["구글 트렌드", "골든타임", "주간 캘린더", "뉴스"])
@@ -792,8 +551,43 @@ with sub_research[0]:
                         ui.kpi("기회 점수", f"{int(row['기회 점수'])}", row["진단"])
 
                 st.write("")
-                ui.section("연관 키워드 목록", "기회 점수가 높은 순")
+                ui.section("측정한 키워드", "사냥 지도에 찍힌 것들 · 기회 점수 높은 순")
                 show_table(rel_df)
+
+        # --- 연관 키워드 전체 ---
+        # 네이버가 주는 걸 다 보여준다. 사냥 지도는 문서수까지 재느라
+        # 몇 개만 다루지만, 검색량만 보는 목록은 수백 개도 부담이 없다.
+        all_rel = r.get("related") or []
+        if all_rel:
+            st.write("")
+            ui.section("연관 키워드 전체", f"{len(all_rel)}개")
+
+            fc1, fc2 = st.columns([1, 1])
+            with fc1:
+                only_has = st.checkbox(f"'{r['keyword']}' 포함한 것만",
+                                       value=False, key="rel_all_filter")
+            with fc2:
+                min_vol = st.select_slider(
+                    "최소 검색량", options=[0, 100, 500, 1000, 5000],
+                    value=0, key="rel_all_min")
+
+            rows_all = [{
+                "키워드": i["keyword"],
+                "월 검색량": i["monthly_pc"] + i["monthly_mobile"],
+                "경쟁": i.get("comp_level") or "-",
+            } for i in all_rel
+                if (i.get("contains", True) or not only_has)
+                and (i["monthly_pc"] + i["monthly_mobile"]) >= min_vol]
+
+            if not rows_all:
+                ui.note("조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요.")
+            else:
+                adf = pd.DataFrame(rows_all).sort_values(
+                    "월 검색량", ascending=False).reset_index(drop=True)
+                adf.index = adf.index + 1
+                st.dataframe(adf, use_container_width=True, height=440,
+                             column_config=col_config(adf.columns) or None)
+                st.caption(f"{len(rows_all)}개 표시 · 전체 {len(all_rel)}개")
 
 # ------------------------------------------------------------
 # 2. 상위노출 해부

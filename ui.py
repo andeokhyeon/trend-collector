@@ -250,59 +250,26 @@ border-color: {DEEP} !important;
 box-shadow: 0 0 0 3px rgba(27,58,75,.10) !important;
 }}
 .stTextInput input::placeholder {{ color: #A8AEB6 !important; }}
-/* 큰 검색창 (키워드 분석 / 내 블로그) */
-.st-key-kw_main input, .st-key-blog_input_tab input,
-.st-key-blog_input_main input {{
-font-size: 1.24rem !important;
-padding: 18px 22px !important;
-border: 2.5px solid {DEEP} !important;
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
 border-radius: 12px !important;
 font-weight: 600 !important;
 }}
-.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
-.st-key-blog_input_main input:focus {{
-box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
-border-color: {GOLD} !important;
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
 }}
-.st-key-kw_main label, .st-key-blog_input_tab label,
-.st-key-blog_input_main label {{
-font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
 }}
-/* 큰 검색창 (키워드 분석 / 내 블로그) */
-.st-key-kw_main input, .st-key-blog_input_tab input,
-.st-key-blog_input_main input {{
-font-size: 1.24rem !important;
-padding: 18px 22px !important;
-border: 2.5px solid {DEEP} !important;
-border-radius: 12px !important;
-font-weight: 600 !important;
-}}
-.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
-.st-key-blog_input_main input:focus {{
-box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
-border-color: {GOLD} !important;
-}}
-.st-key-kw_main label, .st-key-blog_input_tab label,
-.st-key-blog_input_main label {{
-font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
-}}
-/* 큰 검색창 (키워드 분석 / 내 블로그) */
-.st-key-kw_main input, .st-key-blog_input_tab input,
-.st-key-blog_input_main input {{
-font-size: 1.24rem !important;
-padding: 18px 22px !important;
-border: 2.5px solid {DEEP} !important;
-border-radius: 12px !important;
-font-weight: 600 !important;
-}}
-.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
-.st-key-blog_input_main input:focus {{
-box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
-border-color: {GOLD} !important;
-}}
-.st-key-kw_main label, .st-key-blog_input_tab label,
-.st-key-blog_input_main label {{
-font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
 }}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
 .st-key-kw_main input, .st-key-blog_input_tab input,
@@ -322,6 +289,27 @@ border-color: {GOLD} !important;
 .st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
 }}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
 .st-key-kw_main input, .st-key-blog_input_tab input,
 .st-key-blog_input_main input {{
@@ -340,6 +328,27 @@ border-color: {GOLD} !important;
 .st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
 }}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
 .st-key-kw_main input, .st-key-blog_input_tab input,
 .st-key-blog_input_main input {{
@@ -358,6 +367,27 @@ border-color: {GOLD} !important;
 .st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
 }}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
 .st-key-kw_main input, .st-key-blog_input_tab input,
 .st-key-blog_input_main input {{
@@ -376,6 +406,27 @@ border-color: {GOLD} !important;
 .st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
 }}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
 .st-key-kw_main input, .st-key-blog_input_tab input,
 .st-key-blog_input_main input {{
@@ -393,6 +444,144 @@ border-color: {GOLD} !important;
 .st-key-kw_main label, .st-key-blog_input_tab label,
 .st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 최상단 검색창 — 도구의 핵심 동작이라 가장 눈에 띄어야 한다 */
+.st-key-research_kw input {{
+font-size: 1.12rem !important;
+padding: 15px 18px !important;
+border: 2px solid {LINE} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-research_kw input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 4px rgba(27,58,75,.10) !important;
+}}
+.st-key-research_go button {{
+height: 52px !important;
+background: {DEEP} !important;
+border-color: {DEEP} !important;
+font-size: 1rem !important;
+}}
+.st-key-research_go button:hover {{
+background: {GOLD} !important; border-color: {GOLD} !important;
 }}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
 .st-key-kw_main input, .st-key-blog_input_tab input,
@@ -868,6 +1057,13 @@ background: {SURFACE}; box-shadow: 1px 0 0 {LINE};
 .stTextInput input {{ font-size: 16px !important; }}
 .st-key-kw_main input, .st-key-blog_input_main input {{
 font-size: 16px !important; padding: 13px 14px !important;
+}}
+/* 최상단 검색창 — 모바일에서는 세로로 쌓인다 */
+.st-key-research_kw input {{
+font-size: 16px !important; padding: 13px 14px !important;
+}}
+.st-key-research_go button {{
+height: 48px !important; margin-top: 6px; font-size: .95rem !important;
 }}
 /* 라디오·버튼 */
 div[role="radiogroup"] {{ padding: 5px 9px; flex-wrap: wrap; gap: 2px; }}

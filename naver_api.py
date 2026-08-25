@@ -270,7 +270,7 @@ def _quota_ok(n=1):
     return _shared.can_call(n) if _shared is not None else True
 
 
-def get_keyword_data(keyword, related_limit=20):
+def get_keyword_data(keyword, related_limit=200):
     """
     /keywordstool 한 번으로 '이 키워드의 통계'와 '연관 키워드'를 함께 얻는다.
     (예전에는 같은 요청을 두 번 보내고 있었다)
@@ -353,6 +353,7 @@ def get_keyword_data(keyword, related_limit=20):
                 "comp_level": it.get("compIdx", "중간"),
                 "contains": norm in rk.replace(" ", "").upper(),
             })
+        # 키워드를 품은 것을 앞에 두고, 그 안에서 검색량 순으로 정렬한다.
         rel_all.sort(key=lambda x: (not x["contains"],
                                     -(x["monthly_pc"] + x["monthly_mobile"])))
         related = rel_all[:related_limit]
@@ -448,7 +449,10 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
     with_related=False면 연관 키워드를 담지 않는다.
     사냥 지도처럼 여러 키워드를 잴 때 각 키워드의 연관어까지는 필요 없다.
     """
-    data = get_keyword_data(keyword, related_limit=20 if with_related else 1)
+    # ⚠️ 네이버 키워드도구는 한 번 호출에 연관어를 수백 개까지 돌려준다.
+    # 예전에는 그중 20개만 쓰고 나머지를 버려서, 경쟁 서비스가 200개를
+    # 보여주는 것에 비해 초라해 보였다. 이제 받은 만큼 다 쓴다.
+    data = get_keyword_data(keyword, related_limit=200 if with_related else 1)
     stat = data["stat"]
     total_search = stat["monthly_pc"] + stat["monthly_mobile"]
 
