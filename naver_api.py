@@ -329,6 +329,45 @@ def _build_hints(keyword, max_hints=5):
     return hints
 
 
+def get_volumes(keywords):
+    """
+    여러 키워드의 검색량을 한 번에 조회한다 (최대 5개씩).
+
+    _build_hints를 거치지 않는다. 이미 완성된 키워드 목록이라
+    쪼개거나 변형하면 안 되기 때문이다.
+    반환: {키워드(공백제거): 검색량}
+    """
+    words = [w.strip() for w in keywords if w and w.strip()][:5]
+    if not words:
+        return {}
+
+    ck = ("vols", "|".join(sorted(words)))
+    cached = _cache_get(ck)
+    if cached is not None:
+        return cached
+
+    if not _quota_ok():
+        return {}
+
+    out = {}
+    path = "/keywordstool"
+    try:
+        _count_call()
+        res = requests.get(NAVER_BASE_URL + path,
+                           params={"hintKeywords": ",".join(words),
+                                   "showDetail": "1"},
+                           headers=get_naver_headers("GET", path), timeout=10)
+        if res.status_code == 200:
+            for it in res.json().get("keywordList", []):
+                rk = (it.get("relKeyword") or "").replace(" ", "").upper()
+                if rk:
+                    out[rk] = (_to_int(it.get("monthlyPcQcCnt"))
+                               + _to_int(it.get("monthlyMobileQcCnt")))
+    except Exception:
+        pass
+    return _cache_put(ck, out)
+
+
 def get_keyword_data(keyword, related_limit=200):
     """
     /keywordstool 한 번으로 '이 키워드의 통계'와 '연관 키워드'를 함께 얻는다.

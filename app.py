@@ -10,6 +10,7 @@ try:
         analyze_keyword, get_my_blog_feed, estimate_blog_power,
         check_my_rank, calc_win_score, extract_blog_id,
         get_serp, analyze_serp, analyze_titles, build_outline, calc_competition,
+    get_volumes,
     calc_opportunity, calc_search_change, expected_visits, ad_density_pct,
     calc_since_registered,
     )
@@ -128,17 +129,59 @@ def load_data():
         return pd.DataFrame()
 
 
-PERIOD_HOURS = {"실시간": 1, "일별": 24, "주간": 24 * 7, "월별": 24 * 30}
+# 조회 기간 선택지.
+#
+# ⚠️ 수집 주기보다 짧은 기간을 고르면 아무것도 안 나온다.
+# 수집기는 2시간마다 돌고, 항목마다 그보다 긴 주기를 따로 갖는다.
+#   구글 트렌드 : 수집기가 돌 때마다   → 실제 2시간 간격
+#   골든타임    : 6시간마다
+#   주간 캘린더 : 하루 1번
+# 그래서 항목별로 '있을 법한 기간'만 보여준다.
+PERIOD_HOURS = {
+    "최근": 3, "실시간": 1, "일별": 24, "주간": 24 * 7, "월별": 24 * 30,
+    "6시간": 6, "12시간": 12,
+}
+
+# 항목별 선택지 (수집 주기에 맞춤)
+PERIOD_SETS = {
+    "trend": ("최근", "일별", "주간", "월별"),        # 2시간마다 수집
+    "slow": ("6시간", "일별", "주간", "월별"),        # 6시간마다 수집
+    "daily": ("일별", "주간", "월별"),                # 하루 1번 수집
+}
 
 
-def period_picker(key, options=("실시간", "일별", "주간", "월별"), default="일별"):
+def empty_note(source, hours, label=""):
     """
-    조회 기간 선택. 수집 기록이 쌓일수록 넓은 기간이 의미를 갖는다.
-    반환: (선택값, 시간(hours))
+    선택한 기간에 데이터가 없을 때, 왜 없는지 알려준다.
+
+    '데이터가 없습니다'만 뜨면 고장 난 것처럼 보인다.
+    실제로는 기간을 좁게 잡아서 안 걸리는 경우가 대부분이다.
     """
-    idx = list(options).index(default) if default in options else 0
+    all_rows = df[df['source'] == source] if not df.empty else df
+    if all_rows.empty:
+        ui.note(f"아직 {label or '이 항목'} 데이터가 수집되지 않았습니다.<br>"
+                "GitHub의 <b>Actions → collector</b>를 실행하거나 "
+                "<b>3_데이터_수집.bat</b>을 돌려주세요.")
+        return
+
+    last = all_rows['created_at_dt'].max()
+    mins = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
+    ago = f"{mins}분 전" if mins < 120 else f"{mins // 60}시간 전"
+    ui.note(f"선택한 기간 안에 수집된 것이 없습니다. "
+            f"가장 최근 수집은 <b>{ago}</b>입니다.<br>"
+            "위에서 더 넓은 기간을 눌러보세요.", gold=True)
+
+
+def period_picker(key, kind="trend", default=None):
+    """
+    조회 기간 선택.
+    kind로 항목의 수집 주기에 맞는 선택지를 고른다.
+    """
+    options = PERIOD_SETS.get(kind, PERIOD_SETS["trend"])
+    if default not in options:
+        default = options[0]
     choice = st.radio("조회 기간", list(options), horizontal=True,
-                      key=key, index=idx)
+                      key=key, index=list(options).index(default))
     return choice, PERIOD_HOURS[choice]
 
 
@@ -299,13 +342,18 @@ def show_table(frame, height=None):
 
 
 def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
-                 show_docs=True, show_volume=True):
+                 show_docs=True, show_volume=True, source=None, label=""):
     """
     show_docs   : 문서수/경쟁률 컬럼 표시 여부
     show_volume : 월 검색량/검색량 등급 컬럼 표시 여부
+    source      : 비어 있을 때 왜 없는지 안내하기 위한 소스 이름
     """
     if data.empty:
-        ui.note("아직 이 항목에 수집된 데이터가 없습니다. collector.py를 실행하면 채워집니다.")
+        if source:
+            empty_note(source, None, label)
+        else:
+            ui.note("아직 이 항목에 수집된 데이터가 없습니다. "
+                    "수집기를 실행하면 채워집니다.")
         return
 
     d = data.sort_values(by=sort_col, ascending=False).head(limit).reset_index(drop=True)
@@ -829,9 +877,48 @@ with sub_research[0]:
             if not rows_all:
                 ui.note("조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요.")
             else:
+                # 자동완성으로 온 것은 검색량을 모른다.
+                # 한 번에 채워주면 어느 게 쓸 만한지 바로 판단할 수 있다.
+                _unknown = [x["키워드"] for x in rows_all
+                            if x["월 검색량"] is None]
+                if _unknown:
+                    uc1, uc2 = st.columns([1, 3])
+                    with uc1:
+                        fill = st.button(f"검색량 채우기 ({len(_unknown)}개)",
+                                         key="fill_vol",
+                                         use_container_width=True)
+                    with uc2:
+                        st.caption("자동완성으로 찾은 키워드의 검색량을 한 번에 조회합니다. "
+                                   f"약 {max(1, (len(_unknown) + 4) // 5)}회 조회가 필요합니다.")
+
+                    if fill:
+                        @st.cache_data(ttl=1800, show_spinner=False)
+                        def fill_volumes(words):
+                            """5개씩 묶어 조회한다 (한 번에 5개까지 가능)."""
+                            out = {}
+                            for i in range(0, len(words), 5):
+                                try:
+                                    out.update(get_volumes(words[i:i + 5]))
+                                except Exception:
+                                    pass
+                            return out
+
+                        with st.spinner("검색량을 조회하는 중..."):
+                            found = fill_volumes(tuple(_unknown))
+                        for x in rows_all:
+                            if x["월 검색량"] is None:
+                                v = found.get(x["키워드"].replace(" ", "").upper())
+                                if v is not None:
+                                    x["월 검색량"] = v
+                        st.success(f"{sum(1 for v in found.values() if v)}개의 "
+                                   "검색량을 찾았습니다.")
+
                 adf = pd.DataFrame(rows_all).sort_values(
                     "월 검색량", ascending=False,
                     na_position="last").reset_index(drop=True)
+                # None이 그대로 보이지 않게 빈칸으로 바꾼다
+                adf["월 검색량"] = adf["월 검색량"].map(
+                    lambda v: f"{int(v):,}" if pd.notna(v) else "—")
                 adf.index = adf.index + 1
                 st.dataframe(adf, use_container_width=True, height=440,
                              column_config=col_config(adf.columns) or None)
@@ -1476,19 +1563,19 @@ if df.empty:
 else:
     with sub_discover[0]:
         ui.section("구글 트렌드", "지금 사람들이 검색하는 것")
-        _, hours = period_picker("g_period", default="일별")
+        _, hours = period_picker("g_period", kind="trend", default="최근")
         render_table(latest_snapshot(df[df['source'] == 'google_trend'], hours=hours),
-                     show_docs=False)
+                     show_docs=False, source='google_trend', label="구글 트렌드")
 
     with sub_discover[1]:
         ui.section("골든타임", "뜨고 있는데 아직 안 붐비는 선점 구간")
         ui.note("검색이 늘고 있으면서 경쟁 문서는 적은 키워드입니다. "
                 "먼저 쓰면 선점 효과를 기대할 수 있습니다.", gold=True)
         st.write("")
-        _, h = period_picker("gt_period", default="일별")
+        _, h = period_picker("gt_period", kind="slow", default="일별")
         golden = latest_snapshot(df[df['source'] == 'golden_time'], hours=h)
         if golden.empty:
-            ui.note("골든타임 데이터가 없습니다. collector.py 실행 후 다시 확인해주세요.")
+            empty_note('golden_time', h, "골든타임")
         else:
             # ⚠️ 시드 키워드를 없애면서 분류 기준이 바뀌었다.
             # 예전엔 '상품/서비스'였지만, 이제는 어디서 나왔는지로 나눈다.
@@ -1499,11 +1586,13 @@ else:
             with sub[0]:
                 render_table(golden[golden['keyword_category'] == '트렌드'],
                              sort_col='rise_score', show_docs=False,
-                             extra_cols=_extra)
+                             extra_cols=_extra, source='golden_time',
+                             label="골든타임")
             with sub[1]:
                 render_table(golden[golden['keyword_category'] == '세부'],
                              sort_col='rise_score', show_docs=False,
-                             extra_cols=_extra)
+                             extra_cols=_extra, source='golden_time',
+                             label="골든타임")
             with sub[2]:
                 render_table(golden, sort_col='rise_score', show_docs=False,
                              extra_cols=_extra)
@@ -1555,9 +1644,10 @@ else:
 
     with sub_discover[3]:
         ui.section("뉴스", "지금 많이 읽히는 기사")
-        _, h = period_picker("news_period", options=("실시간", "일별", "주간"), default="일별")
+        _, h = period_picker("news_period", kind="trend", default="최근")
         render_table(latest_snapshot(df[df['source'] == 'naver_news'], hours=h),
-                     show_docs=False, show_volume=False)
+                     show_docs=False, show_volume=False,
+                     source='naver_news', label="뉴스")
 
 
 # ------------------------------------------------------------
