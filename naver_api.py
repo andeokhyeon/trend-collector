@@ -125,6 +125,13 @@ def get_blog_doc_count(keyword):
     """
     if not NAVER_HUB_CLIENT_ID or not NAVER_HUB_CLIENT_SECRET:
         return None
+
+    # 풀에 최근에 잰 값이 있으면 다시 부르지 않는다
+    if _shared is not None:
+        cached_docs = _shared.pool_get_docs(keyword)
+        if cached_docs is not None:
+            return cached_docs
+
     headers = {
         "X-NCP-APIGW-API-KEY-ID": NAVER_HUB_CLIENT_ID,
         "X-NCP-APIGW-API-KEY": NAVER_HUB_CLIENT_SECRET,
@@ -140,7 +147,10 @@ def get_blog_doc_count(keyword):
         _count_call()
         res = requests.get(NAVER_HUB_BLOG_URL, headers=headers, params=params, timeout=5)
         if res.status_code == 200:
-            return int(res.json().get("total", 0))
+            total = int(res.json().get("total", 0))
+            if _shared is not None:
+                _shared.pool_put_docs(keyword, total)
+            return total
         else:
             print(f"블로그 문서수 조회 오류(status {res.status_code}): {res.text[:150]}")
     except Exception as e:
@@ -270,6 +280,21 @@ def get_keyword_data(keyword, related_limit=20):
     if cached is not None:
         return cached
 
+    # 풀에 이미 쌓여 있으면 네이버를 부르지 않는다.
+    # (연관어까지 필요할 때는 풀만으로 부족하므로 그때는 호출한다)
+    if _shared is not None and related_limit <= 1:
+        row = _shared.pool_get(keyword)
+        if row:
+            return _cache_put(ck, {
+                "stat": {
+                    "monthly_pc": row.get("monthly_pc", 0),
+                    "monthly_mobile": row.get("monthly_mobile", 0),
+                    "comp_level": row.get("comp_level", "-"),
+                    "pl_avg_depth": row.get("pl_avg_depth", 0),
+                },
+                "related": [],
+            })
+
     empty = {"stat": {"monthly_pc": 0, "monthly_mobile": 0,
                       "comp_level": "-", "pl_avg_depth": 0},
              "related": []}
@@ -331,6 +356,18 @@ def get_keyword_data(keyword, related_limit=20):
         rel_all.sort(key=lambda x: (not x["contains"],
                                     -(x["monthly_pc"] + x["monthly_mobile"])))
         related = rel_all[:related_limit]
+
+        # 💡 한 번 부른 김에 연관어를 통째로 풀에 쌓는다.
+        # 지금까지는 1개만 쓰고 20개를 버렸는데, 그게 가장 큰 낭비였다.
+        # 다음에 누가 그 키워드를 조회하면 네이버를 안 불러도 된다.
+        if _shared is not None:
+            _shared.pool_put_many(
+                [{"keyword": keyword.strip(), **stat}]
+                + [{"keyword": r["keyword"], "monthly_pc": r["monthly_pc"],
+                    "monthly_mobile": r["monthly_mobile"],
+                    "comp_level": r["comp_level"], "pl_avg_depth": 0}
+                   for r in rel_all])
+
         return _cache_put(ck, {"stat": stat, "related": related})
     except Exception:
         return _cache_put(ck, empty)
@@ -348,10 +385,15 @@ def get_blog_stats(keyword, days=30, exact=True):
         return cached
 
     first = _fetch_serp_page(keyword, start=1, display=100, sort="date")
+    # 문서수를 재는 김에 풀에도 남긴다.
+    # (문서수는 키워드마다 따로 불러야 해서 미리 못 쌓지만,
+    #  한 번 잰 것은 재사용할 수 있다)
     if first is None:
         return {"total_docs": None, "recent": None, "capped": False}
 
     total_docs = int(first.get("total", 0) or 0)
+    if _shared is not None:
+        _shared.pool_put_docs(keyword, total_docs)
     items = first.get("items", [])
     now = datetime.now(timezone.utc)
 

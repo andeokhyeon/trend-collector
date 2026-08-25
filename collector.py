@@ -102,53 +102,89 @@ from naver_api import (get_blog_doc_count, calc_competition, analyze_keyword,
 
 def track_saved_keywords():
     """
-    💡 키워드 추적기 — 저장해둔 키워드의 오늘 상태를 기록한다.
+    키워드 추적기 — 저장해둔 키워드의 오늘 상태를 기록한다.
 
-    수집기가 돌 때마다 한 줄씩 쌓이므로, 시간이 지나면
-    '내 순위가 32위 → 7위로 올랐다' 같은 변화를 볼 수 있게 된다.
-    이 도구의 값어치는 이 기록이 쌓일수록 커진다.
+    ⚠️ 호출을 크게 줄인 구조.
+    예전에는 사용자마다 analyze_keyword를 따로 불렀다.
+    100명이 '제습기 추천'을 추적하면 같은 검색량을 100번 조회한 셈이다.
+
+    검색량과 문서수는 '그 키워드의 값'이지 '내 값'이 아니다.
+    그래서 키워드별로 딱 한 번만 재고, 그 결과를 모두가 나눠 쓴다.
+    사람마다 다른 건 '내 글의 순위'뿐이라 그것만 개별로 조회한다.
+
+      이전: 사람수 × 추적수 × 3회
+      이후: (고유 키워드 수 × 2회) + (글 쓴 항목 수 × 1회)
     """
     try:
         res = supabase.table("tracked_keywords").select("*").execute()
         targets = res.data or []
     except Exception as e:
         print(f"⚠️ 추적 목록을 불러오지 못했습니다: {e}")
-        print("   (추적기_DB설정.sql 을 Supabase에서 실행했는지 확인해주세요)")
+        print("   (DB설정_전체.sql 을 Supabase에서 실행했는지 확인해주세요)")
         return []
 
     if not targets:
         print("   추적 중인 키워드가 없습니다. 대시보드에서 추가해주세요.")
         return []
 
+    # ① 고유 키워드만 추려서 한 번씩만 조회
+    unique_kw = []
+    seen = set()
+    for t in targets:
+        kw = (t.get("keyword") or "").strip()
+        if kw and kw not in seen:
+            seen.add(kw)
+            unique_kw.append(kw)
+
+    kw_data = {}
+    for kw in unique_kw:
+        if not cache or not cache.can_call(2):
+            print(f"   ⚠️ 한도에 가까워 여기서 멈춥니다 (조회 {len(kw_data)}개 완료)")
+            break
+        try:
+            kw_data[kw] = analyze_keyword(kw, with_recent=True)
+        except Exception as e:
+            print(f"   · {kw} 조회 실패: {e}")
+        time.sleep(0.12)
+
+    print(f"   (추적 조회: 등록 {len(targets)}건 → 고유 키워드 {len(unique_kw)}개, "
+          f"실제 조회 {len(kw_data)}개)")
+
+    # ② 순위는 사람마다 다르므로 개별 조회 (글을 쓴 항목만)
     rows = []
     for t in targets:
-        kw = t.get("keyword")
+        kw = (t.get("keyword") or "").strip()
         blog_id = t.get("blog_id") or ""
-        if not kw:
+        a = kw_data.get(kw)
+        if not kw or a is None:
             continue
-        try:
-            a = analyze_keyword(kw, with_recent=True)
-            # 글을 안 쓴 '지켜보는 키워드'는 순위를 잴 대상이 없다.
-            # 괜히 조회하면 API만 낭비된다.
-            has_post = bool(t.get("has_post"))
-            rank = check_my_rank(kw, blog_id) if (blog_id and has_post) else None
-            opp = (a.get("opportunity") or {}).get("score", 0)
-            rows.append({
-                "keyword": kw,
-                "blog_id": blog_id,
-                "my_rank": rank,
-                "total_search": a.get("total_search", 0),
-                "blog_total_docs": a.get("doc_count") or 0,
-                "recent_docs": a.get("recent_docs") or 0,
-                "comp_ratio": a.get("comp_ratio") or 0,
-                "opportunity": opp,
-            })
-            mark = (f"{rank}위" if rank else
-                    ("순위밖" if has_post else "지켜보는 중"))
-            print(f"   · {kw} — {mark}, 기회 {opp}")
-        except Exception as e:
-            print(f"   · {kw} 추적 실패: {e}")
-        time.sleep(0.15)
+
+        has_post = bool(t.get("has_post"))
+        rank = None
+        if blog_id and has_post:
+            if cache and not cache.can_call(1):
+                pass                       # 한도가 빠듯하면 순위는 건너뛴다
+            else:
+                try:
+                    rank = check_my_rank(kw, blog_id)
+                except Exception:
+                    rank = None
+                time.sleep(0.1)
+
+        opp = (a.get("opportunity") or {}).get("score", 0)
+        rows.append({
+            "keyword": kw,
+            "blog_id": blog_id,
+            "my_rank": rank,
+            "total_search": a.get("total_search", 0),
+            "blog_total_docs": a.get("doc_count") or 0,
+            "recent_docs": a.get("recent_docs") or 0,
+            "comp_ratio": a.get("comp_ratio") or 0,
+            "opportunity": opp,
+        })
+        mark = f"{rank}위" if rank else ("순위밖" if has_post else "지켜보는 중")
+        print(f"   · {kw} — {mark}, 기회 {opp}")
+
     return rows
 
 
@@ -680,7 +716,7 @@ COLLECT = {
     "golden_time":   True,   # 골든타임         · 약 60회
     "weekly_event":  True,   # 주간 캘린더      · 약 20회
     "news":          True,   # 네이버 뉴스      · 약 0회 (크롤링, API 안 씀)
-    "tracking":      True,   # 추적기 기록      · 추적 키워드 수 × 2회
+    "tracking":      True,   # 추적기 기록      · 고유 키워드 수 × 2회
 
     # 아래는 대시보드에서 탭을 내렸다. 필요하면 True로 켜고
     # app.py의 sub_discover 탭도 함께 되살려야 화면에 보인다.
@@ -690,8 +726,56 @@ COLLECT = {
     "longtail":      False,  # 롱테일
 }
 
-# 경쟁률(문서수) 보강은 항목당 API를 1회씩 더 쓴다.
-# 끄면 호출이 크게 줄지만 '경쟁률' 컬럼이 비게 된다.
+# ⚠️ 항목마다 적정 주기가 다르다.
+#
+# 수집기를 1시간마다 돌리더라도 모든 항목을 매번 부를 이유는 없다.
+# 네이버 검색량은 한 달 단위 집계라 1시간 만에 바뀌지 않고,
+# 공휴일이나 축제 일정은 하루에 바뀔 일이 없다.
+#
+# 아래 숫자는 '최소 몇 시간 간격으로 돌릴지'다.
+# 0이면 매번, 24면 하루 한 번.
+# 전부 매시간 돌리면 하루 2,520회, 나눠 돌리면 740회로 줄어든다.
+INTERVAL_HOURS = {
+    "google_trend":  0,    # 실시간 트렌드라 매번 볼 가치가 있다
+    "golden_time":   6,    # 검색량이 월 단위라 6시간이면 충분
+    "weekly_event": 24,    # 공휴일·축제는 하루에 안 바뀐다
+    "news":          0,    # 크롤링이라 API를 안 쓴다
+    "tracking":     12,    # 순위는 하루 1~2번이면 충분
+    "monthly":      24,
+    "rising":        6,
+    "high_value":   24,
+    "longtail":     24,
+}
+
+
+def _should_run(name):
+    """
+    이 항목을 지금 돌려야 하는지.
+    마지막 수집 시각을 DB에서 보고 판단한다.
+    """
+    hours = INTERVAL_HOURS.get(name, 0)
+    if hours <= 0:
+        return True
+    try:
+        src = {"google_trend": "google_trend", "golden_time": "golden_time",
+               "weekly_event": "weekly_event", "news": "naver_news",
+               "monthly": "naver_monthly", "rising": "gmarket_realtime",
+               "high_value": "high_value_keyword",
+               "longtail": "longtail_keyword"}.get(name)
+        if not src:
+            return True
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        res = (supabase.table("trends_master").select("created_at")
+               .eq("source", src).gte("created_at", cutoff)
+               .limit(1).execute())
+        if res.data:
+            print(f"   ⏭  {name}: 최근 {hours}시간 안에 이미 수집함, 건너뜁니다")
+            return False
+    except Exception:
+        pass
+    return True
+
+
 ENRICH_COMPETITION = False
 
 
@@ -731,7 +815,7 @@ def main():
     def maybe_enrich(rows, label):
         return enrich_with_competition(rows, label) if ENRICH_COMPETITION else rows
 
-    if COLLECT["google_trend"]:
+    if COLLECT["google_trend"] and _should_run("google_trend"):
         google_data = []
         for kw in fetch_google_top_30():
             stat = get_naver_stat(kw)
@@ -743,31 +827,31 @@ def main():
             })
         save("구글 트렌드", google_data)
 
-    if COLLECT["monthly"]:
+    if COLLECT["monthly"] and _should_run("monthly"):
         save("월간 네이버 검색", fetch_monthly_naver_shopping())
 
-    if COLLECT["rising"]:
+    if COLLECT["rising"] and _should_run("rising"):
         save("실시간 급상승",
              maybe_enrich(fetch_realtime_rising_keywords(), "급상승"))
 
-    if COLLECT["news"]:
+    if COLLECT["news"] and _should_run("news"):
         save("네이버 뉴스", fetch_naver_news_headlines_30())
 
-    if COLLECT["high_value"]:
+    if COLLECT["high_value"] and _should_run("high_value"):
         save("고수익 키워드",
              maybe_enrich(fetch_high_value_keywords(), "고수익"))
 
-    if COLLECT["longtail"]:
+    if COLLECT["longtail"] and _should_run("longtail"):
         save("롱테일 키워드 확장",
              maybe_enrich(fetch_longtail_keywords(), "롱테일"))
 
-    if COLLECT["golden_time"]:
+    if COLLECT["golden_time"] and _should_run("golden_time"):
         save("골든타임 키워드", fetch_golden_time_keywords())
 
-    if COLLECT["weekly_event"]:
+    if COLLECT["weekly_event"] and _should_run("weekly_event"):
         save("주별 추천키워드(공휴일/축제 등)", fetch_weekly_event_keywords())
 
-    if COLLECT["tracking"]:
+    if COLLECT["tracking"] and _should_run("tracking"):
         print("\n📌 추적 중인 키워드 기록...")
         rows = track_saved_keywords()
         if rows:
