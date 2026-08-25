@@ -421,10 +421,31 @@ def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
 
 # 최상위는 '무엇을 하려는가' 기준 4개로만 나눈다.
 # 세부 항목은 각 탭 안에서 하위 탭으로 들어간다.
-# 관리 탭은 비밀번호가 설정돼 있을 때만 만든다.
-# 제대로 된 회원 로그인이 아니라 '나만 보는 화면' 용도의 간단한 잠금이다.
+# 관리 탭은 주소 뒤에 열쇠말을 붙였을 때만 나타난다.
+#
+#   https://내주소.streamlit.app/?dog11286575=1
+#
+# 평소에는 탭 자체가 없어서 남이 볼 수 없고,
+# 열쇠말로 들어가도 비밀번호를 한 번 더 물어본다.
+def _admin_requested():
+    if not config.ADMIN_PASSWORD or not config.ADMIN_KEY:
+        return False
+    try:
+        qp = st.query_params            # 최신 Streamlit
+        return config.ADMIN_KEY in qp
+    except AttributeError:
+        try:
+            qp = st.experimental_get_query_params()   # 구버전
+            return config.ADMIN_KEY in qp
+        except Exception:
+            return False
+
+
 _tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
-_has_admin = bool(config.ADMIN_PASSWORD)
+# 한 번 들어오면 조작하는 동안 유지된다 (주소가 지워져도 탭이 사라지지 않게)
+if _admin_requested():
+    st.session_state["admin_visible"] = True
+_has_admin = bool(st.session_state.get("admin_visible"))
 if _has_admin:
     _tab_names.append("🔧 관리")
 
@@ -1473,6 +1494,8 @@ if admin_tab is not None:
     with admin_tab:
         if not st.session_state.get("admin_ok"):
             ui.section("관리자 화면", "비밀번호를 입력하세요")
+            ui.note("이 탭은 주소에 열쇠말을 붙였을 때만 나타납니다. "
+                    "주소를 즐겨찾기에 저장해두면 편합니다.")
             with st.container(border=True):
                 pw = st.text_input("비밀번호", type="password", key="admin_pw")
                 if st.button("확인", key="admin_go"):
@@ -1573,6 +1596,11 @@ if admin_tab is not None:
 
             st.write("")
             if st.button("잠그기", key="admin_lock"):
-                st.session_state.pop("admin_ok", None)
-                st.session_state.pop("admin_loaded", None)
+                for k in ("admin_ok", "admin_loaded", "admin_visible"):
+                    st.session_state.pop(k, None)
+                # 주소에서도 열쇠말을 지운다
+                try:
+                    st.query_params.clear()
+                except Exception:
+                    pass
                 st.rerun()

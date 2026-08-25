@@ -84,10 +84,16 @@ SUPABASE_KEY = get("SUPABASE_KEY")
 TOUR_API_SERVICE_KEY = get("TOUR_API_SERVICE_KEY")
 
 # --- 관리자 화면 ---
-# 이 값을 넣으면 대시보드에 '관리' 탭이 생기고, 비밀번호를 아는 사람만 볼 수 있다.
-# 비워두면 탭 자체가 나타나지 않는다.
+#
+# 관리 탭은 평소에 아예 보이지 않는다.
+# 주소 뒤에 열쇠말을 붙였을 때만 나타난다.
+#
+#   https://내주소.streamlit.app/?dog11286575=1
+#
+# 그렇게 들어가도 비밀번호를 한 번 더 물어보므로 이중으로 막힌다.
 # ⚠️ 제대로 된 회원 로그인이 아니라 '나만 보는 화면' 용도의 간단한 잠금이다.
 ADMIN_PASSWORD = get("ADMIN_PASSWORD")
+ADMIN_KEY = get("ADMIN_KEY", "dog11286575")
 
 # --- Anthropic (AI 판단 브리핑) ---
 ANTHROPIC_API_KEY = get("ANTHROPIC_API_KEY")
