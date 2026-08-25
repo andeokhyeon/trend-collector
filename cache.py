@@ -81,20 +81,61 @@ def put(key, value):
 # ------------------------------------------------------------
 # 사용량
 # ------------------------------------------------------------
+_add_fail_warned = {"done": False}
+
+
 def add_calls(n=1):
-    """실제로 네이버를 부른 횟수를 기록한다."""
+    """
+    실제로 네이버를 부른 횟수를 기록한다.
+
+    ⚠️ 매 호출마다 DB를 두 번(읽기+쓰기) 두드리면 느려지고,
+    동시에 여러 곳에서 부르면 서로 덮어써서 숫자가 어긋난다.
+    그래서 메모리에 모아뒀다가 일정 간격으로만 반영한다.
+    """
+    global _pending
     if _supabase is None or n <= 0:
         return
     day = _today()
+    if _usage_cache["day"] != day:          # 날짜가 바뀌면 초기화
+        _usage_cache.update(day=day, calls=0, checked=0)
+        _pending = 0
+
+    _pending += n
+    _usage_cache["calls"] = _usage_cache.get("calls", 0) + n
+
+    # 20회 모이거나 30초 지나면 한 번에 저장
+    if _pending < 20 and time.time() - _usage_cache.get("flushed", 0) < 30:
+        return
+    flush_calls()
+
+
+_pending = 0
+
+
+def flush_calls():
+    """모아둔 호출 수를 DB에 반영한다."""
+    global _pending
+    if _supabase is None or _pending <= 0:
+        return
+    day = _today()
+    n, _pending = _pending, 0
     try:
         res = (_supabase.table("api_usage").select("calls")
                .eq("day", day).limit(1).execute())
         cur = res.data[0]["calls"] if res.data else 0
+        # ⚠️ day가 primary key이므로 on_conflict를 반드시 지정해야 한다.
+        # 안 그러면 중복 키 오류가 나면서 조용히 실패한다.
         _supabase.table("api_usage").upsert(
-            {"day": day, "calls": cur + n}).execute()
-        _usage_cache.update(day=day, calls=cur + n, checked=time.time())
-    except Exception:
-        pass
+            {"day": day, "calls": cur + n}, on_conflict="day").execute()
+        _usage_cache.update(day=day, calls=cur + n,
+                            checked=time.time(), flushed=time.time())
+    except Exception as e:
+        _pending += n          # 실패했으니 되돌려서 다음에 재시도
+        if not _add_fail_warned["done"]:
+            _add_fail_warned["done"] = True
+            print(f"⚠️ API 사용량 기록 실패: {e}")
+            print("   api_usage 테이블이 있는지 확인해주세요 "
+                  "(DB설정_전체.sql 실행)")
 
 
 def usage(force=False):
@@ -117,6 +158,8 @@ def usage(force=False):
                 calls = _usage_cache["calls"] if _usage_cache["day"] == day else 0
         _usage_cache.update(day=day, calls=calls, checked=time.time())
 
+    # 아직 DB에 반영 안 된 것도 더해서 보여준다
+    calls = max(calls, _usage_cache.get("calls", 0))
     pct = calls / DAILY_LIMIT * 100
     return {
         "calls": calls,
@@ -256,3 +299,79 @@ def can_seed(n=1):
     """씨앗 채우기용 여유가 있는지 (일반 조회 몫을 남겨둔다)."""
     u = usage()
     return u["calls"] + n < DAILY_LIMIT * SEED_RATIO
+
+
+# ------------------------------------------------------------
+# 풀 현황 조회 (관리자 화면용)
+# ------------------------------------------------------------
+
+def pool_recent(limit=50):
+    """최근에 쌓인 키워드."""
+    if _supabase is None:
+        return []
+    try:
+        res = (_supabase.table("keyword_pool")
+               .select("keyword, monthly_pc, monthly_mobile, comp_level, "
+                       "blog_total_docs, updated_at")
+               .order("updated_at", desc=True).limit(limit).execute())
+        return res.data or []
+    except Exception:
+        return []
+
+
+def pool_top(limit=50):
+    """검색량이 큰 키워드."""
+    if _supabase is None:
+        return []
+    try:
+        res = (_supabase.table("keyword_pool")
+               .select("keyword, monthly_pc, monthly_mobile, comp_level, "
+                       "blog_total_docs, updated_at")
+               .order("monthly_mobile", desc=True).limit(limit).execute())
+        return res.data or []
+    except Exception:
+        return []
+
+
+def pool_stats():
+    """
+    풀 요약. 전체 개수, 문서수까지 확인된 개수, 오늘 늘어난 개수.
+    """
+    out = {"total": 0, "with_docs": 0, "today": 0}
+    if _supabase is None:
+        return out
+    try:
+        r = _supabase.table("keyword_pool").select(
+            "keyword", count="exact").limit(1).execute()
+        out["total"] = r.count or 0
+
+        r = (_supabase.table("keyword_pool").select("keyword", count="exact")
+             .not_.is_("docs_checked_at", "null").limit(1).execute())
+        out["with_docs"] = r.count or 0
+
+        today = datetime.now(timezone.utc).date().isoformat()
+        r = (_supabase.table("keyword_pool").select("keyword", count="exact")
+             .gte("updated_at", today).limit(1).execute())
+        out["today"] = r.count or 0
+    except Exception:
+        pass
+    return out
+
+
+def usage_history(days=7):
+    """최근 며칠간 API 사용량."""
+    if _supabase is None:
+        return []
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+        res = (_supabase.table("api_usage").select("day, calls")
+               .gte("day", since).order("day", desc=True).execute())
+        return res.data or []
+    except Exception:
+        return []
+
+
+# 프로그램이 끝날 때 아직 안 넘긴 호출 수를 저장한다.
+# 이게 없으면 수집기가 끝날 때 마지막 몇 회가 기록되지 않는다.
+import atexit
+atexit.register(lambda: flush_calls() if _supabase is not None else None)

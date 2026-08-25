@@ -131,6 +131,25 @@ try:
 except Exception as e:
     print(f"    ❌ Supabase          오류: {str(e)[:160]}")
 
+# --- 4. 사용량 기록이 되는지 ---
+print(f"\n[4] 사용량 기록")
+try:
+    from supabase import create_client
+    import cache
+    sb = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+    cache.attach(sb)
+    before = cache.usage(force=True)["calls"]
+    cache.add_calls(1)
+    cache.flush_calls()
+    after = cache.usage(force=True)["calls"]
+    if after > before:
+        print(f"    ✅ 정상 ({before:,} → {after:,})")
+    else:
+        print(f"    ❌ 기록이 안 됩니다 ({before:,} → {after:,})")
+        print(f"       api_usage 테이블이 있는지 확인하세요 (DB설정_전체.sql)")
+except Exception as e:
+    print(f"    ❌ 오류: {str(e)[:160]}")
+
 print("\n" + "=" * 58)
 print("  ❌ 표시된 항목의 키를 .env 에서 고쳐주세요.")
 print("  고친 뒤에는 검은 창을 닫고 다시 실행해야 합니다.")

@@ -421,7 +421,16 @@ def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
 
 # 최상위는 '무엇을 하려는가' 기준 4개로만 나눈다.
 # 세부 항목은 각 탭 안에서 하위 탭으로 들어간다.
-tabs = st.tabs(["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"])
+# 관리 탭은 비밀번호가 설정돼 있을 때만 만든다.
+# 제대로 된 회원 로그인이 아니라 '나만 보는 화면' 용도의 간단한 잠금이다.
+_tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
+_has_admin = bool(config.ADMIN_PASSWORD)
+if _has_admin:
+    _tab_names.append("🔧 관리")
+
+_all_tabs = st.tabs(_tab_names)
+tabs = _all_tabs[:4]
+admin_tab = _all_tabs[4] if _has_admin else None
 
 with tabs[0]:
     # 키워드를 한 번만 입력하면 아래 세 탭이 모두 같은 키워드로 동작한다.
@@ -1452,3 +1461,118 @@ else:
         _, h = period_picker("news_period", options=("실시간", "일별", "주간"), default="일별")
         render_table(latest_snapshot(df[df['source'] == 'naver_news'], hours=h),
                      show_docs=False, show_volume=False)
+
+
+# ------------------------------------------------------------
+# 관리 탭 — 비밀번호를 아는 사람만
+#
+# 회원 로그인이 아니라 '나만 보는 화면'용 간단한 잠금이다.
+# 나중에 회원을 받게 되면 이 구조를 확장하면 된다.
+# ------------------------------------------------------------
+if admin_tab is not None:
+    with admin_tab:
+        if not st.session_state.get("admin_ok"):
+            ui.section("관리자 화면", "비밀번호를 입력하세요")
+            with st.container(border=True):
+                pw = st.text_input("비밀번호", type="password", key="admin_pw")
+                if st.button("확인", key="admin_go"):
+                    if pw == config.ADMIN_PASSWORD:
+                        st.session_state["admin_ok"] = True
+                        st.rerun()
+                    else:
+                        st.error("비밀번호가 맞지 않습니다.")
+        else:
+            ui.section("관리자 화면", "수집 상태와 키워드 풀 현황")
+
+            if cache is None:
+                ui.note("cache.py가 없어 현황을 볼 수 없습니다.")
+            else:
+                # ⚠️ Streamlit은 어떤 탭을 보고 있든 스크립트 전체를 다시 실행한다.
+                # 그래서 이 조회들을 그냥 두면 키워드 분석 탭을 쓰는 동안에도
+                # 매번 DB를 6번씩 두드린다. 두 가지로 막는다.
+                #   ① 버튼을 눌렀을 때만 불러온다
+                #   ② 불러온 뒤에는 60초간 캐시한다
+                @st.cache_data(ttl=60, show_spinner=False)
+                def load_admin(sort_key):
+                    return {
+                        "stats": cache.pool_stats(),
+                        "usage": cache.usage(),
+                        "hist": cache.usage_history(7),
+                        "rows": (cache.pool_recent(100) if sort_key == "최근 추가순"
+                                 else cache.pool_top(100)),
+                    }
+
+                sort_by = st.radio("정렬", ["최근 추가순", "검색량 많은순"],
+                                   horizontal=True, key="pool_sort")
+
+                b1, b2 = st.columns([1, 4])
+                with b1:
+                    if st.button("불러오기", key="admin_load",
+                                 use_container_width=True):
+                        st.session_state["admin_loaded"] = True
+                        load_admin.clear()
+
+                if not st.session_state.get("admin_loaded"):
+                    ui.note("<b>불러오기</b>를 누르면 현황을 조회합니다. "
+                            "자동으로 부르지 않는 이유는, 이 화면을 안 보고 있을 때도 "
+                            "DB를 계속 두드리면 대시보드 전체가 느려지기 때문입니다.")
+                else:
+                    with st.spinner("현황을 불러오는 중..."):
+                        d = load_admin(sort_by)
+                    stats, u, hist, rows = d["stats"], d["usage"], d["hist"], d["rows"]
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1:
+                        ui.kpi("쌓인 키워드", compact_num(stats["total"]),
+                               f"오늘 +{stats['today']:,}개")
+                    with c2:
+                        ratio = (stats["with_docs"] / stats["total"] * 100
+                                 if stats["total"] else 0)
+                        ui.kpi("문서수 확인됨", compact_num(stats["with_docs"]),
+                               f"전체의 {ratio:.0f}%")
+                    with c3:
+                        ui.kpi("오늘 API 호출", f"{u['calls']:,}",
+                               f"한도 {u['limit']:,}회의 {u['pct']}%")
+                    with c4:
+                        ui.kpi("남은 조회", f"{u['remaining']:,}",
+                               f"{cache.reset_time()} 초기화")
+
+                    st.write("")
+                    ui.gauge("오늘 사용량", min(100, int(u["pct"])),
+                             ("여유", "보통", "한도"),
+                             color=(ui.BAD if u["pct"] >= 70 else
+                                    (ui.WARN if u["pct"] >= 40 else ui.GOOD)))
+
+                    if hist:
+                        st.write("")
+                        ui.bar_series(
+                            [(h["day"][5:], int(h["calls"] or 0))
+                             for h in reversed(hist)],
+                            "최근 7일 API 호출", height=170, accent=ui.DEEP)
+
+                    st.write("")
+                    ui.section("키워드 풀", "실제로 어떤 단어가 쌓였나")
+
+                    if not rows:
+                        ui.note("아직 쌓인 키워드가 없습니다. "
+                                "<b>7_키워드_미리쌓기.bat</b>을 돌리거나 "
+                                "GitHub Actions의 <b>seed-pool</b>을 실행해보세요.")
+                    else:
+                        df_pool = pd.DataFrame([{
+                            "키워드": r["keyword"],
+                            "월 검색량": (r.get("monthly_pc") or 0)
+                                       + (r.get("monthly_mobile") or 0),
+                            "경쟁": r.get("comp_level") or "-",
+                            "문서수": r.get("blog_total_docs") or None,
+                            "쌓인 시각": (r.get("updated_at") or "")[:16].replace("T", " "),
+                        } for r in rows])
+                        df_pool.index = df_pool.index + 1
+                        st.dataframe(df_pool, use_container_width=True, height=420)
+                        st.caption(f"{len(rows)}개 표시 중 · 전체 {stats['total']:,}개 "
+                                   "· 60초간 저장된 값을 씁니다")
+
+            st.write("")
+            if st.button("잠그기", key="admin_lock"):
+                st.session_state.pop("admin_ok", None)
+                st.session_state.pop("admin_loaded", None)
+                st.rerun()

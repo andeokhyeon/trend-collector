@@ -862,6 +862,8 @@ def main():
                 print(f"❌ 추적 기록 저장 실패: {e}")
 
     try:
+        if cache:
+            cache.flush_calls()
         u = cache.usage(force=True) if cache else None
         if u is None:
             raise RuntimeError

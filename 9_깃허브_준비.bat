@@ -14,6 +14,7 @@ if exist ".gitignore" (
 ) else (
   > ".gitignore" echo # Never upload these
   >>".gitignore" echo .env
+  >>".gitignore" echo *.env
   >>".gitignore" echo .streamlit/secrets.toml
   >>".gitignore" echo.
   >>".gitignore" echo # Python

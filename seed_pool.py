@@ -134,14 +134,23 @@ def run(max_calls=None):
                 if (r.get("monthly_pc", 0) + r.get("monthly_mobile", 0)) >= 50:
                     queue.append(k)
 
+        # 무슨 단어가 들어왔는지 보여준다.
+        # 개수만 나오면 잘 되고 있는지 감이 안 온다.
+        if rel:
+            sample = ", ".join(r["keyword"] for r in rel[:5])
+            more = f" 외 {len(rel)-5}개" if len(rel) > 5 else ""
+            print(f"  [{calls:>4}] {kw}  →  {sample}{more}")
+
         if calls % 20 == 0:
+            cache.flush_calls()          # 모아둔 것을 DB에 반영
             now = cache.usage(force=True)
             elapsed = int(time.time() - t0)
-            print(f"  {calls:>5}회 호출 · 대기열 {len(queue):>6,} · "
-                  f"오늘 {now['calls']:,}/{budget_limit:,}회 · {elapsed//60}분 경과")
+            print(f"       ── 호출 {calls:,} · 대기열 {len(queue):,} · "
+                  f"오늘 {now['calls']:,}/{budget_limit:,}회 · {elapsed//60}분 경과 ──")
 
         time.sleep(0.12)
 
+    cache.flush_calls()
     end_size = cache.pool_size()
     fin = cache.usage(force=True)
     print("-" * 58)

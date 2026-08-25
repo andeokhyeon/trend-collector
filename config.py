@@ -83,6 +83,12 @@ SUPABASE_KEY = get("SUPABASE_KEY")
 # --- 한국관광공사 TourAPI (축제/행사) ---
 TOUR_API_SERVICE_KEY = get("TOUR_API_SERVICE_KEY")
 
+# --- 관리자 화면 ---
+# 이 값을 넣으면 대시보드에 '관리' 탭이 생기고, 비밀번호를 아는 사람만 볼 수 있다.
+# 비워두면 탭 자체가 나타나지 않는다.
+# ⚠️ 제대로 된 회원 로그인이 아니라 '나만 보는 화면' 용도의 간단한 잠금이다.
+ADMIN_PASSWORD = get("ADMIN_PASSWORD")
+
 # --- Anthropic (AI 판단 브리핑) ---
 ANTHROPIC_API_KEY = get("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
