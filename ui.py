@@ -55,38 +55,21 @@ html, body, [class*="css"], .stApp {{
 font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
 }}
 .stApp {{ background: {BASE}; }}
-/* Streamlit 기본 메뉴 정리
-   ⚠️ 헤더를 통째로 숨기면 안 된다.
-   사이드바를 여는 버튼이 헤더 안에 있어서, 한 번 닫으면 다시 못 연다.
-   그래서 헤더는 남기고 '⋮ 메뉴'와 'Deploy' 버튼만 없앤다. */
+/* Streamlit 기본 메뉴 정리 — 사이드바를 안 쓰므로 헤더도 필요 없다 */
 #MainMenu, footer {{ display: none !important; }}
 [data-testid="stMainMenu"],
 [data-testid="stDeployButton"],
 .stAppDeployButton,
 [data-testid="stStatusWidget"],
-[data-testid="stDecoration"] {{
+[data-testid="stDecoration"],
+[data-testid="stSidebar"],
+[data-testid="stSidebarCollapsedControl"] {{
 display: none !important;
 }}
-/* 헤더는 투명하게 두되 자리는 남긴다 (사이드바 버튼이 여기 있다) */
 [data-testid="stHeader"] {{
-background: transparent !important;
-height: 2.6rem !important;
+background: transparent !important; height: 0 !important;
 }}
-/* 사이드바 여는 버튼은 항상 보이게 */
-[data-testid="stSidebarCollapsedControl"],
-[data-testid="collapsedControl"] {{
-display: block !important; visibility: visible !important;
-opacity: 1 !important; z-index: 999 !important;
-}}
-[data-testid="stSidebarCollapsedControl"] button,
-[data-testid="collapsedControl"] button {{
-background: {SURFACE} !important;
-border: 1.5px solid {LINE} !important;
-border-radius: 8px !important;
-color: {DEEP} !important;
-box-shadow: 0 1px 4px rgba(20,22,26,.10) !important;
-}}
-.block-container {{ padding-top: 1.4rem; max-width: 1240px; }}
+.block-container {{ padding-top: 1.6rem; max-width: 1180px; }}
 /* 수치는 전부 등폭으로 — 계측기 감각의 핵심 */
 .mono, .metric-val, .kpi-val {{
 font-family: 'IBM Plex Mono', monospace;
@@ -253,47 +236,6 @@ border-radius: 8px; padding: 11px 14px;
 font-size: .94rem; color: #40454C; line-height: 1.65;
 }}
 .note-gold {{ border-left-color: {GOLD}; }}
-/* 사이드바 - 딥네이비 다크 */
-section[data-testid="stSidebar"] {{
-background: linear-gradient(180deg, {DEEP} 0%, #16303E 100%);
-border-right: 1px solid #0F2531;
-}}
-section[data-testid="stSidebar"] * {{ color: #DCE3E8; }}
-section[data-testid="stSidebar"] .stMarkdown p,
-section[data-testid="stSidebar"] label {{ color: #C3CED6 !important; }}
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
-section[data-testid="stSidebar"] .stCaption {{ color: #8FA3AF !important; }}
-section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,.13) !important; }}
-section[data-testid="stSidebar"] code {{
-background: rgba(200,150,62,.22) !important; color: #F0C77E !important;
-padding: 3px 8px; border-radius: 5px; font-weight: 700 !important;
-font-size: .88rem !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{
-color: #A9BAC5 !important; font-size: .84rem !important;
-}}
-.side-brand {{
-display: flex; align-items: center; gap: 10px;
-font-size: 1.3rem; font-weight: 800; color: #fff !important;
-letter-spacing: -0.02em; margin-bottom: 2px;
-}}
-.side-brand span {{ color: {GOLD} !important; }}
-.side-brand svg {{ flex-shrink: 0; }}
-.side-tagline {{
-font-size: .84rem; color: #8FA3AF !important;
-margin: 0 0 4px 44px; letter-spacing: .01em;
-}}
-.side-label {{
-font-size: .78rem; font-weight: 700; letter-spacing: .1em;
-text-transform: uppercase; color: {GOLD} !important; margin-bottom: 8px;
-}}
-.plan-box {{
-border: 1px solid rgba(200,150,62,.35);
-background: rgba(200,150,62,.09);
-border-radius: 10px;
-padding: 14px 16px; font-size: .88rem; color: #C3CED6 !important; line-height: 1.65;
-}}
-.plan-box b {{ color: {GOLD} !important; }}
 /* 입력창 - 눈에 띄게 */
 .stTextInput input {{
 border: 2px solid {LINE} !important;
@@ -309,65 +251,165 @@ box-shadow: 0 0 0 3px rgba(27,58,75,.10) !important;
 }}
 .stTextInput input::placeholder {{ color: #A8AEB6 !important; }}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
-.st-key-kw_main input, .st-key-blog_input_tab input {{
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
 font-size: 1.24rem !important;
 padding: 18px 22px !important;
 border: 2.5px solid {DEEP} !important;
 border-radius: 12px !important;
 font-weight: 600 !important;
 }}
-.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus {{
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
 box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
 border-color: {GOLD} !important;
 }}
-.st-key-kw_main label, .st-key-blog_input_tab label {{
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
 }}
-/* 사이드바 입력창
-   어두운 배경에 어두운 입력창을 얹으면 글자가 안 보이거나 클릭 지점이 헷갈린다.
-   흰 입력창으로 두는 편이 대비도 확실하고 오작동 여지도 없다. */
-section[data-testid="stSidebar"] [data-baseweb="input"],
-section[data-testid="stSidebar"] [data-baseweb="base-input"],
-section[data-testid="stSidebar"] .stTextInput > div,
-section[data-testid="stSidebar"] .stTextInput > div > div {{
-background: #FFFFFF !important;
-background-color: #FFFFFF !important;
-border-radius: 10px !important;
-}}
-section[data-testid="stSidebar"] .stTextInput input {{
-background: #FFFFFF !important;
-background-color: #FFFFFF !important;
-color: #14161A !important;
--webkit-text-fill-color: #14161A !important;
-border: 2px solid #FFFFFF !important;
-border-radius: 10px !important;
-caret-color: {DEEP} !important;
-font-weight: 600 !important;
-font-size: .98rem !important;
-padding: 11px 13px !important;
-}}
-section[data-testid="stSidebar"] .stTextInput input::placeholder {{
-color: #9AA3AC !important;
--webkit-text-fill-color: #9AA3AC !important;
-font-weight: 500 !important;
-}}
-section[data-testid="stSidebar"] .stTextInput input:focus {{
-border-color: {GOLD} !important;
-box-shadow: 0 0 0 3px rgba(200,150,62,.35) !important;
-}}
 /* 큰 검색창 (키워드 분석 / 내 블로그) */
-.st-key-kw_main input, .st-key-blog_input_tab input {{
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
 font-size: 1.24rem !important;
 padding: 18px 22px !important;
 border: 2.5px solid {DEEP} !important;
 border-radius: 12px !important;
 font-weight: 600 !important;
 }}
-.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus {{
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
 box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
 border-color: {GOLD} !important;
 }}
-.st-key-kw_main label, .st-key-blog_input_tab label {{
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
+font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
+}}
+/* 큰 검색창 (키워드 분석 / 내 블로그) */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{
+font-size: 1.24rem !important;
+padding: 18px 22px !important;
+border: 2.5px solid {DEEP} !important;
+border-radius: 12px !important;
+font-weight: 600 !important;
+}}
+.st-key-kw_main input:focus, .st-key-blog_input_tab input:focus,
+.st-key-blog_input_main input:focus {{
+box-shadow: 0 0 0 4px rgba(200,150,62,.22) !important;
+border-color: {GOLD} !important;
+}}
+.st-key-kw_main label, .st-key-blog_input_tab label,
+.st-key-blog_input_main label {{
 font-size: 1rem !important; font-weight: 700 !important; color: {INK} !important;
 }}
 /* 상위노출 글 목록 */
@@ -569,6 +611,36 @@ font-family: 'Pretendard', sans-serif;
 margin-top: 8px; padding-top: 9px; border-top: 1px solid {LINE};
 font-size: .9rem; color: #40454C; line-height: 1.6;
 }}
+/* 상단 정보 줄 */
+.topbar {{
+display: flex; flex-wrap: wrap; gap: 7px;
+margin: -8px 0 14px;
+}}
+.tb-item {{
+font-size: .8rem; font-weight: 600; color: {MUTED};
+background: {SURFACE}; border: 1px solid {LINE};
+padding: 4px 11px; border-radius: 999px;
+}}
+.tb-on {{
+color: {DEEP}; border-color: {DEEP}; background: #F1F6F8;
+}}
+.tb-off {{ color: #9AA3AC; border-style: dashed; }}
+.tb-dim {{
+color: #B4BAC1; font-family: 'IBM Plex Mono', monospace;
+font-size: .72rem; font-weight: 400;
+}}
+/* 접이식 영역 */
+[data-testid="stExpander"] {{
+border: 1.5px solid {LINE} !important;
+border-radius: 12px !important;
+background: {SURFACE} !important;
+margin-bottom: 14px;
+}}
+[data-testid="stExpander"] summary {{
+font-weight: 700 !important; font-size: .95rem !important;
+color: {INK} !important; padding: 12px 16px !important;
+}}
+[data-testid="stExpander"] summary:hover {{ color: {DEEP} !important; }}
 /* 진단 2x2 매트릭스 */
 .diag-grid {{
 display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;
@@ -715,79 +787,95 @@ height: 48px; font-size: 1.02rem !important;
    좁은 화면에서는 여백을 줄이고, 가로로 넘치는 요소를 접는다.
    ============================================================ */
 @media (max-width: 640px) {{
-.block-container {{ padding: 2.6rem .7rem 3rem !important; }}
-/* 모바일에서도 사이드바 버튼이 가려지지 않게 위쪽 여백 확보 */
-[data-testid="stHeader"] {{ height: 2.8rem !important; }}
-.masthead {{ padding: 16px 17px; border-radius: 12px; }}
-.masthead h1 {{ font-size: 1.28rem; }}
-.masthead p {{ font-size: .88rem; }}
-.mast-head-row {{ gap: 11px; }}
-.mast-head-row svg {{ width: 34px; height: 34px; }}
-/* 탭 - 좁은 화면에선 가로 스크롤로 */
+.block-container {{ padding: .8rem .6rem 3rem !important; }}
+.masthead {{ padding: 14px 15px; border-radius: 12px; }}
+.masthead h1 {{ font-size: 1.2rem; }}
+.masthead p {{ font-size: .84rem; line-height: 1.5; }}
+.mast-head-row {{ gap: 10px; }}
+.mast-head-row svg {{ width: 32px; height: 32px; }}
+.topbar {{ gap: 5px; margin: -4px 0 10px; }}
+.tb-item {{ font-size: .72rem; padding: 3px 9px; }}
+/* 탭 — 한 화면에 다 안 들어가므로 가로로 밀어서 본다.
+   끝에 그림자를 둬서 '더 있다'는 걸 알린다. */
 [role="tablist"] {{
 flex-wrap: nowrap !important; overflow-x: auto !important;
-gap: 6px !important; padding-bottom: 10px !important;
+gap: 5px !important; padding: 2px 0 8px !important;
 -webkit-overflow-scrolling: touch;
 scrollbar-width: none;
+-webkit-mask-image: linear-gradient(to right,
+  #000 0, #000 calc(100% - 24px), transparent 100%);
+mask-image: linear-gradient(to right,
+  #000 0, #000 calc(100% - 24px), transparent 100%);
 }}
 [role="tablist"]::-webkit-scrollbar {{ display: none; }}
 [role="tab"] {{
-min-height: 40px !important; padding: 8px 14px !important;
+min-height: 36px !important; padding: 6px 12px !important;
 flex-shrink: 0 !important; white-space: nowrap !important;
 }}
-[role="tab"] *, [role="tab"] p {{ font-size: .92rem !important; }}
-[role="tabpanel"] [role="tab"] {{ min-height: 34px !important; padding: 6px 12px !important; }}
-[role="tabpanel"] [role="tab"] * {{ font-size: .86rem !important; }}
-/* KPI - 세로로 쌓일 때 여백 축소 */
-.kpi {{ padding: 13px 14px; }}
-.kpi-val {{ font-size: 1.5rem; }}
-.kpi-label {{ font-size: .76rem; }}
-.kpi-sub {{ font-size: .8rem; }}
-/* 진단 매트릭스는 1열로 */
+[role="tab"] *, [role="tab"] p {{ font-size: .85rem !important; }}
+[role="tabpanel"] [role="tab"] {{ min-height: 31px !important; padding: 4px 10px !important; }}
+[role="tabpanel"] [role="tab"] * {{ font-size: .8rem !important; }}
+/* KPI */
+.kpi {{ padding: 11px 12px; }}
+.kpi-val {{ font-size: 1.35rem; }}
+.kpi-label {{ font-size: .72rem; }}
+.kpi-sub {{ font-size: .74rem; }}
+/* 표 — 모바일에서 가장 보기 힘든 부분.
+   글자를 키우고 행 간격을 넓혀 손가락으로 짚기 쉽게 한다. */
+.stDataFrame {{ border-radius: 10px; }}
+.stDataFrame [data-testid="stTable"],
+div[data-testid="stDataFrameResizable"] {{ font-size: .9rem !important; }}
+.stDataFrame [role="gridcell"] {{
+padding-top: 10px !important; padding-bottom: 10px !important;
+}}
+.stDataFrame [role="columnheader"] {{
+font-size: .8rem !important;
+padding-top: 8px !important; padding-bottom: 8px !important;
+}}
+/* 첫 열(키워드)은 스크롤해도 남게 */
+.stDataFrame [role="row"] > [role="gridcell"]:first-child,
+.stDataFrame [role="row"] > [role="columnheader"]:first-child {{
+position: sticky; left: 0; z-index: 2;
+background: {SURFACE}; box-shadow: 1px 0 0 {LINE};
+}}
+/* 진단·추적 카드는 1열 */
 .diag-grid {{ grid-template-columns: 1fr !important; }}
 .diag-cell {{ min-height: 0; padding: 11px 13px; }}
 .diag-axis {{ flex-direction: column; gap: 3px; }}
-/* 추적 카드 1열 */
 .track-grid {{ grid-template-columns: 1fr !important; }}
 .track-card {{ min-height: 0 !important; }}
-/* 상위노출 목록 - 블로그명 숨기고 제목 우선 */
-.serp-row {{ gap: 8px; padding: 8px 5px; font-size: .88rem; }}
-.serp-rank {{ flex: 0 0 26px; font-size: .9rem; }}
-.serp-age {{ flex: 0 0 62px; font-size: .78rem; }}
-/* 점수 구성 - 라벨 폭 축소 */
-.sb-name {{ flex: 0 0 58px; font-size: .84rem; }}
-.sb-val {{ flex: 0 0 78px; font-size: .8rem; }}
-.sb-total {{ font-size: 1.4rem; }}
-/* 차트 여백 축소 + 가로 넘침 방지 */
-.chart-box {{ padding: 13px 13px; overflow-x: auto; -webkit-overflow-scrolling: touch; }}
-.chart-box svg {{ min-width: 0; }}
-.gauge-wrap {{ padding: 13px 14px; }}
-/* 사냥 지도는 좁으면 읽기 어려우니 최소 폭을 주고 가로 스크롤 */
-.chart-box svg[viewBox^="0 0 760"] {{ min-width: 560px; }}
+.title-grid {{ grid-template-columns: 1fr !important; }}
+/* 상위노출 목록 */
+.serp-row {{ gap: 8px; padding: 9px 5px; font-size: .86rem; }}
+.serp-rank {{ flex: 0 0 24px; font-size: .88rem; }}
+.serp-age {{ flex: 0 0 58px; font-size: .74rem; }}
+/* 점수 구성 */
+.sb-name {{ flex: 0 0 54px; font-size: .8rem; }}
+.sb-val {{ flex: 0 0 72px; font-size: .76rem; }}
+.sb-total {{ font-size: 1.3rem; }}
+/* 차트 — 가로 넘침 방지 */
+.chart-box {{ padding: 12px 11px; overflow-x: auto; -webkit-overflow-scrolling: touch; }}
+.chart-box svg[viewBox^="0 0 760"] {{ min-width: 520px; }}
 .donut-box svg {{ min-width: 0 !important; }}
-/* 안내문 */
-.note {{ font-size: .88rem; padding: 10px 12px; }}
-.section-title {{ font-size: 1.1rem; }}
-/* 브리핑 */
-.brief-box {{ padding: 14px 15px; }}
-.brief-head {{ font-size: 1.05rem; }}
-.brief-reasons {{ font-size: .88rem; padding-left: 17px; }}
-/* 입력창 - 모바일에서 확대 방지를 위해 16px 이상 유지 */
+.gauge-wrap {{ padding: 12px 13px; }}
+/* 글자 */
+.note {{ font-size: .85rem; padding: 10px 12px; }}
+.section-title {{ font-size: 1.05rem; }}
+.brief-box {{ padding: 13px 14px; }}
+.brief-head {{ font-size: 1rem; }}
+.brief-reasons {{ font-size: .85rem; padding-left: 16px; }}
+/* 입력창 — 16px 미만이면 iOS가 화면을 확대한다 */
 .stTextInput input {{ font-size: 16px !important; }}
-.st-key-kw_main input, .st-key-blog_input_tab input {{
-font-size: 17px !important; padding: 14px 16px !important;
+.st-key-kw_main input, .st-key-blog_input_main input {{
+font-size: 16px !important; padding: 13px 14px !important;
 }}
-/* 표 */
-.stDataFrame [data-testid="stTable"] {{ font-size: .86rem; }}
-div[data-testid="stDataFrameResizable"] {{ font-size: .86rem; }}
-/* 라디오 */
-div[role="radiogroup"] {{ padding: 6px 10px; flex-wrap: wrap; }}
-.stRadio label {{ font-size: .88rem !important; }}
-/* 버튼 전체폭 */
-.stButton button {{ width: 100%; padding: 12px 16px !important; }}
-/* 좁은 화면에선 컬럼이 세로로 쌓이므로 정렬용 여백을 없앤다 */
+/* 라디오·버튼 */
+div[role="radiogroup"] {{ padding: 5px 9px; flex-wrap: wrap; gap: 2px; }}
+.stRadio label {{ font-size: .84rem !important; }}
+.stButton button {{ width: 100%; padding: 12px 14px !important; }}
 .search-btn-pad {{ height: 0 !important; }}
-.st-key-research_go button {{ height: 50px; margin-top: 2px; }}
+.st-key-research_go button {{ height: 46px; margin-top: 2px; }}
+[data-testid="stExpander"] summary {{ font-size: .88rem !important; padding: 11px 13px !important; }}
 }}
 /* 아주 좁은 화면 */
 @media (max-width: 400px) {{
@@ -800,19 +888,50 @@ div[role="radiogroup"] {{ padding: 6px 10px; flex-wrap: wrap; }}
 
 def hunter_icon(size=34):
     """
-    헌터 캐릭터 — 사파리햇을 쓰고 망원경으로 키워드를 조준하는 사냥꾼.
-    이미지 파일 없이 SVG로 직접 그려서 어디서든 깨지지 않는다.
+    헌터 표식 — 과녁에 꽂힌 화살.
+
+    이전에는 사파리햇을 쓴 캐릭터를 그렸는데, 작게 줄이면 뭉개져서
+    무엇인지 알아보기 어려웠다. 도구의 표식은 캐릭터보다
+    단순한 기하 도형이 어느 크기에서든 또렷하다.
+    과녁은 '노린다', 화살은 '맞힌다'를 뜻해서 이름과도 맞는다.
     """
-    return f"""<svg width="{size}" height="{size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"> <circle cx="32" cy="32" r="31" fill="#24506A"/> <circle cx="32" cy="32" r="31" stroke="{GOLD}" stroke-width="2"/> <path d="M14 27c0-9.4 8-16 18-16s18 6.6 18 16" fill="#2E7D6B"/> <ellipse cx="32" cy="27.5" rx="23" ry="4.2" fill="#256556"/> <path d="M14 27h36" stroke="{GOLD}" stroke-width="2.4" stroke-linecap="round"/> <path d="M20 33c0-6.6 5.4-11 12-11s12 4.4 12 11v9c0 6.6-5.4 11-12 11s-12-4.4-12-11z" fill="#F0C9A4"/> <circle cx="26.5" cy="38" r="5.6" fill="#14161A" opacity=".9"/> <circle cx="41.5" cy="38" r="5.6" fill="#14161A" opacity=".9"/> <path d="M32.1 37.6h-.2" stroke="#14161A" stroke-width="2.4" stroke-linecap="round"/> <circle cx="26.5" cy="38" r="3.6" fill="#7FD4E8"/> <circle cx="41.5" cy="38" r="3.6" fill="#7FD4E8"/> <circle cx="27.9" cy="36.4" r="1.35" fill="#fff"/> <circle cx="42.9" cy="36.4" r="1.35" fill="#fff"/> <path d="M28 47.5c2.4 1.9 5.6 1.9 8 0" stroke="#B5715A" stroke-width="2.2" stroke-linecap="round"/> </svg>"""
+    return (
+        f'<svg width="{size}" height="{size}" viewBox="0 0 48 48" fill="none" '
+        f'xmlns="http://www.w3.org/2000/svg">'
+        f'<circle cx="24" cy="24" r="21" fill="none" stroke="{GOLD}" '
+        f'stroke-width="2.5" opacity=".45"/>'
+        f'<circle cx="24" cy="24" r="14" fill="none" stroke="{GOLD}" '
+        f'stroke-width="2.5" opacity=".7"/>'
+        f'<circle cx="24" cy="24" r="6.5" fill="{GOLD}"/>'
+        f'<path d="M24 24 L41 7" stroke="#FFFFFF" stroke-width="4.5" '
+        f'stroke-linecap="round"/>'
+        f'<path d="M24 24 L41 7" stroke="{DEEP}" stroke-width="2.6" '
+        f'stroke-linecap="round"/>'
+        f'<path d="M41 7 L41 14 M41 7 L34 7" stroke="{DEEP}" '
+        f'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
+        f'<circle cx="24" cy="24" r="2.4" fill="#FFFFFF"/>'
+        f'</svg>')
 
 
-def side_brand(name="키워드", accent="헌터", tagline="뚫을 수 있는 키워드를 사냥합니다"):
-    st.markdown(f"""<div class="side-brand">{hunter_icon()}<div>{name}<span>{accent}</span></div></div>
-<div class="side-tagline">{tagline}</div>""", unsafe_allow_html=True)
+def topbar(blog_id="", freshness="", version=""):
+    """
+    화면 맨 위 정보 줄.
 
-
-def side_label(text):
-    st.markdown(f'<div class="side-label">{text}</div>', unsafe_allow_html=True)
+    사이드바를 없애면서 거기 있던 것들(블로그 등록 상태, 마지막 수집 시각)을
+    옮겨왔다. 사이드바는 모바일에서 기본으로 접히고, 여는 버튼을 찾기 어려워
+    쓰이지 않는 공간이 되기 쉽다.
+    """
+    bits = []
+    if blog_id:
+        bits.append(f'<span class="tb-item tb-on">내 블로그 · {_esc(blog_id)}</span>')
+    else:
+        bits.append('<span class="tb-item tb-off">블로그 미등록</span>')
+    if freshness:
+        bits.append(f'<span class="tb-item">수집 {_esc(freshness)}</span>')
+    if version:
+        bits.append(f'<span class="tb-item tb-dim">{_esc(version)}</span>')
+    st.markdown(f'<div class="topbar">{"".join(bits)}</div>',
+                unsafe_allow_html=True)
 
 
 def masthead(title, subtitle):

@@ -174,57 +174,9 @@ SEASONAL_CALENDAR = {
 # ============================================================
 # 사이드바 — 내 블로그 등록 (향후 회원가입/결제가 들어갈 자리)
 # ============================================================
-with st.sidebar:
-    ui.side_brand("키워드", "헌터", "뚫을 수 있는 키워드를 사냥합니다")
-    st.divider()
-
-    ui.side_label("내 블로그 주소 입력")
-    blog_input = st.text_input(
-        "내 블로그 주소 입력",
-        value=st.session_state.get("blog_id", ""),
-        label_visibility="collapsed",
-        key="blog_input_side",
-    )
-    if st.button("등록", use_container_width=True, key="blog_save_side"):
-        if blog_input.strip():
-            st.session_state["blog_id"] = extract_blog_id(blog_input)
-            st.success("등록했습니다.")
-        else:
-            st.session_state.pop("blog_id", None)
-            st.info("등록을 해제했습니다.")
-    elif blog_input.strip():
-        st.session_state["blog_id"] = extract_blog_id(blog_input)
-
-    if st.session_state.get("blog_id"):
-        st.caption(f"등록됨 · `{st.session_state['blog_id']}`")
-    else:
-        st.caption("등록하면 키워드마다 내 승산을 함께 계산합니다.")
-
-    st.divider()
-    ui.side_label("데이터 상태")
-    if df.empty:
-        st.caption("최근 수집 기록 없음")
-    else:
-        last = df['created_at_dt'].max()
-        mins = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
-        freshness = f"{mins}분 전" if mins < 120 else f"{mins // 60}시간 전"
-        st.markdown(f'<div class="mono" style="font-size:1.15rem;font-weight:600;color:#fff">'
-                    f'{freshness}</div>', unsafe_allow_html=True)
-        st.caption("마지막 수집 시각")
-
-    st.divider()
-    st.markdown(
-        '<div class="plan-box"><b>무료 플랜</b><br>'
-        '키워드 분석 · 트렌드 조회<br><br>'
-        '로그인과 결제는 준비 중입니다.</div>',
-        unsafe_allow_html=True)
-
-    try:
-        import naver_api as _na
-        st.caption(f"모듈 {_na.MODULE_VERSION}")
-    except Exception:
-        pass
-
+# 사이드바를 없앴다.
+# 모바일에서 기본으로 접히는 데다 여는 버튼을 찾기 어려워
+# 실제로는 쓰이지 않는 공간이 된다. 필요한 것만 본문 위로 옮겼다.
 
 my_blog_id = st.session_state.get("blog_id", "")
 
@@ -233,6 +185,47 @@ ui.masthead(
     "검색량만으로는 경쟁을 알 수 없습니다. 이미 쓰인 글이 몇 개인지까지 재서, "
     "지금 뛰어들어 이길 수 있는 키워드를 찾습니다."
 )
+
+# --- 상단 정보 줄 (사이드바에 있던 것들) ---
+_fresh = ""
+if not df.empty:
+    _last = df['created_at_dt'].max()
+    _mins = int((datetime.now(timezone.utc) - _last).total_seconds() // 60)
+    _fresh = f"{_mins}분 전" if _mins < 120 else f"{_mins // 60}시간 전"
+
+try:
+    import naver_api as _na
+    _ver = _na.MODULE_VERSION
+except Exception:
+    _ver = ""
+
+ui.topbar(st.session_state.get("blog_id", ""), _fresh, _ver)
+
+# --- 내 블로그 등록 (접어둔다) ---
+# 한 번 등록하면 다시 열 일이 거의 없어서, 펼침으로 두면 자리만 차지한다.
+_registered = bool(st.session_state.get("blog_id"))
+with st.expander(
+        f"🏠 내 블로그  ·  {st.session_state['blog_id']}" if _registered
+        else "🏠 내 블로그 등록하기  ·  키워드마다 내 승산을 함께 계산합니다",
+        expanded=not _registered):
+    bc1, bc2 = st.columns([4, 1])
+    with bc1:
+        blog_input = st.text_input(
+            "블로그 주소",
+            value=st.session_state.get("blog_id", ""),
+            placeholder="blog.naver.com/myid   또는   myid",
+            key="blog_input_main",
+            label_visibility="collapsed")
+    with bc2:
+        if st.button("등록", use_container_width=True, key="blog_save_main"):
+            if blog_input.strip():
+                st.session_state["blog_id"] = extract_blog_id(blog_input)
+                st.rerun()
+            else:
+                st.session_state.pop("blog_id", None)
+                st.rerun()
+    if not _registered:
+        st.caption("등록하면 키워드마다 '내 블로그로 뚫을 수 있는지'까지 계산합니다.")
 
 
 def compact_num(v):
