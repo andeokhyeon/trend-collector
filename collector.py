@@ -326,6 +326,14 @@ def fetch_golden_time_keywords():
             continue
         recent = rc["count"]
 
+        # ⚠️ 트렌드 본체(구글 트렌드에 뜬 키워드 그 자체)는 이미 다들 쓰고 있어서
+        # 세부 키워드와 같은 잣대로 재면 거의 전부 탈락한다.
+        # (그래서 '오늘 트렌드' 탭이 늘 비어 있었다.)
+        # 카테고리별로 관문을 따로 둔다.
+        is_trend = stat.get("origin") == "trend"
+        max_recent = 200 if is_trend else 50
+        min_score = 30 if is_trend else 40
+
         docs = get_blog_doc_count(kw)
         ratio, _ = calc_competition(total, docs)
         opp = calc_opportunity(ratio, (recent / total) if total else None,
@@ -334,7 +342,7 @@ def fetch_golden_time_keywords():
         # 최근 글이 적고, 종합 판단도 나쁘지 않은 것만.
         # ⚠️ 기준이 빡빡하면 하루에 서너 건밖에 안 나와 화면이 비어 보인다.
         # 최근 글 30개 → 50개, 점수 45 → 40으로 조금 넓혔다.
-        if recent <= 50 and opp["score"] >= 40:
+        if recent <= max_recent and opp["score"] >= min_score:
             results.append({
                 "keyword": kw,
                 "source": "golden_time",
@@ -347,7 +355,7 @@ def fetch_golden_time_keywords():
                 "comp_ratio": ratio or 0,
                 "comp_grade": opp["label"],
                 "opportunity": opp["score"],
-                "keyword_category": "트렌드" if stat.get("origin") == "trend" else "세부",
+                "keyword_category": "트렌드" if is_trend else "세부",
             })
         else:
             crowded += 1

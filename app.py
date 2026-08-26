@@ -343,14 +343,18 @@ def show_table(frame, height=None):
 
 
 def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
-                 show_docs=True, show_volume=True, source=None, label=""):
+                 show_docs=True, show_volume=True, source=None, label="",
+                 empty_msg=None):
     """
     show_docs   : 문서수/경쟁률 컬럼 표시 여부
     show_volume : 월 검색량/검색량 등급 컬럼 표시 여부
     source      : 비어 있을 때 왜 없는지 안내하기 위한 소스 이름
+    empty_msg   : 비어 있을 때 보여줄 문구를 직접 지정 (수집 안내 대신)
     """
     if data.empty:
-        if source:
+        if empty_msg:
+            ui.note(empty_msg)
+        elif source:
             empty_note(source, None, label)
         else:
             ui.note("아직 이 항목에 수집된 데이터가 없습니다. "
@@ -1591,28 +1595,34 @@ else:
         st.write("")
         _, h = period_picker("gt_period", kind="slow", default="일별")
         golden = latest_snapshot(df[df['source'] == 'golden_time'], hours=h)
+        # ⚠️ 비어 있을 때 수집 안내를 띄우면 고장 난 것처럼 보인다.
+        # 실제로는 '조건을 통과한 키워드가 없는' 정상 상태다.
+        GT_EMPTY = "추천할만한 키워드가 아직은 없습니다."
         if golden.empty:
-            empty_note('golden_time', h, "골든타임")
+            ui.note(GT_EMPTY)
         else:
             # ⚠️ 시드 키워드를 없애면서 분류 기준이 바뀌었다.
             # 예전엔 '상품/서비스'였지만, 이제는 어디서 나왔는지로 나눈다.
             #   트렌드 — 오늘 구글 트렌드에 뜬 키워드 그 자체
             #   세부   — 그 트렌드에서 파생된 연관 검색어
-            sub = st.tabs(["🔥 오늘 트렌드", "🔍 파생 키워드", "전체"])
+            # ⚠️ 트렌드 본체는 이미 붐벼서 조건을 통과하는 일이 드물다.
+            # 실제로 건질 게 있는 '파생 키워드'를 맨 앞으로 둔다.
+            sub = st.tabs(["🔍 파생 키워드", "🔥 오늘 트렌드", "전체"])
             _extra = [('blog_competition', '최근 30일 글')]
             with sub[0]:
-                render_table(golden[golden['keyword_category'] == '트렌드'],
-                             sort_col='rise_score', show_docs=False,
-                             limit=20, extra_cols=_extra, source='golden_time',
-                             label="골든타임")
-            with sub[1]:
                 render_table(golden[golden['keyword_category'] == '세부'],
                              sort_col='rise_score', show_docs=False,
-                             limit=20, extra_cols=_extra, source='golden_time',
-                             label="골든타임")
+                             limit=20, extra_cols=_extra,
+                             empty_msg=GT_EMPTY)
+            with sub[1]:
+                render_table(golden[golden['keyword_category'] == '트렌드'],
+                             sort_col='rise_score', show_docs=False,
+                             limit=20, extra_cols=_extra,
+                             empty_msg=GT_EMPTY)
             with sub[2]:
                 render_table(golden, sort_col='rise_score', show_docs=False,
-                             limit=40, extra_cols=_extra)
+                             limit=40, extra_cols=_extra,
+                             empty_msg=GT_EMPTY)
 
     with sub_discover[2]:
         ui.section("주간 캘린더", "미리 써두면 유리한 앞으로 4주")
@@ -1645,8 +1655,10 @@ else:
                 ev = weekly[weekly['wk'] == off].copy()
                 ev['요일'] = ev['d'].apply(lambda x: wd[x.weekday()])
                 ev = ev.sort_values('d')
-                out = ev[['d', '요일', 'keyword', 'comp_level', '총 검색량']].copy()
-                out.columns = ['날짜', '요일', '이벤트', '종류', '월 검색량']
+                # ⚠️ 행사 이름은 띄어쓰기가 섞여 있어 네이버 검색량 조회가
+                # 잘 안 붙는다. 0으로 비어 보이느니 아예 감춘다.
+                out = ev[['d', '요일', 'keyword', 'comp_level']].copy()
+                out.columns = ['날짜', '요일', '이벤트', '종류']
                 out.index = range(1, len(out) + 1)
                 show_table(out)
                 st.write("")
