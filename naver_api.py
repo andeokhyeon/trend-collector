@@ -43,7 +43,9 @@ def get_naver_stat(keyword):
     """키워드의 월간 검색량(PC/모바일) 및 광고경쟁 지표 조회."""
     path = "/keywordstool"
     headers = get_naver_headers("GET", path)
-    params = {"hintKeywords": keyword.strip(), "showDetail": "1"}
+    # hintKeywords는 공백을 뺀 형태만 인식한다
+    params = {"hintKeywords": keyword.strip().replace(" ", ""),
+              "showDetail": "1"}
     try:
         _count_call()
         res = requests.get(NAVER_BASE_URL + path, params=params, headers=headers, timeout=10)
@@ -94,7 +96,9 @@ def get_related_keywords(keyword, limit=15):
     """
     path = "/keywordstool"
     headers = get_naver_headers("GET", path)
-    params = {"hintKeywords": keyword.strip(), "showDetail": "1"}
+    # hintKeywords는 공백을 뺀 형태만 인식한다
+    params = {"hintKeywords": keyword.strip().replace(" ", ""),
+              "showDetail": "1"}
     related = []
     try:
         _count_call()
@@ -312,8 +316,9 @@ def _build_hints(keyword, max_hints=5):
     add(joined)                         # 공백 뺀 원형 (가장 중요)
 
     if " " in raw:
-        add(raw)                        # 띄어쓴 형태도 함께
-        for part in raw.split():        # 조각별로도 물어본다
+        # ⚠️ 띄어쓴 형태는 보내지 않는다.
+        # hintKeywords는 공백을 뺀 형태만 인식한다.
+        for part in raw.split():        # 조각별로 물어본다
             if len(part) >= 2:
                 add(part)
         return hints
@@ -424,7 +429,19 @@ def get_volumes(keywords):
     쪼개거나 변형하면 안 되기 때문이다.
     반환: {키워드(공백제거): 검색량}
     """
-    words = [w.strip() for w in keywords if w and w.strip()][:5]
+    # ⚠️ hintKeywords는 공백을 뺀 형태로 보내야 한다.
+    # '국민은행 고객센터'를 그대로 보내면 네이버가 인식하지 못해
+    # 아무것도 안 돌려준다.
+    words, orig = [], {}
+    for w in keywords:
+        if not w or not w.strip():
+            continue
+        clean = w.strip().replace(" ", "")
+        if clean and clean not in orig:
+            orig[clean] = w.strip()
+            words.append(clean)
+        if len(words) >= 5:
+            break
     if not words:
         return {}
 

@@ -724,18 +724,10 @@ with sub_research[0]:
                                "아직 모릅니다. 순위를 매길 때 함께 조회합니다.")
             # 버튼을 눌렀을 때만 잰다.
             # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
-            with st.container(border=True):
-                mc1, mc2 = st.columns([2, 1])
-                with mc1:
-                    pick_n = st.radio("몇 개를 잴까요", [5, 10, 15],
-                                      index=1, horizontal=True, key="map_count",
-                                      help="많이 잴수록 시간이 더 걸립니다. "
-                                           "상위 10개만 순위에 표시됩니다.")
-                with mc2:
-                    st.markdown('<div class="search-btn-pad"></div>',
-                                unsafe_allow_html=True)
-                    draw_map = st.button("🏹 순위 매기기",
-                                         use_container_width=True, key="map_go")
+            # 10개 고정. 고를 이유가 없고, 선택지가 늘면 화면만 복잡해진다.
+            pick_n = 10
+            draw_map = st.button("🏹 순위 매기기 (상위 10개)",
+                                 use_container_width=True, key="map_go")
 
             if draw_map:
                 st.session_state["map_kw"] = r["keyword"]
@@ -1650,22 +1642,20 @@ else:
             with sub[0]:
                 render_table(golden[golden['keyword_category'] == '트렌드'],
                              sort_col='rise_score', show_docs=False,
-                             extra_cols=_extra, source='golden_time',
+                             limit=20, extra_cols=_extra, source='golden_time',
                              label="골든타임")
             with sub[1]:
                 render_table(golden[golden['keyword_category'] == '세부'],
                              sort_col='rise_score', show_docs=False,
-                             extra_cols=_extra, source='golden_time',
+                             limit=20, extra_cols=_extra, source='golden_time',
                              label="골든타임")
             with sub[2]:
                 render_table(golden, sort_col='rise_score', show_docs=False,
-                             extra_cols=_extra)
+                             limit=40, extra_cols=_extra)
 
     with sub_discover[2]:
         ui.section("주간 캘린더", "미리 써두면 유리한 앞으로 4주")
-        ui.note("검색량이 큰 행사가 위에 옵니다. "
-                "<b>0으로 나오는 건</b> 아직 사람들이 안 찾거나, "
-                "공식 명칭이 너무 길어 검색어로 안 쓰이는 경우입니다.")
+
         weekly = latest_snapshot(df[df['source'] == 'weekly_event'])
         if weekly.empty:
             ui.note("예정된 이벤트가 없거나 아직 수집되지 않았습니다.")
@@ -1693,8 +1683,7 @@ else:
                     unsafe_allow_html=True)
                 ev = weekly[weekly['wk'] == off].copy()
                 ev['요일'] = ev['d'].apply(lambda x: wd[x.weekday()])
-                # 검색량이 있는 것을 위로 (0인 건 글감으로 쓸모가 적다)
-                ev = ev.sort_values(['총 검색량', 'd'], ascending=[False, True])
+                ev = ev.sort_values('d')
                 out = ev[['d', '요일', 'keyword', 'comp_level', '총 검색량']].copy()
                 out.columns = ['날짜', '요일', '이벤트', '종류', '월 검색량']
                 out.index = range(1, len(out) + 1)

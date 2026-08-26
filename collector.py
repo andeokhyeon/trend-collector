@@ -57,7 +57,12 @@ def build_keyword_pool(expand_limit=10, force=False):
     for kw in seeds:
         stat = get_naver_stat(kw)
         total = stat["monthly_pc"] + stat["monthly_mobile"]
-        if stat["comp_level"] == "-" or total < 50:
+        # ⚠️ comp_level로 거르면 안 된다.
+        # 구글 트렌드는 '지금 뜨는 이슈'라 네이버 광고 데이터가 없어
+        # comp_level이 '-'로 나온다. 그걸 탈락시키면 골든타임의
+        # '오늘 트렌드' 탭이 항상 비게 된다.
+        # 검색량이 1이라도 있으면 사람들이 찾는 키워드다.
+        if total < 1:
             time.sleep(0.05)
             continue
         pool[kw] = {**stat, "origin": "trend"}
@@ -356,9 +361,9 @@ def fetch_golden_time_keywords():
         return (x["rise_score"] > 0, x["rise_score"], x["opportunity"])
 
     trend_rows = sorted([r for r in results if r["keyword_category"] == "트렌드"],
-                        key=_rank, reverse=True)[:30]
+                        key=_rank, reverse=True)[:20]
     detail_rows = sorted([r for r in results if r["keyword_category"] == "세부"],
-                         key=_rank, reverse=True)[:30]
+                         key=_rank, reverse=True)[:20]
     return trend_rows + detail_rows
 
 
