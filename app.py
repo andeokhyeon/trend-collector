@@ -766,205 +766,208 @@ with sub_research[0]:
                     gold=True)
 
 
-        st.divider()
-        ui.section("노려볼 만한 연관 키워드", "")
+        with st.container(border=True):
+            ui.section("노려볼 만한 연관 키워드", "")
 
-        rel = r.get("related", [])
-        if not rel:
-            ui.note("연관 키워드를 찾지 못했습니다. 더 일반적인 키워드로 시도해보세요.")
-        else:
-            # 측정 개수를 고를 수 있게 한다.
-            # Streamlit은 스크립트가 도는 동안 다른 조작을 받지 못하므로,
-            # 급할 때는 개수를 줄여 대기 시간을 짧게 가져갈 수 있어야 한다.
-            # 네이버는 '같은 업종의 다른 키워드'도 연관어로 준다.
-            # (삼성 → LG전자 같은 경우) 기본은 키워드를 품은 것만 본다.
-            only_contains = st.checkbox(
-                "이 키워드를 포함한 것만 보기", value=True, key="rel_filter",
-                help="끄면 네이버가 같은 업종으로 묶은 다른 키워드까지 함께 봅니다.")
-            # ⚠️ 검색량 0인 것을 빼면 안 된다.
-            # 자동완성으로 온 키워드는 검색량을 아직 모를 뿐(0)이지
-            # 사람들이 안 찾는다는 뜻이 아니다.
-            # '국민은행'처럼 광고 데이터가 없는 키워드는 연관어가 전부
-            # 자동완성이라, 이 조건 하나로 후보가 통째로 사라졌다.
-            pool_rel = [i for i in rel
-                        if i.get("contains", True) or not only_contains]
-
-            # 검색량을 아는 것을 먼저, 그 안에서 큰 순으로.
-            # 모르는 것(자동완성)은 뒤에 붙여 남는 자리를 채운다.
-            pool_rel = sorted(
-                pool_rel,
-                key=lambda x: (-(x["monthly_pc"] + x["monthly_mobile"]),
-                               x.get("source") == "자동완성"))
-            avail = [i["keyword"] for i in pool_rel]
-            if not avail:
-                ui.note("이 키워드를 포함한 연관어가 없습니다. "
-                        "위 체크를 끄면 같은 업종의 다른 키워드까지 볼 수 있습니다.")
-            # 버튼을 눌렀을 때만 잰다.
-            # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
-            # 10개 고정. 고를 이유가 없고, 선택지가 늘면 화면만 복잡해진다.
-            pick_n = 10
-            draw_map = st.button("🏹 순위 매기기 (상위 10개)",
-                                 use_container_width=True, key="map_go")
-
-            if draw_map:
-                st.session_state["map_kw"] = r["keyword"]
-
-            # 다른 키워드를 새로 검색하면 지도를 닫는다
-            if st.session_state.get("map_kw") not in (None, r["keyword"]):
-                st.session_state.pop("map_kw", None)
-
-            show_map = st.session_state.get("map_kw") == r["keyword"]
-            targets = avail[:pick_n] if show_map else []
-
-            # 이미 아는 검색량을 함께 넘긴다.
-            # 다시 물으면 호출만 낭비되고, 힌트로 쪼개지면서
-            # 엉뚱한 값이 돌아와 '측정 실패'로 처리되는 일이 생긴다.
-            # 검색량을 아는 것만 넘긴다.
-            # 자동완성으로 온 것(0)은 넘기지 않아야 측정 단계에서
-            # 네이버에 직접 물어보고 실제 값을 채운다.
-            known = {i["keyword"]: {
-                "monthly_pc": i["monthly_pc"],
-                "monthly_mobile": i["monthly_mobile"],
-                "comp_level": i.get("comp_level", "-"),
-                "pl_avg_depth": 0,
-            } for i in pool_rel
-                if (i["monthly_pc"] + i["monthly_mobile"]) > 0}
-
-            @st.cache_data(ttl=1800, show_spinner=False)
-            def measure_batch(keywords, stats):
-                """
-                연관 키워드를 한꺼번에 측정한다.
-
-                ⚠️ 검색량을 모르는 키워드(자동완성으로 온 것)를
-                analyze_keyword에 그냥 넘기면, 내부에서 힌트로 쪼개지면서
-                응답 첫 항목이 원래 키워드가 아니게 되어 0이 나온다.
-                그래서 모르는 것들은 get_volumes로 5개씩 묶어 먼저 채운 뒤
-                측정에 넘긴다. (get_volumes는 쪼개지 않는다)
-                """
-                # ⚠️ st.cache_data에 넘기려고 dict를 튜플로 바꿔서 들어온다.
-                # (('점심메뉴', (('comp_level','높음'), ('monthly_pc',1200), ...)), ...)
-                # 여기서 안쪽까지 dict로 되돌리지 않으면 analyze_keyword가
-                # stat["monthly_pc"]에서 TypeError를 내고 전부 '측정 실패'가 된다.
-                smap = {k: (dict(v) if not isinstance(v, dict) else v)
-                        for k, v in stats}
-
-                # ① 검색량을 모르는 것부터 채운다 (5개씩, 호출 1회로 5개)
-                unknown = [k for k in keywords if k not in smap]
-                for i in range(0, len(unknown), 5):
-                    try:
-                        vols = get_volumes(unknown[i:i + 5])
-                    except Exception:
-                        continue
-                    for k in unknown[i:i + 5]:
-                        v = vols.get(k.replace(" ", "").upper())
-                        if v:
-                            smap[k] = {"monthly_pc": int(v * 0.3),
-                                       "monthly_mobile": v - int(v * 0.3),
-                                       "comp_level": "-", "pl_avg_depth": 0}
-
-                # ② 문서수를 잰다 (검색량은 이미 알고 있다)
-                out, failed = {}, []
-                with ThreadPoolExecutor(max_workers=4) as pool:
-                    futures = {
-                        pool.submit(analyze_keyword, k, True, False, False,
-                                    smap.get(k), True): k
-                        for k in keywords if k in smap
-                    }
-                    for fut in as_completed(futures):
-                        k = futures[fut]
-                        try:
-                            res = fut.result()
-                            if res and res.get("total_search", 0) > 0:
-                                out[k] = res
-                            else:
-                                failed.append(k)
-                        except Exception:
-                            failed.append(k)
-
-                # 검색량이 정말 0인 것은 '실패'가 아니라 '수요 없음'이다
-                no_demand = [k for k in keywords if k not in smap]
-                return ([out[k] for k in keywords if k in out],
-                        failed, no_demand)
-
-            subs, failed, no_demand = [], [], []
-            if targets:
-                _stats = tuple(sorted(
-                    (k, tuple(sorted(known[k].items())))
-                    for k in targets if k in known))
-                try:
-                    with st.status(f"연관 키워드 {len(targets)}개 측정 중...",
-                                   expanded=True) as status:
-                        st.markdown('<div class="prog-label">검색량과 문서수를 '
-                                    '조회하고 있습니다. 잠시만 기다려주세요.</div>',
-                                    unsafe_allow_html=True)
-                        subs, failed, no_demand = measure_batch(
-                            tuple(targets), _stats)
-                        status.update(label=f"측정 완료 · {len(subs)}개",
-                                      state="complete", expanded=False)
-                except AttributeError:
-                    with st.spinner(f"연관 키워드 {len(targets)}개 측정 중..."):
-                        subs, failed, no_demand = measure_batch(
-                            tuple(targets), _stats)
-
-            if no_demand:
-                st.caption(f"{len(no_demand)}개는 검색량이 확인되지 않아 "
-                           "순위에서 제외했습니다.")
-
-            # 주소에 ?debug=1 을 붙이면 어느 단계에서 걸렸는지 보여준다
-            if "debug" in _get_query_params():
-                st.info(
-                    f"**순위 진단**\n\n"
-                    f"- 연관어 전체: {len(rel)}개\n"
-                    f"- 필터 통과(pool_rel): {len(pool_rel)}개\n"
-                    f"- 검색량 아는 것(known): {len(known)}개\n"
-                    f"- 측정 대상(targets): {len(targets)}개\n"
-                    f"- 측정 성공(subs): {len(subs)}개\n"
-                    f"- 실패(failed): {len(failed)}개\n"
-                    f"- 수요 없음(no_demand): {len(no_demand)}개\n"
-                    f"- 포함필터: {only_contains}"
-                )
-
-            rows = []
-            for sub in subs:
-                rd = sub.get('recent_docs')
-                sopp = sub.get('opportunity') or {'score': 0, 'label': '정보없음'}
-                rows.append({
-                    "키워드": sub["keyword"],
-                    "월 검색량": sub["total_search"],
-                    "누적 문서수": sub["doc_count"] if sub["doc_count"] is not None else 0,
-                    "최근 30일": ((f"{rd:,}+" if sub.get('recent_capped') else f"{rd:,}")
-                                if rd is not None else "—"),
-                    "기회 점수": sopp["score"],
-                    "진단": sopp["label"],
-                })
-
-            if not rows:
-                if not targets:
-                    ui.note("<b>순위 매기기</b>를 누르면 연관 키워드의 문서수를 재서 "
-                            "노려볼 만한 순서대로 세웁니다.")
-                else:
-                    ui.note("순위를 매길 만한 연관 키워드를 찾지 못했습니다. "
-                            "더 일반적인 키워드로 시도해보세요.")
+            rel = r.get("related", [])
+            if not rel:
+                ui.note("연관 키워드를 찾지 못했습니다. 더 일반적인 키워드로 시도해보세요.")
             else:
-                rel_df = pd.DataFrame(rows).sort_values(
-                    "기회 점수", ascending=False).reset_index(drop=True)
-                rel_df.index = rel_df.index + 1
+                # 측정 개수를 고를 수 있게 한다.
+                # Streamlit은 스크립트가 도는 동안 다른 조작을 받지 못하므로,
+                # 급할 때는 개수를 줄여 대기 시간을 짧게 가져갈 수 있어야 한다.
+                # 네이버는 '같은 업종의 다른 키워드'도 연관어로 준다.
+                # (삼성 → LG전자 같은 경우) 기본은 키워드를 품은 것만 본다.
+                only_contains = st.checkbox(
+                    "이 키워드를 포함한 것만 보기", value=True, key="rel_filter",
+                    help="끄면 네이버가 같은 업종으로 묶은 다른 키워드까지 함께 봅니다.")
+                # ⚠️ 검색량 0인 것을 빼면 안 된다.
+                # 자동완성으로 온 키워드는 검색량을 아직 모를 뿐(0)이지
+                # 사람들이 안 찾는다는 뜻이 아니다.
+                # '국민은행'처럼 광고 데이터가 없는 키워드는 연관어가 전부
+                # 자동완성이라, 이 조건 하나로 후보가 통째로 사라졌다.
+                pool_rel = [i for i in rel
+                            if i.get("contains", True) or not only_contains]
 
-                ui.note("기회 점수가 높은 순입니다. "
-                        "<b>찾는 사람은 있는데 쓰인 글이 적을수록</b> 위로 옵니다. "
-                        "1~3위는 특히 노려볼 만한 자리입니다.")
+                # 검색량을 아는 것을 먼저, 그 안에서 큰 순으로.
+                # 모르는 것(자동완성)은 뒤에 붙여 남는 자리를 채운다.
+                pool_rel = sorted(
+                    pool_rel,
+                    key=lambda x: (-(x["monthly_pc"] + x["monthly_mobile"]),
+                                   x.get("source") == "자동완성"))
+                avail = [i["keyword"] for i in pool_rel]
+                if not avail:
+                    ui.note("이 키워드를 포함한 연관어가 없습니다. "
+                            "위 체크를 끄면 같은 업종의 다른 키워드까지 볼 수 있습니다.")
+                # 버튼을 눌렀을 때만 잰다.
+                # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
+                # 10개 고정. 고를 이유가 없고, 선택지가 늘면 화면만 복잡해진다.
+                pick_n = 10
+                draw_map = st.button("🏹 순위 매기기 (상위 10개)",
+                                     use_container_width=True, key="map_go")
 
-                ui.hunt_rank(
-                    [{"keyword": row["키워드"],
-                      "search": int(row["월 검색량"]),
-                      "docs": int(row["누적 문서수"]),
-                      "score": int(row["기회 점수"]),
-                      "label": row["진단"]}
-                     for _, row in rel_df.iterrows()],
-                    main={"keyword": r["keyword"], "search": r["total_search"],
-                          "docs": r.get("doc_count")},
-                    limit=10)
+                if draw_map:
+                    st.session_state["map_kw"] = r["keyword"]
 
+                # 다른 키워드를 새로 검색하면 지도를 닫는다
+                if st.session_state.get("map_kw") not in (None, r["keyword"]):
+                    st.session_state.pop("map_kw", None)
+
+                show_map = st.session_state.get("map_kw") == r["keyword"]
+                targets = avail[:pick_n] if show_map else []
+
+                # 이미 아는 검색량을 함께 넘긴다.
+                # 다시 물으면 호출만 낭비되고, 힌트로 쪼개지면서
+                # 엉뚱한 값이 돌아와 '측정 실패'로 처리되는 일이 생긴다.
+                # 검색량을 아는 것만 넘긴다.
+                # 자동완성으로 온 것(0)은 넘기지 않아야 측정 단계에서
+                # 네이버에 직접 물어보고 실제 값을 채운다.
+                known = {i["keyword"]: {
+                    "monthly_pc": i["monthly_pc"],
+                    "monthly_mobile": i["monthly_mobile"],
+                    "comp_level": i.get("comp_level", "-"),
+                    "pl_avg_depth": 0,
+                } for i in pool_rel
+                    if (i["monthly_pc"] + i["monthly_mobile"]) > 0}
+
+                @st.cache_data(ttl=1800, show_spinner=False)
+                def measure_batch(keywords, stats):
+                    """
+                    연관 키워드를 한꺼번에 측정한다.
+
+                    ⚠️ 검색량을 모르는 키워드(자동완성으로 온 것)를
+                    analyze_keyword에 그냥 넘기면, 내부에서 힌트로 쪼개지면서
+                    응답 첫 항목이 원래 키워드가 아니게 되어 0이 나온다.
+                    그래서 모르는 것들은 get_volumes로 5개씩 묶어 먼저 채운 뒤
+                    측정에 넘긴다. (get_volumes는 쪼개지 않는다)
+                    """
+                    # ⚠️ st.cache_data에 넘기려고 dict를 튜플로 바꿔서 들어온다.
+                    # (('점심메뉴', (('comp_level','높음'), ('monthly_pc',1200), ...)), ...)
+                    # 여기서 안쪽까지 dict로 되돌리지 않으면 analyze_keyword가
+                    # stat["monthly_pc"]에서 TypeError를 내고 전부 '측정 실패'가 된다.
+                    smap = {k: (dict(v) if not isinstance(v, dict) else v)
+                            for k, v in stats}
+
+                    # ① 검색량을 모르는 것부터 채운다 (5개씩, 호출 1회로 5개)
+                    unknown = [k for k in keywords if k not in smap]
+                    for i in range(0, len(unknown), 5):
+                        try:
+                            vols = get_volumes(unknown[i:i + 5])
+                        except Exception:
+                            continue
+                        for k in unknown[i:i + 5]:
+                            v = vols.get(k.replace(" ", "").upper())
+                            if v:
+                                smap[k] = {"monthly_pc": int(v * 0.3),
+                                           "monthly_mobile": v - int(v * 0.3),
+                                           "comp_level": "-", "pl_avg_depth": 0}
+
+                    # ② 문서수를 잰다 (검색량은 이미 알고 있다)
+                    out, failed = {}, []
+                    with ThreadPoolExecutor(max_workers=4) as pool:
+                        futures = {
+                            pool.submit(analyze_keyword, k, True, False, False,
+                                        smap.get(k), True): k
+                            for k in keywords if k in smap
+                        }
+                        for fut in as_completed(futures):
+                            k = futures[fut]
+                            try:
+                                res = fut.result()
+                                if res and res.get("total_search", 0) > 0:
+                                    out[k] = res
+                                else:
+                                    failed.append(k)
+                            except Exception:
+                                failed.append(k)
+
+                    # 검색량이 정말 0인 것은 '실패'가 아니라 '수요 없음'이다
+                    no_demand = [k for k in keywords if k not in smap]
+                    return ([out[k] for k in keywords if k in out],
+                            failed, no_demand)
+
+                subs, failed, no_demand = [], [], []
+                if targets:
+                    _stats = tuple(sorted(
+                        (k, tuple(sorted(known[k].items())))
+                        for k in targets if k in known))
+                    try:
+                        with st.status(f"연관 키워드 {len(targets)}개 측정 중...",
+                                       expanded=True) as status:
+                            st.markdown('<div class="prog-label">검색량과 문서수를 '
+                                        '조회하고 있습니다. 잠시만 기다려주세요.</div>',
+                                        unsafe_allow_html=True)
+                            subs, failed, no_demand = measure_batch(
+                                tuple(targets), _stats)
+                            status.update(label=f"측정 완료 · {len(subs)}개",
+                                          state="complete", expanded=False)
+                    except AttributeError:
+                        with st.spinner(f"연관 키워드 {len(targets)}개 측정 중..."):
+                            subs, failed, no_demand = measure_batch(
+                                tuple(targets), _stats)
+
+                if no_demand:
+                    st.caption(f"{len(no_demand)}개는 검색량이 확인되지 않아 "
+                               "순위에서 제외했습니다.")
+
+                # 주소에 ?debug=1 을 붙이면 어느 단계에서 걸렸는지 보여준다
+                if "debug" in _get_query_params():
+                    st.info(
+                        f"**순위 진단**\n\n"
+                        f"- 연관어 전체: {len(rel)}개\n"
+                        f"- 필터 통과(pool_rel): {len(pool_rel)}개\n"
+                        f"- 검색량 아는 것(known): {len(known)}개\n"
+                        f"- 측정 대상(targets): {len(targets)}개\n"
+                        f"- 측정 성공(subs): {len(subs)}개\n"
+                        f"- 실패(failed): {len(failed)}개\n"
+                        f"- 수요 없음(no_demand): {len(no_demand)}개\n"
+                        f"- 포함필터: {only_contains}"
+                    )
+
+                rows = []
+                for sub in subs:
+                    rd = sub.get('recent_docs')
+                    sopp = sub.get('opportunity') or {'score': 0, 'label': '정보없음'}
+                    rows.append({
+                        "키워드": sub["keyword"],
+                        "월 검색량": sub["total_search"],
+                        "누적 문서수": sub["doc_count"] if sub["doc_count"] is not None else 0,
+                        "최근 30일": ((f"{rd:,}+" if sub.get('recent_capped') else f"{rd:,}")
+                                    if rd is not None else "—"),
+                        "기회 점수": sopp["score"],
+                        "진단": sopp["label"],
+                    })
+
+                if not rows:
+                    if not targets:
+                        ui.note("<b>순위 매기기</b>를 누르면 연관 키워드의 문서수를 재서 "
+                                "노려볼 만한 순서대로 세웁니다.")
+                    else:
+                        ui.note("순위를 매길 만한 연관 키워드를 찾지 못했습니다. "
+                                "더 일반적인 키워드로 시도해보세요.")
+                else:
+                    rel_df = pd.DataFrame(rows).sort_values(
+                        "기회 점수", ascending=False).reset_index(drop=True)
+                    rel_df.index = rel_df.index + 1
+
+                    ui.note("기회 점수가 높은 순입니다. "
+                            "<b>찾는 사람은 있는데 쓰인 글이 적을수록</b> 위로 옵니다. "
+                            "1~3위는 특히 노려볼 만한 자리입니다.")
+
+                    ui.hunt_rank(
+                        [{"keyword": row["키워드"],
+                          "search": int(row["월 검색량"]),
+                          "docs": int(row["누적 문서수"]),
+                          "score": int(row["기회 점수"]),
+                          "label": row["진단"]}
+                         for _, row in rel_df.iterrows()],
+                        main={"keyword": r["keyword"], "search": r["total_search"],
+                              "docs": r.get("doc_count")},
+                        limit=10)
+
+                    # 막대는 한눈에 보라고, 표는 숫자를 정확히 보라고 둔다.
+                    st.write("")
+                    show_table(rel_df)
 
         # --- 연관 키워드 전체 ---
         # 네이버가 주는 걸 다 보여준다. 사냥 지도는 문서수까지 재느라
@@ -972,53 +975,55 @@ with sub_research[0]:
         all_rel = r.get("related") or []
         if all_rel:
             st.write("")
-            ui.section("연관 키워드 전체", f"{len(all_rel)}개")
+            with st.container(border=True):
+                ui.section("연관 키워드 전체", f"{len(all_rel)}개")
 
-            # 어떤 조각으로 물어봤는지 보여준다.
-            # 네이버는 띄어쓰기에 민감해서 '반딧불축제'와 '반딧불 축제'가
-            # 다른 결과를 준다. 그래서 여러 형태로 나눠 묻는다.
-            _hints = r.get("hints") or []
-            if len(_hints) > 1:
-                chips = " ".join(
-                    f'<span class="hint-chip">{h}</span>' for h in _hints)
-                st.markdown(
-                    f'<div class="hint-row">이렇게 나눠서 찾았습니다 {chips}</div>',
-                    unsafe_allow_html=True)
+                # 어떤 조각으로 물어봤는지 보여준다.
+                # 네이버는 띄어쓰기에 민감해서 '반딧불축제'와 '반딧불 축제'가
+                # 다른 결과를 준다. 그래서 여러 형태로 나눠 묻는다.
+                _hints = r.get("hints") or []
+                if len(_hints) > 1:
+                    chips = " ".join(
+                        f'<span class="hint-chip">{h}</span>' for h in _hints)
+                    st.markdown(
+                        f'<div class="hint-row">이렇게 나눠서 찾았습니다 {chips}</div>',
+                        unsafe_allow_html=True)
 
-            fc1, fc2 = st.columns([1, 1])
-            with fc1:
-                only_has = st.checkbox(f"'{r['keyword']}' 포함한 것만",
-                                       value=True, key="rel_all_filter")
-            with fc2:
-                min_vol = st.select_slider(
-                    "최소 검색량", options=[0, 100, 500, 1000, 5000],
-                    value=0, key="rel_all_min")
+                fc1, fc2 = st.columns([1, 1])
+                with fc1:
+                    only_has = st.checkbox(f"'{r['keyword']}' 포함한 것만",
+                                           value=True, key="rel_all_filter")
+                with fc2:
+                    min_vol = st.select_slider(
+                        "최소 검색량", options=[0, 100, 500, 1000, 5000],
+                        value=0, key="rel_all_min")
 
-            rows_all = [{
-                "키워드": i["keyword"],
-                # 자동완성으로 온 것은 검색량을 아직 모른다.
-                # 0으로 표시하면 '아무도 안 찾는다'로 오해하므로 구분한다.
-                "월 검색량": (i["monthly_pc"] + i["monthly_mobile"]
-                            if i.get("source") != "자동완성" else None),
-                "경쟁": i.get("comp_level") or "-",
-                "출처": i.get("source", "검색광고"),
-            } for i in all_rel
-                if (i.get("contains", True) or not only_has)
-                and (i.get("source") == "자동완성"
-                     or (i["monthly_pc"] + i["monthly_mobile"]) >= min_vol)]
+                rows_all = [{
+                    "키워드": i["keyword"],
+                    # 자동완성으로 온 것은 검색량을 아직 모른다.
+                    # 0으로 표시하면 '아무도 안 찾는다'로 오해하므로 구분한다.
+                    "월 검색량": (i["monthly_pc"] + i["monthly_mobile"]
+                                if i.get("source") != "자동완성" else None),
+                    "경쟁": i.get("comp_level") or "-",
+                    "출처": i.get("source", "검색광고"),
+                } for i in all_rel
+                    if (i.get("contains", True) or not only_has)
+                    and (i.get("source") == "자동완성"
+                         or (i["monthly_pc"] + i["monthly_mobile"]) >= min_vol)]
 
-            if not rows_all:
-                ui.note("조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요.")
-            else:
-                adf = pd.DataFrame(rows_all).sort_values(
-                    "월 검색량", ascending=False,
-                    na_position="last").reset_index(drop=True)
-                # None이 그대로 보이지 않게 빈칸으로 바꾼다
-                adf["월 검색량"] = adf["월 검색량"].map(
-                    lambda v: f"{int(v):,}" if pd.notna(v) else "—")
-                adf.index = adf.index + 1
-                show_table(adf, height=440)
-                st.caption(f"{len(rows_all)}개 표시 · 전체 {len(all_rel)}개")
+                if not rows_all:
+                    ui.note("조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요.")
+                else:
+                    adf = pd.DataFrame(rows_all).sort_values(
+                        "월 검색량", ascending=False,
+                        na_position="last").reset_index(drop=True)
+                    # None이 그대로 보이지 않게 빈칸으로 바꾼다
+                    adf["월 검색량"] = adf["월 검색량"].map(
+                        lambda v: f"{int(v):,}" if pd.notna(v) else "—")
+                    adf.index = adf.index + 1
+                    show_table(adf, height=440)
+                    st.caption(f"{len(rows_all)}개 표시 · 전체 {len(all_rel)}개")
+
 
 # ------------------------------------------------------------
 # 2. 상위노출 해부

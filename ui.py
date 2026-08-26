@@ -1364,6 +1364,17 @@ background: {SURFACE} !important; color: #374151 !important; font-weight: 600 !i
 .st-key-research_go button, .st-key-map_go button {{
 background: {DEEP} !important; border-color: {DEEP} !important; color: #fff !important;
 }}
+.st-key-research_go button:hover, .st-key-map_go button:hover {{
+background: #1447B5 !important; border-color: #1447B5 !important; color: #fff !important;
+}}
+/* 입력칸 테두리·포커스 링에 남아 있던 금색을 파랑으로 */
+.st-key-kw_main input, .st-key-blog_input_tab input,
+.st-key-blog_input_main input {{ border-width: 1px !important; border-color: #D9DDE3 !important; }}
+.st-key-research_kw input:focus, .st-key-kw_main input:focus,
+.st-key-blog_input_tab input:focus, .st-key-blog_input_main input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 3px rgba(26,86,219,.12) !important;
+}}
 .eyebrow {{ color: {MUTED}; letter-spacing: .08em; }}
 .section-title {{ font-size: 1.12rem; }}
 .gauge-num {{ color: {DEEP}; }}

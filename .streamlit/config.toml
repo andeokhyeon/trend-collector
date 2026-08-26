@@ -1,8 +1,11 @@
 [theme]
-primaryColor = "#C8963E"
-backgroundColor = "#FAFAF7"
+# ⚠️ primaryColor는 Streamlit이 직접 그리는 것들의 색이다.
+# (탭 아래 표시선, 체크박스, 슬라이더 손잡이 …)
+# 여기가 금색이라 CSS로 아무리 지워도 선택된 탭 밑에 금색 줄이 남았다.
+primaryColor = "#1A56DB"
+backgroundColor = "#F6F7F9"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#14161A"
+textColor = "#111827"
 font = "sans serif"
 
 [browser]
