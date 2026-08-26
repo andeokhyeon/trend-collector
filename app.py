@@ -670,7 +670,7 @@ with sub_research[0]:
                     "어느 키워드가 노려볼 만한 구역에 있는지 색으로 구분해 보여줍니다.")
 
         st.divider()
-        ui.section("사냥 지도", "연관 키워드가 어느 구역에 있는지 한눈에")
+        ui.section("사냥 순위", "노려볼 만한 연관 키워드 10개")
 
         rel = r.get("related", [])
         if not rel:
@@ -687,22 +687,27 @@ with sub_research[0]:
             pool_rel = [i for i in rel
                         if (i["monthly_pc"] + i["monthly_mobile"]) > 0
                         and (i.get("contains", True) or not only_contains)]
+            # 검색량이 큰 것부터 지도에 올린다.
+            # 상위 몇 개만 재는 구조라 아무거나 고르면 의미가 없다.
+            pool_rel = sorted(pool_rel,
+                              key=lambda x: -(x["monthly_pc"] + x["monthly_mobile"]))
             avail = [i["keyword"] for i in pool_rel]
             if not avail:
                 ui.note("이 키워드를 포함한 연관어가 없습니다. "
                         "위 체크를 끄면 같은 업종의 다른 키워드까지 볼 수 있습니다.")
-            # 사냥 지도는 버튼을 눌렀을 때만 그린다.
+            # 버튼을 눌렀을 때만 잰다.
             # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
             with st.container(border=True):
                 mc1, mc2 = st.columns([2, 1])
                 with mc1:
-                    pick_n = st.radio("연관 키워드 수", [5, 10],
-                                      index=0, horizontal=True, key="map_count",
-                                      help="많을수록 지도가 자세해지고 시간이 조금 더 걸립니다.")
+                    pick_n = st.radio("몇 개를 잴까요", [5, 10, 15],
+                                      index=1, horizontal=True, key="map_count",
+                                      help="많이 잴수록 시간이 더 걸립니다. "
+                                           "상위 10개만 순위에 표시됩니다.")
                 with mc2:
                     st.markdown('<div class="search-btn-pad"></div>',
                                 unsafe_allow_html=True)
-                    draw_map = st.button("🏹 사냥 지도 보기",
+                    draw_map = st.button("🏹 순위 매기기",
                                          use_container_width=True, key="map_go")
 
             if draw_map:
@@ -715,28 +720,41 @@ with sub_research[0]:
             show_map = st.session_state.get("map_kw") == r["keyword"]
             targets = avail[:pick_n] if show_map else []
 
+            # 이미 아는 검색량을 함께 넘긴다.
+            # 다시 물으면 호출만 낭비되고, 힌트로 쪼개지면서
+            # 엉뚱한 값이 돌아와 '측정 실패'로 처리되는 일이 생긴다.
+            known = {i["keyword"]: {
+                "monthly_pc": i["monthly_pc"],
+                "monthly_mobile": i["monthly_mobile"],
+                "comp_level": i.get("comp_level", "-"),
+                "pl_avg_depth": 0,
+            } for i in pool_rel}
+
             @st.cache_data(ttl=1800, show_spinner=False)
-            def measure_batch(keywords):
+            def measure_batch(keywords, stats):
                 """
                 연관 키워드를 한꺼번에 측정한다.
 
-                ⚠️ API 호출을 최소로 줄였다.
-                  · 키워드당 2회 (검색량 1 + 블로그 1)
-                  · 각 키워드의 '연관어의 연관어'는 조회하지 않는다
-                  · 동시 3개까지만 — 더 늘리면 네이버가 요청을 거절해서
-                    오히려 전부 실패하고 결과가 비어버린다
-                실패한 건수는 감추지 않고 화면에 알린다.
+                검색량은 이미 알고 있으므로 문서수만 새로 조회한다.
+                목록은 1건만 받아서 응답을 가볍게 하고, 동시에 4개씩 처리한다.
+                (더 늘리면 네이버가 거절해서 오히려 전부 실패한다)
                 """
+                smap = dict(stats)
                 out, failed = {}, []
-                with ThreadPoolExecutor(max_workers=3) as pool:
+                with ThreadPoolExecutor(max_workers=4) as pool:
                     futures = {
-                        pool.submit(analyze_keyword, k, True, False, False): k
+                        # light=True — 문서수만 필요하니 목록은 1건만 받는다.
+                        # 100건씩 받아오는 것보다 응답이 훨씬 가볍다.
+                        pool.submit(analyze_keyword, k, True, False, False,
+                                    smap.get(k), True): k
                         for k in keywords
                     }
                     for fut in as_completed(futures):
                         k = futures[fut]
                         try:
                             res = fut.result()
+                            # 문서수를 못 가져와도 지도에는 찍을 수 있다.
+                            # 검색량만 있으면 가로축은 그려진다.
                             if res and res.get("total_search", 0) > 0:
                                 out[k] = res
                             else:
@@ -747,18 +765,21 @@ with sub_research[0]:
 
             subs, failed = [], []
             if targets:
+                _stats = tuple(sorted(
+                    (k, tuple(sorted(known[k].items())))
+                    for k in targets if k in known))
                 try:
                     with st.status(f"연관 키워드 {len(targets)}개 측정 중...",
                                    expanded=True) as status:
-                        st.markdown('<div class="prog-label">검색량과 문서수를 함께 '
-                                    '조회하고 있습니다. 잠시만 기다려주세요.</div>',
+                        st.markdown('<div class="prog-label">문서수를 조회하고 '
+                                    '있습니다. 잠시만 기다려주세요.</div>',
                                     unsafe_allow_html=True)
-                        subs, failed = measure_batch(tuple(targets))
+                        subs, failed = measure_batch(tuple(targets), _stats)
                         status.update(label=f"측정 완료 · {len(subs)}개",
                                       state="complete", expanded=False)
                 except AttributeError:
                     with st.spinner(f"연관 키워드 {len(targets)}개 측정 중..."):
-                        subs, failed = measure_batch(tuple(targets))
+                        subs, failed = measure_batch(tuple(targets), _stats)
 
             if failed:
                 ui.note(f"{len(failed)}개는 조회하지 못했습니다. "
@@ -780,52 +801,38 @@ with sub_research[0]:
                 })
 
             if not rows:
-                ui.note("지도를 그릴 만한 연관 키워드를 찾지 못했습니다. "
-                        "더 일반적인 키워드로 시도해보세요.")
+                if not targets:
+                    ui.note("<b>순위 매기기</b>를 누르면 연관 키워드의 문서수를 재서 "
+                            "노려볼 만한 순서대로 세웁니다.")
+                elif failed:
+                    ui.note(f"측정에 실패했습니다({len(failed)}개). "
+                            "네이버 호출이 몰리면 거절될 수 있습니다. "
+                            "잠시 후 다시 눌러보세요.")
+                else:
+                    ui.note("순위를 매길 만한 연관 키워드를 찾지 못했습니다. "
+                            "더 일반적인 키워드로 시도해보세요.")
             else:
-                rel_df = pd.DataFrame(rows).sort_values("기회 점수", ascending=False).reset_index(drop=True)
+                rel_df = pd.DataFrame(rows).sort_values(
+                    "기회 점수", ascending=False).reset_index(drop=True)
                 rel_df.index = rel_df.index + 1
 
-                ui.note("가로는 검색량, 세로는 이미 쓰인 글의 수입니다. "
-                        "<b style='color:#C8963E'>금색</b>은 당장 사냥 구역(경쟁률 0.1 미만), "
-                        "<b style='color:#2E7D6B'>초록</b>은 추천 구역, "
-                        "<b style='color:#C4553D'>붉은색</b>은 비추천 구역입니다. "
-                        "<b>진한 남색 큰 점</b>이 지금 분석 중인 키워드이고, "
-                        "아래에서 키워드를 고르면 <b style='color:#C8963E'>금색 테두리</b>로 "
-                        "지도에서 찾아줍니다.")
+                ui.note("기회 점수가 높은 순입니다. "
+                        "<b>찾는 사람은 있는데 쓰인 글이 적을수록</b> 위로 옵니다. "
+                        "1~3위는 특히 노려볼 만한 자리입니다.")
 
-                # 4번: 모바일에서는 점에 마우스를 올릴 수 없어 툴팁이 소용없다.
-                # 목록에서 고르면 지도에서 강조되도록 한다.
-                with st.container(border=True):
-                    kw_options = ["(선택 안 함)"] + rel_df["키워드"].tolist()
-                    picked = st.selectbox("🔦 지도에서 찾을 키워드", kw_options,
-                                          key="map_focus",
-                                          help="고르면 지도에 금색 테두리로 표시됩니다.")
-                focus_kw = None if picked == "(선택 안 함)" else picked
-
-                pts = [{"keyword": row["키워드"],
-                        "search": int(row["월 검색량"]),
-                        "docs": int(row["누적 문서수"])}
-                       for _, row in rel_df.iterrows()]
-                ui.hunting_map(
-                    pts,
+                ui.hunt_rank(
+                    [{"keyword": row["키워드"],
+                      "search": int(row["월 검색량"]),
+                      "docs": int(row["누적 문서수"]),
+                      "score": int(row["기회 점수"]),
+                      "label": row["진단"]}
+                     for _, row in rel_df.iterrows()],
                     main={"keyword": r["keyword"], "search": r["total_search"],
-                          "docs": r.get("doc_count") or 0},
-                    focus=focus_kw)
+                          "docs": r.get("doc_count")},
+                    limit=10)
 
-                if focus_kw:
-                    row = rel_df[rel_df["키워드"] == focus_kw].iloc[0]
-                    f1, f2, f3 = st.columns(3)
-                    with f1:
-                        ui.kpi("월 검색량", compact_num(int(row["월 검색량"])), focus_kw)
-                    with f2:
-                        ui.kpi("이미 쓰인 글", compact_num(int(row["누적 문서수"])), "")
-                    with f3:
-                        ui.kpi("기회 점수", f"{int(row['기회 점수'])}", row["진단"])
-
-                st.write("")
-                ui.section("측정한 키워드", "사냥 지도에 찍힌 것들 · 기회 점수 높은 순")
-                show_table(rel_df)
+                with st.expander("표로 보기"):
+                    show_table(rel_df)
 
         # --- 연관 키워드 전체 ---
         # 네이버가 주는 걸 다 보여준다. 사냥 지도는 문서수까지 재느라

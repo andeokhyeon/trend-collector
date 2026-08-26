@@ -810,7 +810,52 @@ background: #F1F6F8; color: {DEEP}; border: 1px solid #D6E2E8;
 padding: 2px 9px; border-radius: 999px;
 font-size: .78rem; font-weight: 700;
 }}
-/* 상단 정보 줄 */
+/* 사냥 순위 — 가로 막대 */
+.hb-main {{
+display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+padding-bottom: 11px; margin-bottom: 10px;
+border-bottom: 1.5px solid {LINE};
+}}
+.hb-main-label {{
+font-size: .68rem; font-weight: 800; letter-spacing: .09em;
+color: {MUTED}; text-transform: uppercase;
+}}
+.hb-main b {{ font-size: 1.02rem; color: {INK}; }}
+.hb-main-sub {{
+font-size: .78rem; color: {MUTED};
+font-family: 'IBM Plex Mono', monospace;
+}}
+.hb-row {{
+display: grid;
+grid-template-columns: 130px 1fr 150px;
+align-items: center; gap: 11px;
+padding: 7px 0;
+}}
+.hb-kw {{
+font-size: .92rem; font-weight: 700; color: {INK};
+text-align: right;
+overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+.hb-track {{
+height: 26px; background: #F4F4EF; border-radius: 7px;
+overflow: hidden;
+}}
+.hb-fill {{
+height: 100%; border-radius: 7px;
+display: flex; align-items: center; justify-content: flex-end;
+padding-right: 9px; min-width: 34px;
+transition: width .25s ease;
+}}
+.hb-score {{
+color: #fff; font-size: .82rem; font-weight: 700;
+font-family: 'IBM Plex Mono', monospace;
+}}
+.hb-sub {{
+font-size: .76rem; color: {MUTED};
+font-family: 'IBM Plex Mono', monospace;
+overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+/* 상단 정보 줄 *//* 상단 정보 줄 */
 .topbar {{
 display: flex; flex-wrap: wrap; gap: 7px;
 margin: -8px 0 14px;
@@ -1037,6 +1082,16 @@ padding-top: 8px !important; padding-bottom: 8px !important;
 position: sticky; left: 0; z-index: 2;
 background: {SURFACE}; box-shadow: 1px 0 0 {LINE};
 }}
+/* 사냥 순위 — 좁은 화면에서는 이름을 막대 위로 올린다 */
+.hb-row {{
+grid-template-columns: 1fr !important;
+gap: 3px !important; padding: 8px 0 !important;
+border-bottom: 1px solid #F2F2ED;
+}}
+.hb-kw {{ text-align: left !important; font-size: .88rem; }}
+.hb-track {{ height: 22px; }}
+.hb-sub {{ font-size: .72rem; }}
+.hb-main-sub {{ font-size: .74rem; }}
 /* 진단·추적 카드는 1열 */
 .diag-grid {{ grid-template-columns: 1fr !important; }}
 .diag-cell {{ min-height: 0; padding: 11px 13px; }}
@@ -1958,3 +2013,62 @@ def since_compare(data, since_label=""):
         + added_txt
         + f'<div class="sc-note">{_esc(data["note"])}</div>'
         f'</div>', unsafe_allow_html=True)
+
+
+def hunt_rank(items, main=None, limit=10):
+    """
+    🏹 사냥 순위 — 노려볼 만한 순서대로 가로 막대로 세운다.
+
+    ⚠️ 왜 산점도에서 바꿨나
+    좌표에 점을 흩뿌리면 '어디가 좋은지'를 눈으로 읽어내야 한다.
+    모바일에서는 점이 뭉쳐서 더 어렵다.
+    막대는 길이만 비교하면 되니 판단이 즉시 된다.
+
+    items: [{"keyword","search","docs","score","label"}]
+    """
+    if not items:
+        return
+
+    rows = sorted(items, key=lambda x: -x.get("score", 0))[:limit]
+    top = max((r.get("score", 0) for r in rows), default=1) or 1
+
+    parts = []
+    for it in rows:
+        score = it.get("score", 0)
+        label = it.get("label", "")
+        # 진단 색을 기본으로 쓰되, 없으면 점수대로 색을 정한다.
+        # 막대만 보고도 좋고 나쁨이 바로 읽혀야 한다.
+        color = GRADE_COLORS.get(label)
+        if not color:
+            color = (GOOD if score >= 70 else
+                     (GOLD if score >= 55 else
+                      (WARN if score >= 40 else BAD)))
+        width = max(6, int(score / top * 100))
+
+        search = it.get("search") or 0
+        docs = it.get("docs")
+        docs_txt = f"{docs:,}" if docs is not None else "—"
+        tip = f"{it['keyword']} · {label} · 검색 {search:,} · 글 {docs_txt}"
+
+        parts.append(
+            f'<div class="hb-row" title="{_esc(tip)}">'
+            f'<span class="hb-kw">{_esc(it["keyword"])}</span>'
+            f'<div class="hb-track">'
+            f'<div class="hb-fill" style="width:{width}%;background:{color}">'
+            f'<span class="hb-score">{score}</span></div>'
+            f'</div>'
+            f'<span class="hb-sub">검색 {search:,} · 글 {docs_txt}</span>'
+            f'</div>')
+
+    head = ""
+    if main:
+        ms = main.get("search") or 0
+        md = main.get("docs")
+        sub = f"검색 {ms:,}" + (f" · 글 {md:,}" if md is not None else "")
+        head = (f'<div class="hb-main">'
+                f'<span class="hb-main-label">기준</span>'
+                f'<b>{_esc(main["keyword"])}</b>'
+                f'<span class="hb-main-sub">{sub}</span></div>')
+
+    st.markdown(f'<div class="chart-box">{head}{"".join(parts)}</div>',
+                unsafe_allow_html=True)

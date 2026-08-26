@@ -564,18 +564,22 @@ def get_keyword_data(keyword, related_limit=200):
         return _cache_put(ck, empty)
 
 
-def get_blog_stats(keyword, days=30, exact=True):
+def get_blog_stats(keyword, days=30, exact=True, light=False):
     """
     블로그 검색 한 번으로 '누적 문서수'와 '최근 N일 새 글 수'를 함께 얻는다.
     최신순 첫 페이지 응답에 total이 들어 있어서 따로 부를 이유가 없다.
     exact=True일 때만 100건을 넘는 구간을 이분탐색으로 정확히 센다.
     """
-    ck = ("blogstats", keyword.strip(), days, exact)
+    ck = ("blogstats", keyword.strip(), days, exact, light)
     cached = _cache_get(ck)
     if cached is not None:
         return cached
 
-    first = _fetch_serp_page(keyword, start=1, display=100, sort="date")
+    # light=True면 문서수만 필요하므로 목록을 1건만 받는다.
+    # 100건을 받아오는 것보다 응답이 훨씬 가벼워 체감 속도가 붙는다.
+    # (순위 매기기처럼 여러 키워드를 한꺼번에 잴 때 쓴다)
+    first = _fetch_serp_page(keyword, start=1,
+                             display=1 if light else 100, sort="date")
     # 문서수를 재는 김에 풀에도 남긴다.
     # (문서수는 키워드마다 따로 불러야 해서 미리 못 쌓지만,
     #  한 번 잰 것은 재사용할 수 있다)
@@ -585,6 +589,9 @@ def get_blog_stats(keyword, days=30, exact=True):
     total_docs = int(first.get("total", 0) or 0)
     if _shared is not None:
         _shared.pool_put_docs(keyword, total_docs)
+    if light:
+        return _cache_put(ck, {"total_docs": total_docs,
+                               "recent": None, "capped": False})
     items = first.get("items", [])
     now = datetime.now(timezone.utc)
 
@@ -627,7 +634,7 @@ def get_blog_stats(keyword, days=30, exact=True):
 
 
 def analyze_keyword(keyword, with_recent=True, exact_recent=True,
-                    with_related=True):
+                    with_related=True, known_stat=None, light=False):
     """
     단일 키워드 종합 분석.
 
@@ -642,15 +649,23 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
     # ⚠️ 네이버 키워드도구는 한 번 호출에 연관어를 수백 개까지 돌려준다.
     # 예전에는 그중 20개만 쓰고 나머지를 버려서, 경쟁 서비스가 200개를
     # 보여주는 것에 비해 초라해 보였다. 이제 받은 만큼 다 쓴다.
-    data = get_keyword_data(keyword, related_limit=200 if with_related else 1)
-    stat = data["stat"]
+    # 이미 검색량을 아는 경우(연관 키워드 목록에서 넘어온 경우) 재조회하지 않는다.
+    # 다시 물으면 호출만 낭비될 뿐 아니라, 힌트로 쪼개지면서
+    # 응답 첫 항목이 원래 키워드가 아니게 되어 0이 나올 수 있다.
+    if known_stat is not None:
+        data = {"stat": known_stat, "related": [], "hints": []}
+        stat = known_stat
+    else:
+        data = get_keyword_data(keyword,
+                                related_limit=200 if with_related else 1)
+        stat = data["stat"]
     total_search = stat["monthly_pc"] + stat["monthly_mobile"]
 
     doc_count = None
     recent, recent_ratio, recent_grade, recent_capped = None, None, "정보없음", False
 
     if with_recent:
-        blog = get_blog_stats(keyword, exact=exact_recent)
+        blog = get_blog_stats(keyword, exact=exact_recent, light=light)
         doc_count = blog["total_docs"]
         recent = blog["recent"]
         recent_capped = blog["capped"]
