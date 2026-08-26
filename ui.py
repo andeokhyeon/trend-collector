@@ -1403,6 +1403,36 @@ font-size: .78rem; color: #9AA1AB; white-space: nowrap;
 }}
 [role="tablist"] {{ padding-left: 152px !important; height: 54px !important; align-items: center !important; }}
 [role="tabpanel"] [role="tablist"] {{ padding-left: 0 !important; height: auto !important; }}
+/* ---- 추적 카드: 쓴 키워드 / 지켜보는 키워드를 파스텔로 구분 ---- */
+.track-card {{
+border: 1.5px solid #E3E6EB; border-radius: 14px;
+box-shadow: none; min-height: 208px;
+}}
+.track-card:hover {{ border-color: #C3CBD6; }}
+/* 내가 쓴 키워드 — 연한 파랑 */
+.track-card.mine {{
+border: 1.5px solid #C3D7F7;
+background: #F2F7FF;
+box-shadow: none;
+}}
+.track-card.mine:hover {{ border-color: #9CBEF0; }}
+/* 지켜보는 키워드 — 연한 살구 */
+.track-card.watching {{
+border: 1.5px solid #EFE1C6; border-style: solid;
+background: #FFFAF2;
+}}
+.track-card.watching:hover {{ border-color: #E3CB9C; }}
+.tc-tag {{
+background: #DCE8FB; color: #1A4FB0;
+font-weight: 700; padding: 3px 10px;
+}}
+.tc-tag.watch {{
+background: #F7EBD6; color: #91661A;
+border: 0; font-weight: 700;
+}}
+.tc-kw {{ border-bottom-color: #E7E9ED; }}
+/* 표 안에서 가운데로 세울 칸 */
+.kh-t .kh-center, .kh-t th.kh-center {{ text-align: center; }}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -2108,12 +2138,12 @@ def tracked_cards(items, key_prefix="tc"):
     """
     추적 중인 키워드를 박스로 늘어놓아 한눈에 들어오게 한다.
     순위만 보면 실속을 알 수 없어서, 검색량 추세와 예상 방문자를 함께 보여준다.
-    반환: (중단 요청 키워드, 자세히 보기 요청 키워드) — 없으면 각각 None
+    반환: (중단, 자세히, 변경) 요청 키워드 — 없으면 각각 None
     """
     if not items:
-        return None, None
+        return None, None, None
 
-    stopped, detail = None, None
+    stopped, detail, flipped = None, None, None
     cols_per_row = 5
 
     # ⚠️ st.columns(len(chunk))로 만들면 마지막 줄의 칸 수가 달라져서
@@ -2127,7 +2157,7 @@ def tracked_cards(items, key_prefix="tc"):
                     continue          # 빈 칸은 아무것도 그리지 않는다
                 it = chunk[idx]
                 _one_track_card(it)
-                b1, b2 = st.columns(2)
+                b1, b2, b3 = st.columns(3)
                 with b1:
                     if st.button("자세히", key=f"{key_prefix}_view_{it['keyword']}",
                                  use_container_width=True):
@@ -2136,7 +2166,16 @@ def tracked_cards(items, key_prefix="tc"):
                     if st.button("중단", key=f"{key_prefix}_stop_{it['keyword']}",
                                  use_container_width=True):
                         stopped = it["keyword"]
-    return stopped, detail
+                with b3:
+                    # 글을 쓴 뒤 '내가 쓴 키워드'로, 반대로도 되돌린다.
+                    if st.button(
+                            "변경", key=f"{key_prefix}_flip_{it['keyword']}",
+                            use_container_width=True,
+                            help=("지켜보는 중으로 되돌립니다"
+                                  if it.get("has_post")
+                                  else "내가 쓴 키워드로 바꿉니다")):
+                        flipped = it["keyword"]
+    return stopped, detail, flipped
 
 
 def _one_track_card(it):

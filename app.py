@@ -347,7 +347,7 @@ def _cell_text(v):
     return str(v)
 
 
-def table_html(frame, height=None):
+def table_html(frame, height=None, center_cols=()):
     """
     표를 HTML로 직접 그린다.
 
@@ -370,6 +370,8 @@ def table_html(frame, height=None):
     def cls(i, name):
         if i == 0:
             return "kh-key"
+        if name in center_cols:
+            return "kh-num kh-center"
         return "kh-num" if name in NUM_COLS else ""
 
     head = "".join(
@@ -404,13 +406,14 @@ def table_html(frame, height=None):
             f'<div class="kh-hint">← 표를 옆으로 밀면 나머지 항목이 보입니다</div>')
 
 
-def show_table(frame, height=None):
+def show_table(frame, height=None, center_cols=()):
     """
     모든 표를 같은 규칙으로 그린다.
     HTML 표가 어떤 이유로든 실패하면 기본 표로 물러난다.
     """
     try:
-        st.markdown(table_html(frame, height), unsafe_allow_html=True)
+        st.markdown(table_html(frame, height, center_cols),
+                    unsafe_allow_html=True)
         return
     except Exception:
         pass
@@ -1217,7 +1220,7 @@ with sub_research[2]:
                     {"세부 주제": x["keyword"], "월 검색량": x["volume"]}
                     for x in an["subtopics"]])
                 sub_df.index = sub_df.index + 1
-                show_table(sub_df)
+                show_table(sub_df, center_cols=("월 검색량",))
 
             if outline:
                 st.write("")
@@ -1361,45 +1364,36 @@ with tabs[1]:
                 "opp_note": opp.get("note", ""),
             })
 
+        # ⚠️ 예전에는 '내가 쓴'과 '지켜보는'을 위아래로 갈라 두 묶음으로 그렸다.
+        # 그런데 개수가 적을 땐 화면만 두 번 끊길 뿐이고, 어차피 카드 색과
+        # 딱지로 구분이 된다. 한 줄로 이어 붙이되 쓴 것을 앞으로 보낸다.
         mine_list = [x for x in summary if x.get("has_post")]
         watch_list = [x for x in summary if not x.get("has_post")]
+        ordered = mine_list + watch_list
 
-        stopped = detail_kw = None
+        stopped = detail_kw = flipped = None
 
-        if mine_list:
-            ui.section("내가 쓴 키워드", f"{len(mine_list)}개 · 순위가 오르는지 봅니다")
-            s1, d1 = ui.tracked_cards(mine_list, key_prefix="mine")
-            stopped = stopped or s1
-            detail_kw = detail_kw or d1
-            st.write("")
+        if ordered:
+            ui.section(
+                "추적 중인 키워드",
+                f"{len(ordered)}개 · 내가 쓴 것 {len(mine_list)}개를 앞에 둡니다")
+            ui.note("글을 발행했다면 카드 밑 <b>변경</b>을 눌러 "
+                    "<b>내가 쓴 키워드</b>로 바꿔주세요. 그때부터 순위를 추적합니다.")
+            stopped, detail_kw, flipped = ui.tracked_cards(ordered,
+                                                           key_prefix="trk")
 
-        if watch_list:
-            ui.section("지켜보는 키워드",
-                       f"{len(watch_list)}개 · 아직 글은 없고 검색량 변화만 봅니다")
-            ui.note("글을 쓴 뒤에는 아래에서 <b>내가 쓴 키워드로 전환</b>해주세요. "
-                    "그때부터 순위를 추적합니다.")
-            s2, d2 = ui.tracked_cards(watch_list, key_prefix="watch")
-            stopped = stopped or s2
-            detail_kw = detail_kw or d2
+        if flipped:
+            tgt = next((t for t in tracked if t["keyword"] == flipped), None)
+            if tgt:
+                try:
+                    supabase.table("tracked_keywords") \
+                        .update({"has_post": not bool(tgt.get("has_post"))}) \
+                        .eq("id", tgt["id"]).execute()
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"전환 실패: {e}")
 
-            with st.expander("글을 쓴 키워드로 전환하기"):
-                to_flip = st.multiselect("글을 발행한 키워드를 고르세요",
-                                         [x["keyword"] for x in watch_list],
-                                         key="flip_kws")
-                if st.button("선택한 키워드를 '내가 쓴 키워드'로 전환") and to_flip:
-                    try:
-                        for kwn in to_flip:
-                            tgt = next((t for t in tracked if t["keyword"] == kwn), None)
-                            if tgt:
-                                supabase.table("tracked_keywords") \
-                                    .update({"has_post": True}) \
-                                    .eq("id", tgt["id"]).execute()
-                        st.cache_data.clear()
-                        st.success(f"{len(to_flip)}개를 전환했습니다. 다음 수집부터 "
-                                   "순위가 기록됩니다.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"전환 실패: {e}")
         if detail_kw:
             st.session_state["track_detail"] = detail_kw
         if stopped:
