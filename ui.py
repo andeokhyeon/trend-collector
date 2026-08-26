@@ -1453,18 +1453,35 @@ font-size: .92rem; font-weight: 700; color: {INK};
 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }}
 .outline-w {{ font-size: .78rem; color: {MUTED}; line-height: 1.55; margin: 0; }}
-/* ---- 추적 카드: 높이를 못 박고, 아래 딱지 줄은 접히지 않게 ---- */
-.track-card {{ height: 224px; min-height: 224px; overflow: hidden; }}
+/* ---- 추적 카드 ----
+   ⚠️ 높이를 못 박았더니 flex가 안쪽 줄을 눌러 짜서
+   키워드 글자가 위아래로 잘렸다. 높이는 최소값만 주고,
+   대신 두 종류의 카드가 같은 줄 수를 갖도록 내용을 맞춘다. */
+.track-card {{ min-height: 232px; height: auto; overflow: visible; }}
+.track-card > * {{ flex: 0 0 auto; }}
 .tc-meta {{ flex-wrap: nowrap !important; gap: 6px; }}
 .tc-pill {{ flex: 0 1 auto; min-width: 0; }}
 .tc-rec {{ flex: none; white-space: nowrap; }}
-.track-card + div .stButton button {{
-white-space: nowrap !important; font-size: .8rem !important;
-padding: 7px 4px !important;
+/* ⚠️ '.track-card + div' 로는 Streamlit 버튼이 안 잡힌다.
+   (카드와 버튼이 서로 다른 컨테이너에 들어간다)
+   버튼 글자는 어디서든 줄바꿈될 이유가 없으니 전부에 건다. */
+.stButton button, .stButton button p, .stButton button div {{
+white-space: nowrap !important; word-break: keep-all !important;
+}}
+.track-card ~ div .stButton button {{
+font-size: .82rem !important; padding: 7px 4px !important;
 }}
 @media (max-width: 1100px) {{
-.track-card {{ height: 208px; min-height: 208px; }}
+.track-card {{ min-height: 214px; height: auto; }}
 }}
+/* ---- 등록 당시와 비교: 오른쪽 % 칸을 없애고 아래 두 줄로 말한다 ---- */
+.sc-to {{ flex: 0 0 auto; min-width: 92px; }}
+.sc-delta {{
+font-family: 'Pretendard', sans-serif;
+font-size: .88rem; color: {MUTED};
+padding-top: 9px; line-height: 1.6;
+}}
+.sc-delta b {{ font-weight: 700; }}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -2285,8 +2302,10 @@ def _one_track_card(it):
             sub = '<div class="tc-sub tc-flat">방문자 거의 없음</div>'
         else:
             sub = '<div class="tc-sub tc-flat">내 글 상위노출 없음</div>' 
+        # 지켜보는 카드와 줄 수를 맞춘다 (카드 높이가 들쭉날쭉해지지 않게)
         body = (main_html + sub
-                + f'<div class="tc-sub">{trend_html}</div>' + docs_html)
+                + f'<div class="tc-sub">{trend_html}</div>'
+                + docs_html + since_html)
     else:
         # --- 지켜보는 키워드: 검색량 추세가 주인공 ---------
         search = it.get("search")
@@ -2366,27 +2385,40 @@ def since_compare(data, since_label=""):
         return
     color = SINCE_COLORS.get(data["verdict"], MUTED)
 
-    def row(label, a, b, pct, invert=False):
-        """invert=True면 늘어나는 게 나쁜 항목(글 수)."""
-        if pct is None:
-            arrow, c = "—", MUTED
-        elif pct >= 10:
-            arrow, c = f"▲ {pct:+.0f}%", (BAD if invert else GOOD)
-        elif pct <= -10:
-            arrow, c = f"▼ {pct:+.0f}%", (GOOD if invert else BAD)
-        else:
-            arrow, c = f"{pct:+.0f}%", MUTED
+    def row(label, a, b):
+        """숫자만 나란히. 얼마나 변했는지는 아래 두 줄에서 따로 말한다."""
         return (f'<div class="sc-row">'
                 f'<span class="sc-label">{_esc(label)}</span>'
                 f'<span class="sc-from">{a:,}</span>'
                 f'<span class="sc-arrow">→</span>'
                 f'<span class="sc-to">{b:,}</span>'
-                f'<span class="sc-pct" style="color:{c}">{arrow}</span>'
                 f'</div>')
 
-    added = data.get("docs_added")
-    added_txt = (f'<div class="sc-foot">등록 이후 글이 <b>{added:,}편</b> 늘었습니다.</div>'
-                 if added and added > 0 else "")
+    def delta(label, a, b, pct, unit, invert=False):
+        """
+        '추적 후 찾는 사람 100명 증가 / +3%' 한 줄.
+        invert=True면 늘어나는 게 나쁜 항목(글 수)이라 색을 뒤집는다.
+        """
+        if a is None or b is None:
+            return ""
+        diff = b - a
+        if diff > 0:
+            word, c = "증가", (BAD if invert else GOOD)
+        elif diff < 0:
+            word, c = "감소", (GOOD if invert else BAD)
+        else:
+            word, c = "변화 없음", MUTED
+        amt = f"{abs(diff):,}{unit} {word}" if diff else word
+        pct_txt = f" / {pct:+.0f}%" if pct is not None else ""
+        return (f'<div class="sc-delta">추적 후 {_esc(label)} '
+                f'<b style="color:{c}">{amt}</b>'
+                f'<span style="color:{c}">{pct_txt}</span></div>')
+
+    added_txt = (
+        delta("찾는 사람", data.get("search_from"), data.get("search_to"),
+              data.get("search_pct"), "명")
+        + delta("쓰인 글", data.get("docs_from"), data.get("docs_to"),
+                data.get("docs_pct"), "편", invert=True))
 
     st.markdown(
         f'<div class="chart-box">'
@@ -2394,8 +2426,8 @@ def since_compare(data, since_label=""):
         f'<span class="sc-verdict" style="background:{color}">'
         f'{_esc(data["verdict"])}</span></div>'
         f'<div class="sc-since">{_esc(since_label)}</div>'
-        + row("찾는 사람", data["search_from"], data["search_to"], data["search_pct"])
-        + row("쓰인 글", data["docs_from"], data["docs_to"], data["docs_pct"], invert=True)
+        + row("찾는 사람", data["search_from"], data["search_to"])
+        + row("쓰인 글", data["docs_from"], data["docs_to"])
         + added_txt
         + f'<div class="sc-note">{_esc(data["note"])}</div>'
         f'</div>', unsafe_allow_html=True)
