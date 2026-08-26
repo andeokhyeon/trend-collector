@@ -1482,6 +1482,13 @@ font-size: .88rem; color: {MUTED};
 padding-top: 9px; line-height: 1.6;
 }}
 .sc-delta b {{ font-weight: 700; }}
+/* ---- 상단 로고 ---- */
+.mast-brand {{ text-decoration: none !important; top: 10px; }}
+.mast-brand:hover {{ opacity: .82; }}
+.mast-logo {{ height: 34px; width: auto; display: block; }}
+/* 글씨도 로고와 같은 색으로 맞춰 한 덩어리로 보이게 */
+.mast-name {{ color: #0057A7 !important; }}
+.mast-name b {{ color: #F96F00 !important; }}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -1494,6 +1501,7 @@ padding: 2px 0 8px; margin-bottom: 2px;
 .mast-brand, .mast-meta {{ position: static; }}
 .mast-brand {{ flex: none; }}
 .mast-name {{ font-size: 1rem; }}
+.mast-logo {{ height: 26px; }}
 /* 좁은 화면에서 상태 글이 로고를 밀지 않게, 남는 만큼만 쓰고 잘라낸다 */
 .mast-meta {{
 font-size: .72rem; flex: 1; min-width: 0; margin-left: 12px;
@@ -1574,6 +1582,41 @@ def topbar(blog_id="", freshness="", version=""):
                 unsafe_allow_html=True)
 
 
+@st.cache_data(show_spinner=False)
+def _logo_uri():
+    """
+    상단바 로고. 파일을 base64로 박아 넣는다.
+
+    ⚠️ st.markdown 안의 <img>는 로컬 경로(logo.png)를 못 읽는다.
+    브라우저가 그 주소로 다시 요청하는데 Streamlit이 파일을 내주지 않는다.
+    그래서 파일을 통째로 문자열에 담아 보낸다. (한 번 읽고 캐시)
+    """
+    import base64
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+    try:
+        with open(path, "rb") as f:
+            return "data:image/png;base64," + base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
+
+
+def _home_href():
+    """
+    로고를 누르면 첫 화면(키워드 조사 → 키워드 분석)으로 돌아간다.
+
+    ⚠️ Streamlit은 탭을 코드로 바꿀 수가 없다. 대신 페이지를 다시 열면
+    항상 첫 번째 탭과 첫 번째 하위 탭이 열린 상태로 시작한다.
+    주소의 열쇠말(관리 탭)은 잃지 않도록 그대로 붙여준다.
+    """
+    try:
+        qp = dict(st.query_params)
+    except Exception:
+        qp = {}
+    bits = [f"{k}={v}" for k, v in qp.items() if isinstance(v, str)]
+    return ("?" + "&".join(bits)) if bits else "./"
+
+
 def masthead(title, subtitle="", meta=""):
     """
     화면 맨 위 한 줄 — 왼쪽에 이름, 오른쪽에 상태.
@@ -1589,8 +1632,11 @@ def masthead(title, subtitle="", meta=""):
     parts = str(title).split()
     name = (f'{parts[0]}<b>{"".join(parts[1:])}</b>'
             if len(parts) > 1 else str(title))
+    uri = _logo_uri()
+    mark = (f'<img class="mast-logo" src="{uri}" alt="">' if uri
+            else hunter_icon(24))
     st.markdown(f"""<div class="masthead">
-<div class="mast-brand">{hunter_icon(24)}<span class="mast-name">{name}</span></div>
+<a class="mast-brand" href="{_home_href()}" target="_self">{mark}<span class="mast-name">{name}</span></a>
 <div class="mast-meta">{meta}</div>
 </div>""", unsafe_allow_html=True)
 
