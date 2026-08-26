@@ -1569,8 +1569,10 @@ else:
 
     with sub_discover[1]:
         ui.section("골든타임", "뜨고 있는데 아직 안 붐비는 선점 구간")
-        ui.note("검색이 늘고 있으면서 경쟁 문서는 적은 키워드입니다. "
-                "먼저 쓰면 선점 효과를 기대할 수 있습니다.", gold=True)
+        ui.note("찾는 사람은 있는데 <b>최근에 쓰인 글이 적은</b> 키워드입니다. "
+                "먼저 쓰면 선점 효과를 기대할 수 있습니다.<br>"
+                "<small>검색량이 오르는 중이면 위로 올라옵니다. 다만 네이버 검색량은 "
+                "월 단위 집계라 며칠로는 잘 안 변합니다.</small>", gold=True)
         st.write("")
         _, h = period_picker("gt_period", kind="slow", default="일별")
         golden = latest_snapshot(df[df['source'] == 'golden_time'], hours=h)

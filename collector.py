@@ -298,8 +298,15 @@ def fetch_golden_time_keywords():
     for kw, stat in pool.items():
         total = stat["monthly_pc"] + stat["monthly_mobile"]
 
+        # ⚠️ 예전에는 '검색량이 늘어야만' 통과시켰다.
+        # 그런데 네이버가 주는 검색량은 한 달 단위 집계라
+        # 하루 이틀로는 값이 거의 안 변한다. 그래서 대부분 0이 나오고
+        # 전부 탈락해서 골든타임이 늘 비어 있었다.
+        #
+        # 이제 상승은 '순위를 매기는 재료'로만 쓰고, 탈락 조건에서 뺀다.
+        # 대신 '새 글이 적은가'와 '기회 점수'로 거른다.
         rise = get_rise_score(kw, stat, cutoff)
-        if rise <= 0:
+        if rise < 0:
             no_rise += 1
             continue
 
@@ -336,13 +343,17 @@ def fetch_golden_time_keywords():
             crowded += 1
         time.sleep(0.1)
 
-    print(f"   (골든타임 진단: 풀 {len(pool)}개 중 상승없음 {no_rise} / "
+    print(f"   (골든타임 진단: 풀 {len(pool)}개 중 검색량하락 {no_rise} / "
           f"API실패 {api_fail} / 조건미달 {crowded} / 통과 {len(results)}건)")
 
+    # 상승폭이 있으면 그걸 먼저, 없으면 기회 점수로 줄 세운다
+    def _rank(x):
+        return (x["rise_score"] > 0, x["rise_score"], x["opportunity"])
+
     trend_rows = sorted([r for r in results if r["keyword_category"] == "트렌드"],
-                        key=lambda x: x["opportunity"], reverse=True)[:30]
+                        key=_rank, reverse=True)[:30]
     detail_rows = sorted([r for r in results if r["keyword_category"] == "세부"],
-                         key=lambda x: x["opportunity"], reverse=True)[:30]
+                         key=_rank, reverse=True)[:30]
     return trend_rows + detail_rows
 
 
