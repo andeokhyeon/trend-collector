@@ -1174,6 +1174,74 @@ div[role="radiogroup"] {{ padding: 5px 9px; flex-wrap: wrap; gap: 2px; }}
 .kpi-val {{ font-size: 1.32rem; }}
 .serp-age {{ display: none; }}
 }}
+/* ============================================================
+   표 — 키워드 열은 붙박이, 나머지는 옆으로 민다
+   ⚠️ 모바일에서 열이 많은 표는 어떻게 줄여도 안 들어간다.
+   글씨를 줄이는 대신, 첫 열(키워드)만 고정하고
+   나머지를 가로로 밀어 보게 한다. 무엇의 숫자인지 항상 보인다.
+   ============================================================ */
+.kh-tw {{
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+border: 1px solid {LINE};
+border-radius: 4px;
+background: {SURFACE};
+}}
+.kh-t {{
+border-collapse: separate; border-spacing: 0;
+width: 100%; font-size: .9rem; color: {INK};
+}}
+.kh-t th {{
+font-size: .74rem; color: {MUTED}; font-weight: 600;
+text-align: left; padding: 10px 13px;
+background: #F7F7F4; border-bottom: 1px solid {LINE};
+white-space: nowrap; letter-spacing: .02em;
+}}
+.kh-t td {{
+padding: 11px 13px; border-bottom: 1px solid #F1F1EC;
+white-space: nowrap;
+}}
+.kh-t tbody tr:last-child td {{ border-bottom: 0; }}
+.kh-t .kh-num {{
+font-family: 'IBM Plex Mono', monospace;
+font-variant-numeric: tabular-nums;
+text-align: right; color: #4B5563;
+}}
+.kh-t th.kh-num {{ text-align: right; }}
+/* 붙박이 열 — 배경이 투명하면 뒤 칸이 비쳐 보인다 */
+.kh-t .kh-key {{
+position: sticky; left: 0; z-index: 2;
+background: {SURFACE};
+border-right: 1px solid {LINE};
+font-weight: 600;
+/* ⚠️ 키워드는 절대 줄바꿈하지 않는다.
+   두 줄로 접히면 행 높이가 제각각이 되어 표가 울퉁불퉁해진다.
+   width:1% + nowrap = 내용 길이에 딱 맞게 줄어드는 칸. */
+white-space: nowrap;
+width: 1%;
+}}
+.kh-t th.kh-key {{ z-index: 3; background: #F7F7F4; }}
+.kh-t tbody tr:nth-child(even) td {{ background: #FCFCFA; }}
+.kh-t tbody tr:nth-child(even) td.kh-key {{ background: #FCFCFA; }}
+.kh-rk {{
+color: #B6BAC0; font-family: 'IBM Plex Mono', monospace;
+font-size: .74rem; margin-right: 8px;
+}}
+.kh-chip {{
+font-size: .76rem; font-weight: 600;
+padding: 3px 8px; border-radius: 4px; display: inline-block;
+}}
+.kh-hint {{
+display: none; font-size: .74rem; color: {MUTED};
+text-align: right; margin: 6px 2px 14px;
+}}
+@media (max-width: 700px) {{
+.kh-hint {{ display: block; }}
+.kh-t {{ font-size: .84rem; }}
+.kh-t td {{ padding: 10px 11px; }}
+.kh-t th {{ padding: 9px 11px; }}
+.kh-t .kh-key {{ padding-right: 14px; }}
+}}
 </style>""", unsafe_allow_html=True)
 
 

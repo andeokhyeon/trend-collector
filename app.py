@@ -1,4 +1,5 @@
 import streamlit as st
+from html import escape
 import pandas as pd
 from supabase import create_client
 from datetime import datetime, timedelta, timezone
@@ -318,11 +319,100 @@ def style_table(frame):
     return sty
 
 
+# 숫자로 다뤄야 하는 컬럼 (오른쪽 정렬 + 등폭 + 천 단위 쉼표)
+NUM_COLS = {
+    '월 검색량', '검색량', '문서수', '누적 문서수', '최근 30일', '최근 30일 글',
+    '기회 점수', '내 승산', '광고 경쟁도', '경쟁률', '순위', '조회수',
+}
+
+
+# 열이 많을 때 키워드 바로 옆으로 당길 '판단' 계열 (왼쪽부터 이 순서로)
+PRIORITY_COLS = ('진단', '판단', '기회 점수', '내 승산', '경쟁률', '검색량', '경쟁')
+
+
+def _cell_text(v):
+    """표에 넣을 문자열. 숫자는 천 단위로 끊고, 빈 값은 —로."""
+    if v is None:
+        return "—"
+    try:
+        if pd.isna(v):
+            return "—"
+    except (TypeError, ValueError):
+        pass
+    if isinstance(v, bool):
+        return "예" if v else "아니오"
+    if isinstance(v, (int, float)):
+        # 12.0 처럼 소수점만 붙은 값은 정수로 보여준다
+        return f"{int(v):,}" if float(v).is_integer() else f"{v:,.1f}"
+    return str(v)
+
+
+def table_html(frame):
+    """
+    표를 HTML로 직접 그린다.
+
+    ⚠️ st.dataframe은 첫 열을 고정할 수 없다.
+    그래서 모바일에서 옆으로 밀면 '무엇의 숫자인지'가 화면 밖으로 사라진다.
+    첫 열(키워드/이벤트/제목)을 붙박이로 두고 나머지만 밀리게 한다.
+    """
+    cols = list(frame.columns)
+    if not cols:
+        return ""
+
+    # ⚠️ 열이 많으면 모바일에서 오른쪽이 잘린다.
+    # 그때 먼저 보여야 하는 건 원자료(검색량·문서수)가 아니라 '판단'이다.
+    # 등급/점수 계열을 키워드 바로 옆으로 당긴다.
+    if len(cols) > 4:
+        first, rest = cols[0], cols[1:]
+        head_up = [c for c in PRIORITY_COLS if c in rest]
+        cols = [first] + head_up + [c for c in rest if c not in head_up]
+
+    def cls(i, name):
+        if i == 0:
+            return "kh-key"
+        return "kh-num" if name in NUM_COLS else ""
+
+    head = "".join(
+        f'<th class="{cls(i, c)}">{escape(str(c))}</th>'
+        for i, c in enumerate(cols))
+
+    rows = []
+    for n, (idx, row) in enumerate(frame.iterrows(), 1):
+        rank = idx if isinstance(idx, (int,)) and not isinstance(idx, bool) else n
+        cells = []
+        for i, c in enumerate(cols):
+            txt = escape(_cell_text(row[c]))
+            if i == 0:
+                cells.append(f'<td class="kh-key">'
+                             f'<span class="kh-rk">{rank}</span>{txt}</td>')
+                continue
+            # 등급/진단 계열은 의미별 색 칩으로
+            tint = GRADE_TINT.get(str(row[c])) if c in TINT_COLS else None
+            if tint:
+                bg, fg = tint
+                cells.append(f'<td><span class="kh-chip" '
+                             f'style="background:{bg};color:{fg}">{txt}</span></td>')
+            else:
+                cells.append(f'<td class="{cls(i, c)}">{txt}</td>')
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+
+    return (f'<div class="kh-tw"><table class="kh-t">'
+            f'<thead><tr>{head}</tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>'
+            f'<div class="kh-hint">← 표를 옆으로 밀면 나머지 항목이 보입니다</div>')
+
+
 def show_table(frame, height=None):
     """
     모든 표를 같은 규칙으로 그린다.
-    스타일이나 컬럼 설정이 버전 문제로 실패해도 표는 반드시 보이게 물러난다.
+    HTML 표가 어떤 이유로든 실패하면 기본 표로 물러난다.
     """
+    try:
+        st.markdown(table_html(frame), unsafe_allow_html=True)
+        return
+    except Exception:
+        pass
+
     kwargs = {"use_container_width": True}
     if height is not None:
         kwargs["height"] = height
@@ -331,11 +421,6 @@ def show_table(frame, height=None):
         kwargs["column_config"] = cfg
     try:
         st.dataframe(style_table(frame), **kwargs)
-        return
-    except Exception:
-        pass
-    try:
-        st.dataframe(frame, **kwargs)
         return
     except Exception:
         pass
@@ -759,7 +844,12 @@ with sub_research[0]:
                 그래서 모르는 것들은 get_volumes로 5개씩 묶어 먼저 채운 뒤
                 측정에 넘긴다. (get_volumes는 쪼개지 않는다)
                 """
-                smap = dict(stats)
+                # ⚠️ st.cache_data에 넘기려고 dict를 튜플로 바꿔서 들어온다.
+                # (('점심메뉴', (('comp_level','높음'), ('monthly_pc',1200), ...)), ...)
+                # 여기서 안쪽까지 dict로 되돌리지 않으면 analyze_keyword가
+                # stat["monthly_pc"]에서 TypeError를 내고 전부 '측정 실패'가 된다.
+                smap = {k: (dict(v) if not isinstance(v, dict) else v)
+                        for k, v in stats}
 
                 # ① 검색량을 모르는 것부터 채운다 (5개씩, 호출 1회로 5개)
                 unknown = [k for k in keywords if k not in smap]
@@ -837,11 +927,6 @@ with sub_research[0]:
                     f"- 포함필터: {only_contains}"
                 )
 
-            if failed:
-                ui.note(f"{len(failed)}개는 조회하지 못했습니다. "
-                        "네이버 API 호출이 몰리면 일부가 거절될 수 있습니다. "
-                        "잠시 후 다시 시도하거나 측정 개수를 줄여보세요.")
-
             rows = []
             for sub in subs:
                 rd = sub.get('recent_docs')
@@ -860,10 +945,6 @@ with sub_research[0]:
                 if not targets:
                     ui.note("<b>순위 매기기</b>를 누르면 연관 키워드의 문서수를 재서 "
                             "노려볼 만한 순서대로 세웁니다.")
-                elif failed:
-                    ui.note(f"측정에 실패했습니다({len(failed)}개). "
-                            "네이버 호출이 몰리면 거절될 수 있습니다. "
-                            "잠시 후 다시 눌러보세요.")
                 else:
                     ui.note("순위를 매길 만한 연관 키워드를 찾지 못했습니다. "
                             "더 일반적인 키워드로 시도해보세요.")
