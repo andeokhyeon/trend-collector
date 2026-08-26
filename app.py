@@ -1601,6 +1601,9 @@ else:
 
     with sub_discover[2]:
         ui.section("주간 캘린더", "미리 써두면 유리한 앞으로 4주")
+        ui.note("검색량이 큰 행사가 위에 옵니다. "
+                "<b>0으로 나오는 건</b> 아직 사람들이 안 찾거나, "
+                "공식 명칭이 너무 길어 검색어로 안 쓰이는 경우입니다.")
         weekly = latest_snapshot(df[df['source'] == 'weekly_event'])
         if weekly.empty:
             ui.note("예정된 이벤트가 없거나 아직 수집되지 않았습니다.")
@@ -1628,6 +1631,8 @@ else:
                     unsafe_allow_html=True)
                 ev = weekly[weekly['wk'] == off].copy()
                 ev['요일'] = ev['d'].apply(lambda x: wd[x.weekday()])
+                # 검색량이 있는 것을 위로 (0인 건 글감으로 쓸모가 적다)
+                ev = ev.sort_values(['총 검색량', 'd'], ascending=[False, True])
                 out = ev[['d', '요일', 'keyword', 'comp_level', '총 검색량']].copy()
                 out.columns = ['날짜', '요일', '이벤트', '종류', '월 검색량']
                 out.index = range(1, len(out) + 1)

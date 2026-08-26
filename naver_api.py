@@ -329,6 +329,93 @@ def _build_hints(keyword, max_hints=5):
     return hints
 
 
+def event_search_forms(title, limit=4):
+    """
+    행사명을 '사람들이 실제로 검색하는 형태'로 줄인다.
+
+    ⚠️ 왜 필요한가
+    공공데이터에 등록된 행사명은 공식 명칭이라 길고 장식이 많다.
+      '국토정중앙 청춘양구 배꼽축제'
+      '달성가족문화축제 YES! 키즈존'
+    사람들은 이렇게 안 친다. '양구 배꼽축제', '배꼽축제'로 친다.
+    긴 공식 명칭을 그대로 조회하면 검색량이 0으로 나온다.
+
+    반환: 짧은 것부터 시도할 후보 목록
+    """
+    raw = (title or "").strip()
+    if not raw:
+        return []
+
+    # 괄호와 장식 기호 제거
+    t = re.sub(r"[\[\(<{].*?[\]\)>}]", " ", raw)
+    t = re.sub(r"[!?~·ㆍ「」『』\"\']", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+
+    # '제12회', '2026' 같은 회차·연도 제거
+    t = re.sub(r"제?\s*\d+\s*회", " ", t)
+    t = re.sub(r"\b20\d{2}\b", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+
+    if not t:
+        return [raw]
+
+    words = t.split()
+    forms, seen = [], set()
+
+    def add(x):
+        x = x.strip()
+        if x and len(x) >= 2 and x not in seen and len(forms) < limit:
+            seen.add(x)
+            forms.append(x)
+
+    # ① 행사 성격이 담긴 낱말을 찾는다.
+    #    마지막 낱말이 항상 핵심은 아니다.
+    #    ('달성가족문화축제 YES! 키즈존' → 핵심은 '키즈존'이 아니라 '축제')
+    EVENT_WORDS = ("축제", "야행", "페스티벌", "박람회", "영화제", "음악제",
+                   "전시", "마켓", "행사", "대회", "잔치", "한마당")
+    core_idx = None
+    for i, w in enumerate(words):
+        if any(e in w for e in EVENT_WORDS):
+            core_idx = i          # 마지막으로 나온 것을 쓴다
+    if core_idx is None:
+        core_idx = len(words) - 1
+
+    core = words[core_idx]
+    add(core)
+
+    # ② 지역명 + 핵심 낱말  ('양구 배꼽축제')
+    if core_idx > 0:
+        add(f"{words[core_idx - 1]} {core}")
+    if core_idx > 1:
+        add(f"{words[0]} {core}")
+
+    # ③ 공백 없이 붙인 전체 (네이버는 붙여쓴 형태를 더 잘 안다)
+    add(t.replace(" ", ""))
+
+    # ④ 원문
+    add(t)
+    return forms
+
+
+def get_event_volume(title):
+    """
+    행사명으로 검색량을 찾는다.
+    짧은 형태부터 시도해서 처음으로 잡히는 값을 쓴다.
+    반환: (검색량, 실제로 쓴 검색어)
+    """
+    forms = event_search_forms(title)
+    if not forms:
+        return 0, title
+
+    vols = get_volumes(forms)          # 한 번에 조회 (호출 1회)
+    best, best_form = 0, forms[0]
+    for f in forms:
+        v = vols.get(f.replace(" ", "").upper(), 0)
+        if v > best:
+            best, best_form = v, f
+    return best, best_form
+
+
 def get_volumes(keywords):
     """
     여러 키워드의 검색량을 한 번에 조회한다 (최대 5개씩).

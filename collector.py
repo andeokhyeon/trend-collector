@@ -97,7 +97,8 @@ except ImportError:
 # (블로그 총 문서수 ÷ 월간 검색량 = 블랙키위의 콘텐츠 포화도에 해당하는 핵심 지표)
 from naver_api import (get_blog_doc_count, calc_competition, analyze_keyword,
                        check_my_rank, _to_int, get_recent_doc_count,
-                       calc_opportunity, get_related_keywords)
+                       calc_opportunity, get_related_keywords,
+                       get_event_volume)
 
 
 def track_saved_keywords():
@@ -683,12 +684,21 @@ def fetch_weekly_event_keywords():
 
     # 3) TODO: 법령 시행일 (법제처 Open API, open.law.go.kr, 무료 OC 발급 필요)
 
-    # 검색량 조회해서 실제로 사람들이 찾는지도 같이 확인 (선택 정보)
+    # 검색량 조회.
+    # ⚠️ 공공데이터의 행사명은 공식 명칭이라 길고 장식이 많다.
+    #    '국토정중앙 청춘양구 배꼽축제'를 그대로 조회하면 0이 나온다.
+    #    사람들이 실제로 치는 형태('배꼽축제', '양구 배꼽축제')로 줄여서 찾는다.
     for r in results:
-        stat = get_naver_stat(r["keyword"])
-        r["monthly_pc"] = stat["monthly_pc"]
-        r["monthly_mobile"] = stat["monthly_mobile"]
-        time.sleep(0.1)
+        try:
+            vol, used = get_event_volume(r["keyword"])
+        except Exception:
+            vol, used = 0, r["keyword"]
+        # 모바일 비중이 큰 편이라 7:3으로 나눠 담는다 (표시용)
+        r["monthly_mobile"] = int(vol * 0.7)
+        r["monthly_pc"] = vol - int(vol * 0.7)
+        if used != r["keyword"]:
+            r["search_form"] = used     # 실제로 검색된 형태
+        time.sleep(0.12)
 
     return results
 
