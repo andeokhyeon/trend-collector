@@ -498,75 +498,20 @@ SEASONAL_CALENDAR = {
 
 my_blog_id = st.session_state.get("blog_id", "")
 
-ui.masthead(
-    "키워드 헌터",
-    "검색량만 보면 경쟁을 알 수 없습니다. 이미 쓰인 글까지 재서 "
-    "지금 이길 수 있는 키워드를 찾습니다."
-)
-
-# --- 상단 정보 줄 (사이드바에 있던 것들) ---
+# --- 맨 윗줄: 이름 + 상태 (탭이 이 줄에 얹힌다) ---
 _fresh = ""
 if not df.empty:
     _last = df['created_at_dt'].max()
     _mins = int((datetime.now(timezone.utc) - _last).total_seconds() // 60)
     _fresh = f"{_mins}분 전" if _mins < 120 else f"{_mins // 60}시간 전"
 
-try:
-    import naver_api as _na
-    _ver = _na.MODULE_VERSION
-except Exception:
-    _ver = ""
+_meta = []
+if st.session_state.get("blog_id"):
+    _meta.append(f"내 블로그 · {st.session_state['blog_id']}")
+if _fresh:
+    _meta.append(f"마지막 수집 {_fresh}")
 
-ui.topbar(st.session_state.get("blog_id", ""), _fresh, _ver)
-
-# --- 검색창 (항상 최상단) ---
-# 어느 탭에 있든 바로 검색할 수 있게 탭 위에 둔다.
-# 도구의 핵심 동작이 화면에 들어오자마자 보여야 한다.
-with st.container(border=True):
-    kc1, kc2 = st.columns([5, 1])
-    with kc1:
-        kw_input = st.text_input(
-            "조사할 키워드",
-            placeholder="분석할 키워드를 입력하세요",
-            key="research_kw",
-            label_visibility="collapsed")
-    with kc2:
-        searched = st.button("🔍 분석", use_container_width=True,
-                             key="research_go", type="primary")
-
-if searched and kw_input.strip():
-    st.session_state["active_kw"] = kw_input.strip()
-elif kw_input.strip():
-    st.session_state["active_kw"] = kw_input.strip()
-elif not kw_input:
-    st.session_state.pop("active_kw", None)
-
-research_kw = st.session_state.get("active_kw", "")
-
-# --- 내 블로그 등록 ---
-# 한 번 등록하면 다시 열 일이 없어서 접어둔다.
-_registered = bool(st.session_state.get("blog_id"))
-with st.expander(
-        f"🏠 내 블로그  ·  {st.session_state['blog_id']}" if _registered
-        else "🏠 내 블로그 주소 입력하기",
-        expanded=False):
-    bc1, bc2 = st.columns([4, 1])
-    with bc1:
-        blog_input = st.text_input(
-            "블로그 주소",
-            value=st.session_state.get("blog_id", ""),
-            placeholder="blog.naver.com/myid   또는   myid",
-            key="blog_input_main",
-            label_visibility="collapsed")
-    with bc2:
-        if st.button("등록", use_container_width=True, key="blog_save_main"):
-            if blog_input.strip():
-                st.session_state["blog_id"] = extract_blog_id(blog_input)
-            else:
-                st.session_state.pop("blog_id", None)
-            st.rerun()
-    if not _registered:
-        st.caption("등록하면 키워드마다 '내 블로그로 뚫을 수 있는지'까지 계산합니다.")
+ui.masthead("키워드 헌터", meta="　·　".join(_meta))
 
 # 관리 탭은 주소 뒤에 열쇠말을 붙였을 때만 나타난다.
 #
@@ -615,19 +560,70 @@ if "debug" in _get_query_params():
         f"- 모듈 버전: `{__import__('naver_api').MODULE_VERSION}`"
     )
 
-_tab_names = ["🔎 키워드 조사", "📈 추적기", "🏠 내 블로그", "📡 키워드 발굴"]
+_tab_names = ["키워드 조사", "추적기", "내 블로그", "키워드 발굴"]
 # 한 번 들어오면 조작하는 동안 유지된다 (주소가 지워져도 탭이 사라지지 않게)
 if _admin_requested():
     st.session_state["admin_visible"] = True
 _has_admin = bool(st.session_state.get("admin_visible"))
 if _has_admin:
-    _tab_names.append("🔧 관리")
+    _tab_names.append("관리")
 
 _all_tabs = st.tabs(_tab_names)
 tabs = _all_tabs[:4]
 admin_tab = _all_tabs[4] if _has_admin else None
 
 with tabs[0]:
+    # --- 검색창 ---
+    # ⚠️ 예전에는 탭 바깥(맨 위)에 뒀다. 그런데 Streamlit은 탭 내용이
+    # 탭 막대 바로 아래에 붙어서, 검색창을 위에 두면 로고 줄과 탭 줄
+    # 사이에 끼어 한 줄짜리 상단바를 만들 수 없다.
+    # 검색어를 쓰는 곳이 '키워드 조사' 탭뿐이라 이 안으로 옮겼다.
+    with st.container(border=True):
+        kc1, kc2 = st.columns([5, 1])
+        with kc1:
+            kw_input = st.text_input(
+                "조사할 키워드",
+                placeholder="분석할 키워드를 입력하세요",
+                key="research_kw",
+                label_visibility="collapsed")
+        with kc2:
+            searched = st.button("🔍 분석", use_container_width=True,
+                                 key="research_go", type="primary")
+
+    if searched and kw_input.strip():
+        st.session_state["active_kw"] = kw_input.strip()
+    elif kw_input.strip():
+        st.session_state["active_kw"] = kw_input.strip()
+    elif not kw_input:
+        st.session_state.pop("active_kw", None)
+
+    research_kw = st.session_state.get("active_kw", "")
+
+    # --- 내 블로그 등록 ---
+    # 한 번 등록하면 다시 열 일이 없어서 접어둔다.
+    _registered = bool(st.session_state.get("blog_id"))
+    with st.expander(
+            f"🏠 내 블로그  ·  {st.session_state['blog_id']}" if _registered
+            else "🏠 내 블로그 주소 입력하기",
+            expanded=False):
+        bc1, bc2 = st.columns([4, 1])
+        with bc1:
+            blog_input = st.text_input(
+                "블로그 주소",
+                value=st.session_state.get("blog_id", ""),
+                placeholder="blog.naver.com/myid   또는   myid",
+                key="blog_input_main",
+                label_visibility="collapsed")
+        with bc2:
+            if st.button("등록", use_container_width=True, key="blog_save_main"):
+                if blog_input.strip():
+                    st.session_state["blog_id"] = extract_blog_id(blog_input)
+                else:
+                    st.session_state.pop("blog_id", None)
+                st.rerun()
+        if not _registered:
+            st.caption("등록하면 키워드마다 '내 블로그로 뚫을 수 있는지'까지 계산합니다.")
+
     sub_research = st.tabs(["키워드 분석", "상위노출 해부", "글감 만들기"])
 with tabs[3]:
     sub_discover = st.tabs(["구글 트렌드", "골든타임", "주간 캘린더", "뉴스"])

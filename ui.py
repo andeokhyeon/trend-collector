@@ -1361,12 +1361,48 @@ background: {DEEP} !important; border-color: {DEEP} !important; color: #fff !imp
 .section-title {{ font-size: 1.12rem; }}
 .gauge-num {{ color: {DEEP}; }}
 
+/* ---- 로고 + 탭을 한 줄로 ----
+   높이 0짜리 칸에 로고와 상태를 띄워두고,
+   바로 아래 오는 탭 막대에 왼쪽 여백을 줘서 같은 줄처럼 보이게 한다. */
+.masthead {{
+height: 0; overflow: visible; position: relative; z-index: 4;
+background: transparent; border: 0; border-radius: 0;
+padding: 0; margin: 0;
+}}
+.mast-brand {{
+position: absolute; left: 2px; top: 13px;
+display: flex; align-items: center; gap: 8px;
+}}
+.mast-brand svg {{ flex: none; }}
+.mast-name {{
+font-size: 1.06rem; font-weight: 800; color: {INK};
+letter-spacing: -.03em; white-space: nowrap;
+}}
+.mast-name b {{ color: {DEEP}; font-weight: 800; }}
+.mast-meta {{
+position: absolute; right: 2px; top: 19px;
+font-size: .78rem; color: #9AA1AB; white-space: nowrap;
+}}
+[role="tablist"] {{ padding-left: 152px !important; height: 54px !important; align-items: center !important; }}
+[role="tabpanel"] [role="tablist"] {{ padding-left: 0 !important; height: auto !important; }}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
-.masthead {{ padding: 12px 14px; border-radius: 10px; }}
-.masthead h1 {{ font-size: 1.04rem; }}
-.masthead p {{ font-size: .81rem; }}
+/* 좁은 화면에서는 로고 줄과 탭 줄을 위아래로 나눈다 */
+.masthead {{
+height: auto; position: static; display: flex;
+align-items: center; justify-content: space-between;
+padding: 2px 0 8px; margin-bottom: 2px;
+}}
+.mast-brand, .mast-meta {{ position: static; }}
+.mast-brand {{ flex: none; }}
+.mast-name {{ font-size: 1rem; }}
+/* 좁은 화면에서 상태 글이 로고를 밀지 않게, 남는 만큼만 쓰고 잘라낸다 */
+.mast-meta {{
+font-size: .72rem; flex: 1; min-width: 0; margin-left: 12px;
+text-align: right; overflow: hidden; text-overflow: ellipsis;
+}}
+[role="tablist"] {{ padding-left: 0 !important; height: auto !important; }}
 [role="tablist"] {{ margin-bottom: 13px !important; }}
 [role="tab"] {{ padding: 9px 12px !important; min-height: 38px !important; }}
 [role="tab"] *, [role="tab"] p {{ font-size: .87rem !important; }}
@@ -1441,10 +1477,24 @@ def topbar(blog_id="", freshness="", version=""):
                 unsafe_allow_html=True)
 
 
-def masthead(title, subtitle):
+def masthead(title, subtitle="", meta=""):
+    """
+    화면 맨 위 한 줄 — 왼쪽에 이름, 오른쪽에 상태.
+
+    ⚠️ 탭을 이 줄의 가운데에 올려야 하는데, Streamlit은 탭 막대 안에
+    다른 것을 끼워 넣을 수가 없다. 그래서 이 칸의 높이를 0으로 만들고
+    안의 것들을 띄워서, 바로 아래 오는 탭 막대와 같은 줄에 겹쳐 보이게 한다.
+    (CSS의 .masthead / .mast-brand / .mast-meta 참고)
+
+    subtitle은 더 이상 쓰지 않는다. 한 줄 막대에 설명까지 넣으면
+    줄이 두꺼워져서 탭을 같은 줄에 올릴 수 없다.
+    """
+    parts = str(title).split()
+    name = (f'{parts[0]}<b>{"".join(parts[1:])}</b>'
+            if len(parts) > 1 else str(title))
     st.markdown(f"""<div class="masthead">
-<div class="mast-head-row">{hunter_icon(44)}<div><div class="rule"></div><h1>{title}</h1></div></div>
-<p>{subtitle}</p>
+<div class="mast-brand">{hunter_icon(24)}<span class="mast-name">{name}</span></div>
+<div class="mast-meta">{meta}</div>
 </div>""", unsafe_allow_html=True)
 
 
