@@ -179,7 +179,11 @@ def track_saved_keywords():
             "my_rank": rank,
             "total_search": a.get("total_search", 0),
             "blog_total_docs": a.get("doc_count") or 0,
-            "recent_docs": a.get("recent_docs") or 0,
+            # 1000건에서 잘린 경우 그대로 저장하면 나중에 계산이 헐거워진다.
+            # 실제로는 그보다 많다는 뜻이므로 여유를 얹어 남긴다.
+            "recent_docs": (int((a.get("recent_docs") or 0) * 1.5)
+                            if a.get("recent_capped")
+                            else (a.get("recent_docs") or 0)),
             "comp_ratio": a.get("comp_ratio") or 0,
             "opportunity": opp,
         })

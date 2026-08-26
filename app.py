@@ -456,7 +456,7 @@ research_kw = st.session_state.get("active_kw", "")
 _registered = bool(st.session_state.get("blog_id"))
 with st.expander(
         f"🏠 내 블로그  ·  {st.session_state['blog_id']}" if _registered
-        else "🏠 내 블로그를 등록하면 '내가 뚫을 수 있는지'까지 계산합니다",
+        else "🏠 내 블로그 주소 입력하기",
         expanded=False):
     bc1, bc2 = st.columns([4, 1])
     with bc1:
@@ -473,6 +473,8 @@ with st.expander(
             else:
                 st.session_state.pop("blog_id", None)
             st.rerun()
+    if not _registered:
+        st.caption("등록하면 키워드마다 '내 블로그로 뚫을 수 있는지'까지 계산합니다.")
 
 # 관리 탭은 주소 뒤에 열쇠말을 붙였을 때만 나타난다.
 #
@@ -578,9 +580,18 @@ with sub_research[0]:
                    f"{r['doc_count']:,}편" if r['doc_count'] is not None else "조회 실패")
         with c3:
             if recent_docs is not None:
-                val = (f"{recent_docs:,}+" if r.get('recent_capped')
-                       else f"{recent_docs:,}")
-                ui.kpi("최근 30일 새 글", val, f"요즘 분위기 · {recent_grade}")
+                # 1000건이 한계라 그 이상은 발행 속도로 추정한다.
+                # 추정도 어려우면 정직하게 '1000+'로 둔다.
+                if r.get('recent_estimated'):
+                    val = f"약 {compact_num(recent_docs)}"
+                    sub = f"발행 속도로 추정 · {recent_grade}"
+                elif r.get('recent_capped'):
+                    val = f"{recent_docs:,}+"
+                    sub = f"너무 많아 정확히 못 셈 · {recent_grade}"
+                else:
+                    val = f"{recent_docs:,}"
+                    sub = f"요즘 분위기 · {recent_grade}"
+                ui.kpi("최근 30일 새 글", val, sub)
             else:
                 ui.kpi("최근 30일 새 글", "—", "조회 실패")
         with c4:
@@ -643,9 +654,12 @@ with sub_research[0]:
                 return ai_brief.brief_keyword(k, payload["a"], payload.get("serp"),
                                               payload.get("power"), payload.get("rank"))
 
+            # recent_capped를 빠뜨리면 AI가 '1000+'를 '정확히 1000건'으로 읽는다
             payload = {"a": {kk: r.get(kk) for kk in
                              ("total_search", "monthly_pc", "monthly_mobile",
-                              "doc_count", "recent_docs", "comp_ratio", "comp_grade",
+                              "doc_count", "recent_docs", "recent_capped",
+                              "recent_estimated",
+                              "comp_ratio", "comp_grade",
                               "recent_grade", "opportunity", "pl_avg_depth")}}
             if my_blog_id and power:
                 payload["power"] = {"posts_per_week": power.get("posts_per_week"),
@@ -684,17 +698,30 @@ with sub_research[0]:
             only_contains = st.checkbox(
                 "이 키워드를 포함한 것만 보기", value=True, key="rel_filter",
                 help="끄면 네이버가 같은 업종으로 묶은 다른 키워드까지 함께 봅니다.")
+            # ⚠️ 검색량 0인 것을 빼면 안 된다.
+            # 자동완성으로 온 키워드는 검색량을 아직 모를 뿐(0)이지
+            # 사람들이 안 찾는다는 뜻이 아니다.
+            # '국민은행'처럼 광고 데이터가 없는 키워드는 연관어가 전부
+            # 자동완성이라, 이 조건 하나로 후보가 통째로 사라졌다.
             pool_rel = [i for i in rel
-                        if (i["monthly_pc"] + i["monthly_mobile"]) > 0
-                        and (i.get("contains", True) or not only_contains)]
-            # 검색량이 큰 것부터 지도에 올린다.
-            # 상위 몇 개만 재는 구조라 아무거나 고르면 의미가 없다.
-            pool_rel = sorted(pool_rel,
-                              key=lambda x: -(x["monthly_pc"] + x["monthly_mobile"]))
+                        if i.get("contains", True) or not only_contains]
+
+            # 검색량을 아는 것을 먼저, 그 안에서 큰 순으로.
+            # 모르는 것(자동완성)은 뒤에 붙여 남는 자리를 채운다.
+            pool_rel = sorted(
+                pool_rel,
+                key=lambda x: (-(x["monthly_pc"] + x["monthly_mobile"]),
+                               x.get("source") == "자동완성"))
             avail = [i["keyword"] for i in pool_rel]
             if not avail:
                 ui.note("이 키워드를 포함한 연관어가 없습니다. "
                         "위 체크를 끄면 같은 업종의 다른 키워드까지 볼 수 있습니다.")
+            else:
+                _no_vol = sum(1 for i in pool_rel
+                              if (i["monthly_pc"] + i["monthly_mobile"]) == 0)
+                if _no_vol:
+                    st.caption(f"후보 {len(avail)}개 중 {_no_vol}개는 검색량을 "
+                               "아직 모릅니다. 순위를 매길 때 함께 조회합니다.")
             # 버튼을 눌렀을 때만 잰다.
             # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
             with st.container(border=True):
@@ -723,12 +750,16 @@ with sub_research[0]:
             # 이미 아는 검색량을 함께 넘긴다.
             # 다시 물으면 호출만 낭비되고, 힌트로 쪼개지면서
             # 엉뚱한 값이 돌아와 '측정 실패'로 처리되는 일이 생긴다.
+            # 검색량을 아는 것만 넘긴다.
+            # 자동완성으로 온 것(0)은 넘기지 않아야 측정 단계에서
+            # 네이버에 직접 물어보고 실제 값을 채운다.
             known = {i["keyword"]: {
                 "monthly_pc": i["monthly_pc"],
                 "monthly_mobile": i["monthly_mobile"],
                 "comp_level": i.get("comp_level", "-"),
                 "pl_avg_depth": 0,
-            } for i in pool_rel}
+            } for i in pool_rel
+                if (i["monthly_pc"] + i["monthly_mobile"]) > 0}
 
             @st.cache_data(ttl=1800, show_spinner=False)
             def measure_batch(keywords, stats):
@@ -768,6 +799,7 @@ with sub_research[0]:
                 _stats = tuple(sorted(
                     (k, tuple(sorted(known[k].items())))
                     for k in targets if k in known))
+                _unknown_n = sum(1 for k in targets if k not in known)
                 try:
                     with st.status(f"연관 키워드 {len(targets)}개 측정 중...",
                                    expanded=True) as status:

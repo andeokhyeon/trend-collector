@@ -113,7 +113,15 @@ def brief_keyword(kw, analysis, serp_meta=None, blog_power=None, my_rank=None):
         "월 검색량": analysis.get("total_search"),
         "PC 대 모바일": f"{analysis.get('monthly_pc')} / {analysis.get('monthly_mobile')}",
         "이미 쓰인 글(누적)": analysis.get("doc_count"),
-        "최근 30일 새 글": analysis.get("recent_docs"),
+        # ⚠️ 1000건을 넘으면 정확히 못 센다(검색 API 한계).
+        #    그냥 1000이라고 넘기면 AI가 '정확히 1000건'으로 오해한다.
+        "최근 30일 새 글": (
+            f"약 {analysis.get('recent_docs'):,}건 (발행 속도로 추정)"
+            if analysis.get("recent_estimated")
+            else (f"{analysis.get('recent_docs')}건 이상 "
+                  "(너무 많아 정확히 못 셈)"
+                  if analysis.get("recent_capped")
+                  else analysis.get("recent_docs"))),
         "경쟁률(문서수÷검색량)": analysis.get("comp_ratio"),
         "경쟁률 등급": analysis.get("comp_grade"),
         "최근 발행 강도": analysis.get("recent_grade"),

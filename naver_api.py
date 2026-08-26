@@ -584,14 +584,16 @@ def get_blog_stats(keyword, days=30, exact=True, light=False):
     # (문서수는 키워드마다 따로 불러야 해서 미리 못 쌓지만,
     #  한 번 잰 것은 재사용할 수 있다)
     if first is None:
-        return {"total_docs": None, "recent": None, "capped": False}
+        return {"total_docs": None, "recent": None, "capped": False,
+                "estimated": False}
 
     total_docs = int(first.get("total", 0) or 0)
     if _shared is not None:
         _shared.pool_put_docs(keyword, total_docs)
     if light:
         return _cache_put(ck, {"total_docs": total_docs,
-                               "recent": None, "capped": False})
+                               "recent": None, "capped": False,
+                               "estimated": False})
     items = first.get("items", [])
     now = datetime.now(timezone.utc)
 
@@ -604,17 +606,21 @@ def get_blog_stats(keyword, days=30, exact=True, light=False):
             break
 
     if fresh < len(items) or not items:
-        return _cache_put(ck, {"total_docs": total_docs, "recent": fresh, "capped": False})
+        return _cache_put(ck, {"total_docs": total_docs, "recent": fresh,
+                               "capped": False, "estimated": False})
 
     if not exact:
-        return _cache_put(ck, {"total_docs": total_docs, "recent": len(items), "capped": True})
+        return _cache_put(ck, {"total_docs": total_docs, "recent": len(items),
+                               "capped": True, "estimated": False})
 
     upper = min(total_docs, MAX_START)
     if upper <= len(items):
         return _cache_put(ck, {"total_docs": total_docs, "recent": len(items),
-                               "capped": total_docs > MAX_START})
+                               "capped": total_docs > MAX_START,
+                               "estimated": False})
 
     lo, hi = len(items), upper
+    edge_age = None          # 마지막으로 확인한 위치의 글 나이
     while lo < hi:
         mid = (lo + hi + 1) // 2
         page = _fetch_serp_page(keyword, start=mid, display=1, sort="date")
@@ -627,10 +633,42 @@ def get_blog_stats(keyword, days=30, exact=True, light=False):
         age = _postdate_age(arr[0], now)
         if age is not None and age <= days:
             lo = mid
+            edge_age = age
         else:
             hi = mid - 1
+
+    capped = lo >= MAX_START and total_docs > MAX_START
+
+    # 💡 1000건에서 잘렸다면 '글이 쌓이는 속도'로 실제 수를 추정한다.
+    #
+    # 최신순 1000번째 글이 6일 전 것이라면, 6일 동안 1000개가 올라온 것이다.
+    # 하루 약 167개 → 30일이면 약 5,000개.
+    # '1000+'라고만 하면 5,000인지 50,000인지 알 수 없는데,
+    # 이 추정으로 자릿수 감각은 잡힌다. 추가 호출도 필요 없다.
+    estimated = False
+    if capped:
+        # 정확도를 위해 1000번째 글의 나이를 다시 확인한다.
+        # 이분탐색이 중간에 멈추면 edge_age가 부정확할 수 있다.
+        page = _fetch_serp_page(keyword, start=MAX_START, display=1, sort="date")
+        if page and page.get("items"):
+            a = _postdate_age(page["items"][0], now)
+            if a is not None:
+                edge_age = a
+
+        # ⚠️ 발행일은 '일' 단위라, 1000번째 글이 며칠 안 된 경우
+        # 내림 오차가 커져서 추정이 두 배씩 틀린다.
+        # (하루 500개면 1000번째가 2일 전인데, 1일로 내려가면 두 배가 된다)
+        # 그래서 나이가 충분히 벌어졌을 때만 추정하고,
+        # 아니면 정직하게 '1000+'로 남긴다.
+        if edge_age is not None and edge_age >= 5:
+            per_day = MAX_START / edge_age
+            est = int(per_day * days)
+            if est > lo:
+                lo = est
+                estimated = True
+
     return _cache_put(ck, {"total_docs": total_docs, "recent": lo,
-                           "capped": lo >= MAX_START and total_docs > MAX_START})
+                           "capped": capped, "estimated": estimated})
 
 
 def analyze_keyword(keyword, with_recent=True, exact_recent=True,
@@ -662,15 +700,18 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
     total_search = stat["monthly_pc"] + stat["monthly_mobile"]
 
     doc_count = None
-    recent, recent_ratio, recent_grade, recent_capped = None, None, "정보없음", False
+    recent, recent_ratio, recent_grade = None, None, "정보없음"
+    recent_capped = recent_estimated = False
 
     if with_recent:
         blog = get_blog_stats(keyword, exact=exact_recent, light=light)
         doc_count = blog["total_docs"]
         recent = blog["recent"]
         recent_capped = blog["capped"]
+        recent_estimated = blog.get("estimated", False)
         if recent is not None and total_search:
-            recent_ratio, recent_grade = calc_recent_competition(total_search, recent)
+            recent_ratio, recent_grade = calc_recent_competition(
+                total_search, recent, capped=recent_capped)
     else:
         doc_count = get_blog_doc_count(keyword)
 
@@ -712,6 +753,7 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
         "comp_grade": grade,
         "recent_docs": recent,
         "recent_capped": recent_capped,
+        "recent_estimated": recent_estimated,
         "recent_ratio": recent_ratio,
         "recent_grade": recent_grade,
         "opportunity": opportunity,
@@ -1036,14 +1078,23 @@ def get_recent_doc_count(keyword, days=30, exact=True):
     return {"count": lo, "capped": lo >= MAX_START and total > MAX_START}
 
 
-def calc_recent_competition(total_search, recent_count):
-    """최근 30일 발행량 대비 경쟁 강도. 반환: (비율, 등급)"""
+def calc_recent_competition(total_search, recent_count, capped=False):
+    """
+    최근 30일 발행량 대비 경쟁 강도. 반환: (비율, 등급)
+
+    ⚠️ capped=True면 실제로는 그보다 더 많다는 뜻이다.
+    (검색 API가 1000건까지만 세어준다)
+    그대로 계산하면 경쟁이 실제보다 낮게 평가되므로 한 단계 올려 잡는다.
+    """
     if not total_search or total_search <= 0:
         return None, "검색량없음"
     if recent_count is None:
         return None, "정보없음"
 
     ratio = recent_count / total_search
+    if capped:
+        # 못 센 만큼을 감안해 넉넉히 잡는다
+        ratio *= 1.5
     if ratio < 0.005:
         grade = "매우한산"
     elif ratio < 0.02:

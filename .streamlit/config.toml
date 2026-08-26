@@ -9,4 +9,5 @@ font = "sans serif"
 gatherUsageStats = false
 
 [client]
-toolbarMode = "minimal"
+toolbarMode = "viewer"
+showErrorDetails = true
