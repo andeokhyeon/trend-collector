@@ -819,6 +819,20 @@ with sub_research[0]:
                 st.caption(f"{len(no_demand)}개는 검색량이 확인되지 않아 "
                            "순위에서 제외했습니다.")
 
+            # 주소에 ?debug=1 을 붙이면 어느 단계에서 걸렸는지 보여준다
+            if "debug" in _get_query_params():
+                st.info(
+                    f"**순위 진단**\n\n"
+                    f"- 연관어 전체: {len(rel)}개\n"
+                    f"- 필터 통과(pool_rel): {len(pool_rel)}개\n"
+                    f"- 검색량 아는 것(known): {len(known)}개\n"
+                    f"- 측정 대상(targets): {len(targets)}개\n"
+                    f"- 측정 성공(subs): {len(subs)}개\n"
+                    f"- 실패(failed): {len(failed)}개\n"
+                    f"- 수요 없음(no_demand): {len(no_demand)}개\n"
+                    f"- 포함필터: {only_contains}"
+                )
+
             if failed:
                 ui.note(f"{len(failed)}개는 조회하지 못했습니다. "
                         "네이버 API 호출이 몰리면 일부가 거절될 수 있습니다. "
@@ -892,7 +906,7 @@ with sub_research[0]:
             fc1, fc2 = st.columns([1, 1])
             with fc1:
                 only_has = st.checkbox(f"'{r['keyword']}' 포함한 것만",
-                                       value=False, key="rel_all_filter")
+                                       value=True, key="rel_all_filter")
             with fc2:
                 min_vol = st.select_slider(
                     "최소 검색량", options=[0, 100, 500, 1000, 5000],
