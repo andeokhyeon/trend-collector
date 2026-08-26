@@ -1433,6 +1433,38 @@ border: 0; font-weight: 700;
 .tc-kw {{ border-bottom-color: #E7E9ED; }}
 /* 표 안에서 가운데로 세울 칸 */
 .kh-t .kh-center, .kh-t th.kh-center {{ text-align: center; }}
+/* ---- 글 뼈대 후보: 세로 목록 대신 가로 카드 ---- */
+.outline-grid {{
+display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+gap: 10px;
+}}
+.outline-card {{
+background: {SURFACE}; border: 1px solid {LINE}; border-radius: 12px;
+padding: 12px 13px 13px;
+}}
+.outline-top {{ display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }}
+.outline-num {{
+flex: none; min-width: 0; height: 22px; border-radius: 6px;
+font-size: .72rem; font-weight: 700; color: #fff;
+display: inline-flex; align-items: center; padding: 0 8px;
+}}
+.outline-h {{
+font-size: .92rem; font-weight: 700; color: {INK};
+overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+.outline-w {{ font-size: .78rem; color: {MUTED}; line-height: 1.55; margin: 0; }}
+/* ---- 추적 카드: 높이를 못 박고, 아래 딱지 줄은 접히지 않게 ---- */
+.track-card {{ height: 224px; min-height: 224px; overflow: hidden; }}
+.tc-meta {{ flex-wrap: nowrap !important; gap: 6px; }}
+.tc-pill {{ flex: 0 1 auto; min-width: 0; }}
+.tc-rec {{ flex: none; white-space: nowrap; }}
+.track-card + div .stButton button {{
+white-space: nowrap !important; font-size: .8rem !important;
+padding: 7px 4px !important;
+}}
+@media (max-width: 1100px) {{
+.track-card {{ height: 208px; min-height: 208px; }}
+}}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -2144,7 +2176,8 @@ def tracked_cards(items, key_prefix="tc"):
         return None, None, None
 
     stopped, detail, flipped = None, None, None
-    cols_per_row = 5
+    # ⚠️ 5개씩 놓으면 칸이 좁아 '자세히' 글자가 세로로 쪼개진다.
+    cols_per_row = 4
 
     # ⚠️ st.columns(len(chunk))로 만들면 마지막 줄의 칸 수가 달라져서
     # 카드 폭이 제각각이 된다. 항상 같은 수의 칸을 만들고 남는 칸은 비워둔다.

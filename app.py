@@ -806,7 +806,7 @@ with sub_research[0]:
                 # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
                 # 10개 고정. 고를 이유가 없고, 선택지가 늘면 화면만 복잡해진다.
                 pick_n = 10
-                draw_map = st.button("🏹 순위 매기기 (상위 10개)",
+                draw_map = st.button("기회 있는 키워드 보기",
                                      use_container_width=True, key="map_go")
 
                 if draw_map:
@@ -943,7 +943,7 @@ with sub_research[0]:
 
                 if not rows:
                     if not targets:
-                        ui.note("<b>순위 매기기</b>를 누르면 연관 키워드의 문서수를 재서 "
+                        ui.note("<b>기회 있는 키워드 보기</b>를 누르면 연관 키워드의 문서수를 재서 "
                                 "노려볼 만한 순서대로 세웁니다.")
                     else:
                         ui.note("순위를 매길 만한 연관 키워드를 찾지 못했습니다. "
@@ -1225,15 +1225,18 @@ with sub_research[2]:
             if outline:
                 st.write("")
                 ui.section("글 뼈대 후보", "근거가 있는 항목만 모았습니다")
+                # ⚠️ 세로로 한 줄씩 쌓으면 20개만 돼도 화면을 한참 내려야 한다.
+                # 항목 하나가 짧으니 카드로 만들어 가로로 늘어놓는다.
                 rows = "".join(
-                    f'<div class="outline-item">'
-                    f'<div class="outline-num" style="background:'
+                    f'<div class="outline-card">'
+                    f'<div class="outline-top">'
+                    f'<span class="outline-num" style="background:'
                     f'{ui.DEEP if s_["kind"] == "필수" else ui.GOLD}">'
-                    f'{"핵심" if s_["kind"] == "필수" else "검색"}</div>'
-                    f'<div><div class="outline-h">{s_["heading"]}</div>'
-                    f'<div class="outline-w">{s_["why"]}</div></div></div>'
+                    f'{"핵심" if s_["kind"] == "필수" else "검색"}</span>'
+                    f'<span class="outline-h">{s_["heading"]}</span></div>'
+                    f'<div class="outline-w">{s_["why"]}</div></div>'
                     for s_ in outline)
-                st.markdown(f'<div class="chart-box">{rows}</div>',
+                st.markdown(f'<div class="outline-grid">{rows}</div>',
                             unsafe_allow_html=True)
 
 # ------------------------------------------------------------
