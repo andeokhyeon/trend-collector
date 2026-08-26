@@ -11,16 +11,16 @@
 import streamlit as st
 
 # --- 토큰 ---------------------------------------------------
-INK = "#14161A"        # 본문
+INK = "#111827"        # 본문
 MUTED = "#6B7280"      # 보조 텍스트
-LINE = "#E4E4DF"       # 경계선
-BASE = "#FAFAF7"       # 배경
+LINE = "#E8EAED"       # 경계선
+BASE = "#F6F7F9"       # 배경
 SURFACE = "#FFFFFF"    # 카드
-DEEP = "#1B3A4B"       # 딥 틸네이비 (구조/헤더)
+DEEP = "#1A56DB"       # 포인트 파랑 (구조/강조)
 GOLD = "#C8963E"       # 기회 신호 (골든타임)
-GOOD = "#2E7D6B"       # 좋음
-WARN = "#B8873B"       # 주의
-BAD = "#C4553D"        # 나쁨
+GOOD = "#0E9F6E"       # 좋음
+WARN = "#C27803"       # 주의
+BAD = "#E02424"        # 나쁨
 
 GRADE_COLORS = {
     # 누적 경쟁률
@@ -1196,7 +1196,12 @@ font-size: .74rem; color: {MUTED}; font-weight: 600;
 text-align: left; padding: 10px 13px;
 background: #F7F7F4; border-bottom: 1px solid {LINE};
 white-space: nowrap; letter-spacing: .02em;
+/* 긴 목록을 세로로 굴릴 때 머리글이 따라 올라가지 않게 */
+position: sticky; top: 0; z-index: 3;
 }}
+.kh-t th.kh-key {{ z-index: 4; }}
+/* 행이 많은 목록은 표 안에서 굴린다 (페이지가 끝없이 길어지지 않게) */
+.kh-tw.kh-scroll {{ overflow-y: auto; }}
 .kh-t td {{
 padding: 11px 13px; border-bottom: 1px solid #F1F1EC;
 white-space: nowrap;
@@ -1220,7 +1225,7 @@ font-weight: 600;
 white-space: nowrap;
 width: 1%;
 }}
-.kh-t th.kh-key {{ z-index: 3; background: #F7F7F4; }}
+.kh-t th.kh-key {{ background: #F7F7F4; }}
 .kh-t tbody tr:nth-child(even) td {{ background: #FCFCFA; }}
 .kh-t tbody tr:nth-child(even) td.kh-key {{ background: #FCFCFA; }}
 .kh-rk {{
@@ -1241,6 +1246,143 @@ text-align: right; margin: 6px 2px 14px;
 .kh-t td {{ padding: 10px 11px; }}
 .kh-t th {{ padding: 9px 11px; }}
 .kh-t .kh-key {{ padding-right: 14px; }}
+}}
+
+/* ============================================================
+   A 톤 — 흰 배경 / 옅은 회색 선 / 파란 포인트
+   ⚠️ 위쪽 규칙이 오래 쌓이면서 같은 선택자가 여러 번 겹쳐 있다.
+   하나씩 고치면 어느 게 이겼는지 알기 어려워서,
+   최종 모습은 여기 한 곳에서만 정한다. (뒤에 오는 규칙이 이긴다)
+   ============================================================ */
+.stApp {{ background: {BASE}; }}
+.block-container {{ padding-top: 1.1rem; max-width: 1180px; }}
+
+/* 상단 바 — 짙은 카드에서 흰 바로 */
+.masthead {{
+background: {SURFACE}; border: 1px solid {LINE};
+border-radius: 12px; padding: 15px 20px;
+margin-bottom: 14px; color: {INK};
+}}
+.masthead h1 {{ font-size: 1.3rem; font-weight: 800; color: {INK}; }}
+.masthead p {{ margin: 6px 0 0; font-size: .89rem; color: {MUTED}; }}
+.masthead .rule {{ display: none; }}
+.mast-head-row {{ gap: 12px; }}
+
+/* 상위 탭 — 알약을 버리고 밑줄로 */
+[role="tablist"] {{
+gap: 0 !important; padding: 0 !important;
+margin-bottom: 18px !important;
+border-bottom: 1px solid {LINE} !important;
+flex-wrap: nowrap !important; overflow-x: auto !important;
+scrollbar-width: none;
+}}
+[role="tablist"]::-webkit-scrollbar {{ display: none; }}
+[role="tab"] {{
+min-height: 42px !important; padding: 11px 16px !important;
+background: transparent !important;
+border: 0 !important; border-radius: 0 !important;
+border-bottom: 2px solid transparent !important;
+box-shadow: none !important; color: {MUTED} !important;
+white-space: nowrap !important; transform: none !important;
+}}
+[role="tab"] *, [role="tab"] p, [role="tab"] div, [role="tab"] span {{
+font-size: .95rem !important; font-weight: 600 !important; color: inherit !important;
+}}
+[role="tab"]:hover {{
+background: transparent !important; color: {INK} !important;
+box-shadow: none !important; transform: none !important;
+border-bottom-color: #C7CDD6 !important;
+}}
+[role="tab"][aria-selected="true"] {{
+background: transparent !important; color: {INK} !important;
+box-shadow: none !important;
+border-bottom: 2px solid {DEEP} !important;
+}}
+[role="tab"][aria-selected="true"] *,
+[role="tab"][aria-selected="true"] p,
+[role="tab"][aria-selected="true"] div,
+[role="tab"][aria-selected="true"] span {{
+color: {INK} !important; font-weight: 700 !important;
+}}
+[role="tab"][aria-selected="true"]:hover {{
+background: transparent !important; border-bottom-color: {DEEP} !important;
+}}
+
+/* 하위 탭 — 작은 회색 알약, 선택하면 옅은 파랑 */
+[role="tabpanel"] [role="tablist"] {{
+border-bottom: 0 !important; gap: 6px !important;
+margin-bottom: 14px !important; padding: 0 !important;
+}}
+[role="tabpanel"] [role="tab"] {{
+min-height: 32px !important; padding: 6px 13px !important;
+background: #F1F3F6 !important; border-radius: 999px !important;
+border-bottom: 0 !important; color: #55606D !important;
+}}
+[role="tabpanel"] [role="tab"] *,
+[role="tabpanel"] [role="tab"] p {{
+font-size: .87rem !important; font-weight: 600 !important; color: inherit !important;
+}}
+[role="tabpanel"] [role="tab"]:hover {{
+background: #E6EAEF !important; border-bottom: 0 !important; color: {INK} !important;
+}}
+[role="tabpanel"] [role="tab"][aria-selected="true"] {{
+background: #EAF1FD !important; color: {DEEP} !important; border-bottom: 0 !important;
+}}
+[role="tabpanel"] [role="tab"][aria-selected="true"] *,
+[role="tabpanel"] [role="tab"][aria-selected="true"] p {{ color: {DEEP} !important; }}
+[role="tabpanel"] [role="tab"][aria-selected="true"]:hover {{ background: #DCE8FB !important; }}
+
+/* 카드 · 입력 · 버튼 */
+.kpi {{ border: 1px solid {LINE}; border-radius: 12px; padding: 15px 17px; }}
+.kpi-label {{ text-transform: none; letter-spacing: 0; font-size: .8rem; font-weight: 500; }}
+.kpi-val {{ font-size: 1.55rem; }}
+.note {{ border-left: 3px solid {DEEP}; border-radius: 10px; color: #4B5563; }}
+.note-gold {{ border-left-color: {GOLD}; }}
+.chip {{ border-radius: 6px; padding: 4px 10px; font-size: .84rem; }}
+.stTextInput input {{
+border: 1px solid #D9DDE3 !important; border-radius: 10px !important;
+}}
+.stTextInput input:focus {{
+border-color: {DEEP} !important;
+box-shadow: 0 0 0 3px rgba(26,86,219,.12) !important;
+}}
+.stButton button {{
+border-radius: 10px !important; border: 1px solid #D9DDE3 !important;
+background: {SURFACE} !important; color: #374151 !important; font-weight: 600 !important;
+}}
+.st-key-research_go button, .st-key-map_go button {{
+background: {DEEP} !important; border-color: {DEEP} !important; color: #fff !important;
+}}
+.eyebrow {{ color: {MUTED}; letter-spacing: .08em; }}
+.section-title {{ font-size: 1.12rem; }}
+.gauge-num {{ color: {DEEP}; }}
+
+/* ---- 모바일: G처럼 촘촘하게 ---- */
+@media (max-width: 700px) {{
+.block-container {{ padding: .7rem .65rem 2rem !important; }}
+.masthead {{ padding: 12px 14px; border-radius: 10px; }}
+.masthead h1 {{ font-size: 1.04rem; }}
+.masthead p {{ font-size: .81rem; }}
+[role="tablist"] {{ margin-bottom: 13px !important; }}
+[role="tab"] {{ padding: 9px 12px !important; min-height: 38px !important; }}
+[role="tab"] *, [role="tab"] p {{ font-size: .87rem !important; }}
+[role="tabpanel"] [role="tablist"] {{ flex-wrap: nowrap !important; overflow-x: auto !important; }}
+[role="tabpanel"] [role="tab"] {{ padding: 5px 11px !important; min-height: 29px !important; }}
+[role="tabpanel"] [role="tab"] *, [role="tabpanel"] [role="tab"] p {{ font-size: .81rem !important; }}
+.kpi {{ padding: 11px 12px; border-radius: 10px; }}
+.kpi-label {{ font-size: .72rem; margin-bottom: 4px; }}
+.kpi-val {{ font-size: 1.18rem; }}
+.kpi-sub {{ font-size: .74rem; }}
+.section-title {{ font-size: 1rem; }}
+.note {{ font-size: .85rem; padding: 9px 11px; line-height: 1.6; }}
+/* 가로로 늘어선 카드는 모바일에서 2개씩 접는다.
+   4개를 그대로 두면 칸이 좁아 숫자가 잘린다. */
+[data-testid="stHorizontalBlock"] {{
+gap: .5rem !important; flex-wrap: wrap !important;
+}}
+[data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
+}}
 }}
 </style>""", unsafe_allow_html=True)
 

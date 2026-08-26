@@ -347,7 +347,7 @@ def _cell_text(v):
     return str(v)
 
 
-def table_html(frame):
+def table_html(frame, height=None):
     """
     표를 HTML로 직접 그린다.
 
@@ -396,7 +396,9 @@ def table_html(frame):
                 cells.append(f'<td class="{cls(i, c)}">{txt}</td>')
         rows.append("<tr>" + "".join(cells) + "</tr>")
 
-    return (f'<div class="kh-tw"><table class="kh-t">'
+    box = ('class="kh-tw kh-scroll" style="max-height:%dpx"' % int(height)
+           if height else 'class="kh-tw"')
+    return (f'<div {box}><table class="kh-t">'
             f'<thead><tr>{head}</tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table></div>'
             f'<div class="kh-hint">← 표를 옆으로 밀면 나머지 항목이 보입니다</div>')
@@ -408,7 +410,7 @@ def show_table(frame, height=None):
     HTML 표가 어떤 이유로든 실패하면 기본 표로 물러난다.
     """
     try:
-        st.markdown(table_html(frame), unsafe_allow_html=True)
+        st.markdown(table_html(frame, height), unsafe_allow_html=True)
         return
     except Exception:
         pass
@@ -1020,8 +1022,7 @@ with sub_research[0]:
                 adf["월 검색량"] = adf["월 검색량"].map(
                     lambda v: f"{int(v):,}" if pd.notna(v) else "—")
                 adf.index = adf.index + 1
-                st.dataframe(adf, use_container_width=True, height=440,
-                             column_config=col_config(adf.columns) or None)
+                show_table(adf, height=440)
                 st.caption(f"{len(rows_all)}개 표시 · 전체 {len(all_rel)}개")
 
 # ------------------------------------------------------------
@@ -1872,7 +1873,7 @@ if admin_tab is not None:
                             "쌓인 시각": (r.get("updated_at") or "")[:16].replace("T", " "),
                         } for r in rows])
                         df_pool.index = df_pool.index + 1
-                        st.dataframe(df_pool, use_container_width=True, height=420)
+                        show_table(df_pool, height=420)
                         st.caption(f"{len(rows)}개 표시 중 · 전체 {stats['total']:,}개 "
                                    "· 60초간 저장된 값을 씁니다")
 
