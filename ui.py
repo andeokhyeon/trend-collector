@@ -1491,6 +1491,140 @@ padding-top: 9px; line-height: 1.6;
 .mast-name b {{ color: #F96F00 !important; }}
 .donut-box {{ overflow: hidden; }}
 .donut-box svg {{ max-width: 100%; height: auto; }}
+/* 한국어는 단어 중간에서 줄이 바뀌면 읽기가 확 나빠진다.
+   ('찾습니 / 다.' 처럼 잘리는 것) 어절 단위로만 끊는다. */
+body, .stApp, p, div, span, li, td, th, h1, h2, h3, h4 {{
+word-break: keep-all; overflow-wrap: break-word;
+}}
+.mono, code, .kh-num, .tc-rank {{ word-break: normal; }}
+/* ================= 첫 화면 히어로 ================= */
+.hero {{ text-align:center; padding: 30px 10px 22px; }}
+.hero-h {{
+font-family:'Gothic A1','Pretendard',sans-serif;
+font-size: clamp(1.6rem, 4.6vw, 2.7rem); font-weight: 900;
+letter-spacing: -.035em; line-height: 1.24; color: {INK}; margin: 0;
+}}
+.hero-h em {{ font-style: normal; color: {DEEP}; }}
+.hero-p {{
+margin: 14px auto 0; max-width: 46ch;
+font-size: clamp(.9rem, 1.9vw, 1.02rem); color: {MUTED}; line-height: 1.7;
+}}
+.hero-p b {{ color: {INK}; font-weight: 600; }}
+.hero-chips {{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin-top:12px; }}
+.hero-chip {{
+font-size:.82rem; color:{MUTED}; background:{SURFACE};
+border:1px solid {LINE}; border-radius:999px; padding:5px 13px;
+}}
+.hero-stat {{
+margin-top:16px; text-align:center; font-size:.82rem; color:#9AA1AB;
+}}
+.hero-stat b {{ font-family:'IBM Plex Mono',monospace; color:{INK}; font-weight:600; }}
+
+/* ================= 추이 그래프 ================= */
+.trend-box {{ padding: 15px 17px 13px; }}
+.tr-top {{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }}
+.tr-chg {{ font-family:'IBM Plex Mono',monospace; font-size:.92rem; font-weight:700; }}
+.tr-up {{ color:{GOOD}; }}
+.tr-down {{ color:{BAD}; }}
+.tr-flat {{ color:{MUTED}; }}
+.tr-foot {{
+display:flex; justify-content:space-between; margin-top:6px;
+font-family:'IBM Plex Mono',monospace; font-size:.72rem; color:#9AA1AB;
+}}
+.tr-peak {{ color:{GOLD}; font-weight:600; }}
+.tr-abs {{ display:block; margin-top:6px; font-size:.78rem; color:{MUTED}; }}
+
+/* ================= 황금 키워드 ================= */
+.gk-box {{ padding: 16px 18px; }}
+.gk-top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }}
+.gk-sub {{ font-size:.78rem; color:{MUTED}; margin-top:-4px; }}
+.gk-score {{
+font-family:'IBM Plex Mono',monospace; font-size:2.3rem; font-weight:600;
+line-height:1; letter-spacing:-.03em; flex:none;
+}}
+.gk-row {{
+display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+padding:10px 0 0; margin-top:10px; border-top:1px solid {LINE};
+}}
+.gk-k {{ font-size:.86rem; font-weight:700; color:{INK}; flex:0 0 auto; }}
+.gk-v {{ font-family:'IBM Plex Mono',monospace; font-size:1.02rem; font-weight:600; color:{DEEP}; }}
+.gk-n {{ font-size:.76rem; color:#9AA1AB; flex:1 1 100%; }}
+.gk-season {{
+margin-top:12px; padding:10px 12px; border-radius:9px; font-size:.85rem;
+display:flex; flex-direction:column; gap:2px;
+}}
+.gk-season b {{ font-weight:700; }}
+.gk-season span {{ font-size:.78rem; opacity:.85; }}
+.gk-now {{ background:#FDECE4; color:#A34310; }}
+.gk-soon {{ background:#E9F2FD; color:#12467F; }}
+.gk-off {{ background:#F1F3F6; color:#55606D; }}
+
+/* ================= 적중률 ================= */
+.hr-box {{ padding:16px 18px; }}
+.hr-top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:6px; }}
+.hr-sub {{ font-size:.78rem; color:{MUTED}; margin-top:-4px; }}
+.hr-big {{ font-family:'IBM Plex Mono',monospace; font-size:2.5rem; font-weight:600; line-height:1; letter-spacing:-.03em; }}
+.hr-big small {{ font-size:1.1rem; margin-left:1px; }}
+.hr-row {{ display:flex; align-items:center; gap:10px; margin-top:9px; }}
+.hr-lbl {{ flex:0 0 96px; font-size:.82rem; color:{INK}; font-weight:600; }}
+.hr-track {{ flex:1; height:8px; background:#EEF0F3; border-radius:999px; overflow:hidden; }}
+.hr-fill {{ height:8px; border-radius:999px; }}
+.hr-num {{ flex:0 0 52px; text-align:right; font-family:'IBM Plex Mono',monospace; font-size:.8rem; color:{MUTED}; }}
+.hr-note {{ margin-top:12px; padding-top:10px; border-top:1px solid {LINE}; font-size:.79rem; color:{MUTED}; line-height:1.6; }}
+
+/* ================= 모바일 마무리 ================= */
+@media (max-width: 700px) {{
+.hero {{ padding: 16px 4px 14px; }}
+.hero-p {{ margin-top:10px; }}
+.hero-chip {{ font-size:.76rem; padding:4px 11px; }}
+.trend-box {{ padding:13px 13px 11px; }}
+.gk-box, .hr-box {{ padding:14px 14px; }}
+.gk-score {{ font-size:1.9rem; }}
+.hr-big {{ font-size:2rem; }}
+.hr-lbl {{ flex:0 0 78px; font-size:.78rem; }}
+.gk-row {{ gap:8px; }}
+/* 좁은 화면에서 버튼·입력이 손가락에 맞게 */
+.stButton button {{ min-height: 42px !important; }}
+.stTextInput input {{ font-size: 16px !important; }}
+.chart-box {{ padding: 14px 14px !important; }}
+.stTabs {{ overflow: visible; }}
+/* 표 안 글씨가 더 줄지 않도록 (읽기 한계) */
+.kh-t {{ font-size: .83rem; }}
+}}
+@media (max-width: 400px) {{
+.hero-h {{ font-size: 1.42rem; }}
+.gk-n {{ font-size:.72rem; }}
+}}
+/* ================= 약한 고리 ================= */
+.ws-box {{ padding: 16px 18px; }}
+.ws-top {{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; }}
+.ws-sub {{ font-size:.78rem; color:{MUTED}; margin-top:-4px; }}
+.ws-big {{ font-family:'IBM Plex Mono',monospace; font-size:2.5rem; font-weight:600;
+line-height:1; letter-spacing:-.03em; flex:none; }}
+.ws-big small {{ font-size:1.05rem; color:{MUTED}; }}
+.ws-strip {{ display:flex; gap:4px; margin:14px 0 8px; }}
+.ws-cell {{ flex:1; height:12px; border-radius:3px; }}
+.ws-legend {{ display:flex; flex-wrap:wrap; gap:12px; font-size:.75rem; color:{MUTED}; }}
+.ws-lg i {{ display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; }}
+.ws-list {{ margin-top:12px; border-top:1px solid {LINE}; padding-top:4px; }}
+.ws-row {{ display:flex; align-items:center; gap:9px; padding:6px 0; font-size:.85rem;
+border-bottom:1px solid #F3F4F6; }}
+.ws-row:last-child {{ border-bottom:0; }}
+.ws-rank {{ flex:0 0 18px; font-family:'IBM Plex Mono',monospace; font-size:.75rem; color:#A8AEB6; text-align:right; }}
+.ws-dot {{ flex:0 0 7px; height:7px; border-radius:99px; }}
+.ws-title {{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:{INK}; }}
+.ws-row.ws-open .ws-title {{ font-weight:600; }}
+.ws-row.ws-hard .ws-title, .ws-row.ws-boss .ws-title {{ color:#8A9099; }}
+.ws-lbl {{ flex:0 0 auto; font-size:.76rem; font-weight:600; white-space:nowrap; }}
+.ws-note {{ margin-top:10px; padding-top:10px; border-top:1px solid {LINE};
+font-size:.79rem; color:{MUTED}; line-height:1.6; }}
+@media (max-width: 700px) {{
+.ws-box {{ padding:14px; }}
+.ws-big {{ font-size:2rem; }}
+.ws-title {{ font-size:.8rem; }}
+.ws-lbl {{ font-size:.72rem; }}
+.ws-cell {{ height:10px; }}
+}}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -2374,6 +2508,218 @@ def _one_track_card(it):
         f'<div class="tc-head">{tag}</div>'
         f'<div class="tc-kw">{_esc(it["keyword"])}</div>'
         f'{body}{meta}</div>', unsafe_allow_html=True)
+
+
+def hero(placeholder_chips=()):
+    """
+    첫 화면 — 무엇을 하는 도구인지 한 문장, 그리고 큰 검색창 하나.
+
+    ⚠️ 왜 필요한가. 지금까지는 들어오자마자 탭 다섯 개와 표가 먼저 보였다.
+    처음 온 사람은 '뭘 해야 하는지'를 모른 채 화면을 훑는다.
+    경쟁사(블랙키위)가 첫 화면을 문장 하나 + 검색창 하나로 비운 이유가 이것이다.
+    검색창은 Streamlit 위젯이라 여기서는 '위·아래 껍데기'만 그린다.
+    """
+    chips = "".join(f'<span class="hero-chip">{_esc(c)}</span>'
+                    for c in placeholder_chips)
+    st.markdown(
+        f'<div class="hero">'
+        f'<h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>'
+        f'<p class="hero-p">이미 쓰인 글까지 재서 <b>지금 이길 수 있는 키워드</b>를 찾습니다.'
+        f' 검색량 · 문서수 · 최근 발행량 · 광고 단가를 한 번에.</p>'
+        f'</div>', unsafe_allow_html=True)
+    return chips
+
+
+def hero_after(chips_html="", stat_line=""):
+    """검색창 바로 아래 — 예시 키워드와 한 줄 통계."""
+    bits = []
+    if chips_html:
+        bits.append(f'<div class="hero-chips">{chips_html}</div>')
+    if stat_line:
+        bits.append(f'<div class="hero-stat">{stat_line}</div>')
+    if bits:
+        st.markdown("".join(bits), unsafe_allow_html=True)
+
+
+def trend_chart(points, title="1년 검색 추이", change_pct=None,
+                peak=None, height=132, abs_points=None):
+    """
+    검색어트렌드 면적 그래프.
+
+    ⚠️ 꺾은선만 그리면 '이 키워드가 계절을 타는지'가 눈에 안 들어온다.
+    면적으로 채우고 고점에 표식을 찍으면 한눈에 읽힌다.
+    """
+    if not points or len(points) < 4:
+        return
+    vals = [v for _, v in points]
+    lo, hi = min(vals), max(vals) or 1
+    span = (hi - lo) or 1
+    W, H, PAD = 720, height, 10
+
+    def xy(i, v):
+        x = PAD + (W - PAD * 2) * (i / max(1, len(points) - 1))
+        y = PAD + (H - PAD * 2) * (1 - (v - lo) / span)
+        return x, y
+
+    pts = [xy(i, v) for i, v in enumerate(vals)]
+    line = " ".join(f"{'M' if i == 0 else 'L'} {x:.1f} {y:.1f}"
+                    for i, (x, y) in enumerate(pts))
+    area = line + f" L {pts[-1][0]:.1f} {H - PAD} L {pts[0][0]:.1f} {H - PAD} Z"
+
+    pi = vals.index(hi)
+    px, py = pts[pi]
+    peak_lbl = points[pi][0][5:].replace("-", ".") if peak is None else peak
+
+    if change_pct is None:
+        chg = '<span class="tr-flat">변화 정보 없음</span>'
+    elif change_pct >= 10:
+        chg = f'<span class="tr-up">↑ {change_pct:+.0f}%</span>'
+    elif change_pct <= -10:
+        chg = f'<span class="tr-down">↓ {change_pct:+.0f}%</span>'
+    else:
+        chg = f'<span class="tr-flat">{change_pct:+.0f}%</span>'
+
+    first, last = points[0][0][2:].replace("-", "."), points[-1][0][2:].replace("-", ".")
+    tip = ""
+    if abs_points:
+        tip = (f'<span class="tr-abs">최근 하루 약 '
+               f'{abs_points[-1][1]:,}회</span>')
+
+    st.markdown(
+        f'<div class="chart-box trend-box">'
+        f'<div class="tr-top"><span class="chart-title">{_esc(title)}</span>'
+        f'<span class="tr-chg">{chg}</span></div>'
+        f'<svg viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
+        f'preserveAspectRatio="none" '
+        f'style="max-width:100%;height:{H}px;display:block" '
+        f'xmlns="http://www.w3.org/2000/svg">'
+        f'<defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0%" stop-color="{DEEP}" stop-opacity=".22"/>'
+        f'<stop offset="100%" stop-color="{DEEP}" stop-opacity="0"/>'
+        f'</linearGradient></defs>'
+        f'<path d="{area}" fill="url(#tg)"/>'
+        f'<path d="{line}" fill="none" stroke="{DEEP}" stroke-width="2" '
+        f'stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
+        f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.5" fill="{GOLD}"/>'
+        f'</svg>'
+        f'<div class="tr-foot"><span>{first}</span>'
+        f'<span class="tr-peak">고점 {peak_lbl}</span>'
+        f'<span>{last}</span></div>'
+        f'{tip}</div>', unsafe_allow_html=True)
+
+
+def gold_card(gold, min_bid=None, income=None, season=None):
+    """
+    황금 키워드 카드 — '이겨봤자 남는 게 있는가'를 한 장으로.
+    기회 점수(이길 수 있는가)와 나란히 놓으면 판단이 끝난다.
+    """
+    if not gold:
+        return
+    sc = gold["score"]
+    color = GOOD if sc >= 70 else (WARN if sc >= 45 else BAD)
+    rows = []
+    if min_bid:
+        rows.append(("광고 최소 입찰가", f"{min_bid:,}원",
+                     "광고주가 이 검색어 한 번에 내는 돈"))
+    if income:
+        lo, hi, visits = income
+        rows.append(("3위 시 월 수익 추정", f"{lo:,}~{hi:,}원",
+                     f"예상 방문 {visits:,}명 · 애드포스트 기준 추정"))
+    body = "".join(
+        f'<div class="gk-row"><span class="gk-k">{_esc(k)}</span>'
+        f'<span class="gk-v">{_esc(v)}</span>'
+        f'<span class="gk-n">{_esc(n)}</span></div>' for k, v, n in rows)
+
+    season_html = ""
+    if season and season[0]:
+        cls = {"now": "gk-now", "soon": "gk-soon"}.get(season[2], "gk-off")
+        season_html = (f'<div class="gk-season {cls}"><b>{_esc(season[0])}</b>'
+                       f'<span>{_esc(season[1])}</span></div>')
+
+    st.markdown(
+        f'<div class="chart-box gk-box">'
+        f'<div class="gk-top">'
+        f'<div><div class="chart-title">황금 키워드 점수</div>'
+        f'<div class="gk-sub">{_esc(gold["basis"])} · 돈이 되는 자리인가</div></div>'
+        f'<div class="gk-score" style="color:{color}">{sc}</div></div>'
+        f'{body}{season_html}</div>', unsafe_allow_html=True)
+
+
+def hit_rate(stats):
+    """
+    적중률 — 우리가 매긴 점수를 실제 순위로 되짚는다.
+    stats: {"n":.., "hit":.., "rate":.., "avg_rank":.., "buckets":[(라벨,n,hit)]}
+    """
+    if not stats or not stats.get("n"):
+        return
+    rate = stats["rate"]
+    color = GOOD if rate >= 60 else (WARN if rate >= 35 else BAD)
+    bars = "".join(
+        f'<div class="hr-row"><span class="hr-lbl">{_esc(lbl)}</span>'
+        f'<div class="hr-track"><div class="hr-fill" style="width:{(h/n*100) if n else 0:.0f}%;'
+        f'background:{GOOD if (h/n if n else 0) >= .6 else (WARN if (h/n if n else 0) >= .35 else BAD)}"></div></div>'
+        f'<span class="hr-num">{h}/{n}</span></div>'
+        for lbl, n, h in stats.get("buckets", []) if n)
+
+    st.markdown(
+        f'<div class="chart-box hr-box">'
+        f'<div class="hr-top"><div>'
+        f'<div class="chart-title">우리 점수, 맞았을까</div>'
+        f'<div class="hr-sub">발행한 글 {stats["n"]}개를 실제 순위와 대조했습니다</div>'
+        f'</div><div class="hr-big" style="color:{color}">{rate:.0f}<small>%</small></div></div>'
+        f'{bars}'
+        f'<div class="hr-note">기회 점수가 높을수록 실제로 30위 안에 든 비율입니다. '
+        f'이 숫자를 공개하는 도구는 아직 없습니다.</div>'
+        f'</div>', unsafe_allow_html=True)
+
+
+WEAK_COLORS = {"open": GOOD, "mid": WARN, "hard": BAD, "boss": "#5A6570"}
+WEAK_NAMES = {"open": "빈틈", "mid": "보통", "hard": "단단함", "boss": "강자"}
+
+
+def weak_strip(data, keyword=""):
+    """
+    약한 고리 — 상위 10칸을 한 칸씩 색으로 보여준다.
+
+    ⚠️ 이 화면이 이 제품에서 가장 눈에 띄는 자리다.
+    "경쟁 62점"은 머리로 계산해야 하지만, 초록 칸 4개는 그냥 보인다.
+    """
+    if not data or not data.get("slots"):
+        return
+    open_n, total = data["open"], data["total"]
+    color = GOOD if open_n >= 4 else (WARN if open_n >= 2 else BAD)
+
+    cells = "".join(
+        f'<span class="ws-cell" style="background:{WEAK_COLORS[x["kind"]]}" '
+        f'title="{x["rank"]}위 · {_esc(x["label"])}"></span>'
+        for x in data["slots"])
+
+    rows = "".join(
+        f'<div class="ws-row ws-{x["kind"]}">'
+        f'<span class="ws-rank">{x["rank"]}</span>'
+        f'<span class="ws-dot" style="background:{WEAK_COLORS[x["kind"]]}"></span>'
+        f'<span class="ws-title">{_esc((x["title"] or "")[:38])}</span>'
+        f'<span class="ws-lbl" style="color:{WEAK_COLORS[x["kind"]]}">'
+        f'{_esc(x["label"])}</span></div>'
+        for x in data["slots"])
+
+    legend = "".join(
+        f'<span class="ws-lg"><i style="background:{WEAK_COLORS[k]}"></i>{v}</span>'
+        for k, v in WEAK_NAMES.items())
+
+    st.markdown(
+        f'<div class="chart-box ws-box">'
+        f'<div class="ws-top"><div>'
+        f'<div class="chart-title">공략 가능한 자리</div>'
+        f'<div class="ws-sub">{_esc(data["verdict"])} · 상위 {total}칸을 한 칸씩 봤습니다</div>'
+        f'</div><div class="ws-big" style="color:{color}">{open_n}'
+        f'<small>/{total}</small></div></div>'
+        f'<div class="ws-strip">{cells}</div>'
+        f'<div class="ws-legend">{legend}</div>'
+        f'<div class="ws-list">{rows}</div>'
+        f'<div class="ws-note">초록 칸이 <b>내가 밀어낼 수 있는 자리</b>입니다. '
+        f'제목에 이 키워드가 없거나, 1년 넘게 안 고쳐진 글입니다.</div>'
+        f'</div>', unsafe_allow_html=True)
 
 
 def _compact(v):

@@ -13,6 +13,8 @@ try:
         get_serp, analyze_serp, analyze_titles, build_outline, calc_competition,
     get_volumes,
     calc_opportunity, calc_search_change, expected_visits, ad_density_pct,
+    get_search_trend, seasonality_note, get_min_bids, calc_gold_score,
+    estimate_monthly_income, weak_spots,
     calc_since_registered,
     )
 except ImportError as _e:
@@ -323,11 +325,13 @@ def style_table(frame):
 NUM_COLS = {
     '월 검색량', '검색량', '문서수', '누적 문서수', '최근 30일', '최근 30일 글',
     '기회 점수', '내 승산', '광고 경쟁도', '경쟁률', '순위', '조회수',
+    '황금 점수', '광고단가',
 }
 
 
 # 열이 많을 때 키워드 바로 옆으로 당길 '판단' 계열 (왼쪽부터 이 순서로)
-PRIORITY_COLS = ('진단', '판단', '기회 점수', '내 승산', '경쟁률', '검색량', '경쟁')
+PRIORITY_COLS = ('황금 점수', '광고단가', '진단', '판단', '기회 점수',
+                 '내 승산', '경쟁률', '검색량', '경쟁')
 
 
 def _cell_text(v):
@@ -406,6 +410,22 @@ def table_html(frame, height=None, center_cols=()):
             f'<div class="kh-hint">← 표를 옆으로 밀면 나머지 항목이 보입니다</div>')
 
 
+def csv_button(frame, name, key):
+    """
+    표를 CSV로 내려받기.
+
+    ⚠️ 경쟁사 대부분이 내보내기를 상위 유료 플랜에 가둬둔다.
+    우리는 그냥 연다 — 이것 하나로 '데이터를 안 가둔다'는 인상이 생긴다.
+    엑셀에서 한글이 깨지지 않도록 BOM을 붙인 utf-8-sig로 쓴다.
+    """
+    try:
+        data = frame.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("CSV로 내려받기", data=data,
+                           file_name=f"{name}.csv", mime="text/csv", key=key)
+    except Exception:
+        pass
+
+
 def show_table(frame, height=None, center_cols=()):
     """
     모든 표를 같은 규칙으로 그린다.
@@ -472,6 +492,33 @@ def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
     out.columns = names
     out.index = out.index + 1
     show_table(out)
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def keyword_trend(keyword, total_search=None):
+    """데이터랩 1년 추이. 하루 1,000회 한도라 6시간 캐시."""
+    try:
+        return get_search_trend(keyword, days=365, total_search=total_search)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def cached_min_bids(keywords):
+    """여러 키워드의 광고 최소 입찰가를 한 번에 (호출 1회)."""
+    try:
+        return get_min_bids(list(keywords)) or {}
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def keyword_min_bid(keyword):
+    """이 키워드 광고 최소 입찰가(원). 못 가져오면 None."""
+    try:
+        return (get_min_bids([keyword]) or {}).get(keyword.strip())
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -613,17 +660,42 @@ with sub_research[0]:
     # 탭 막대 바로 아래에 붙어서, 검색창을 위에 두면 로고 줄과 탭 줄
     # 사이에 끼어 한 줄짜리 상단바를 만들 수 없다.
     # 검색어를 쓰는 곳이 이 하위 탭 세 개뿐이라 여기 맨 위로 옮겼다.
+    # ⚠️ 처음 들어온 사람에게 표부터 보여주면 무엇을 하는 도구인지 모른다.
+    # 아직 아무것도 안 친 상태에서만 문장 하나 + 큰 검색창으로 화면을 비운다.
+    # ⚠️ '비었는가'는 검색창을 읽어봐야 알 수 있는데, 히어로는 검색창 위에
+    # 그려져야 한다. 자리를 먼저 잡아두고 나중에 채운다.
+    _hero_slot = st.container()
+
     with st.container(border=True):
         kc1, kc2 = st.columns([5, 1])
         with kc1:
             kw_input = st.text_input(
                 "조사할 키워드",
-                placeholder="분석할 키워드를 입력하세요",
+                placeholder="분석할 키워드를 입력하세요  ·  예) 캠핑의자, 제주도맛집",
                 key="research_kw",
                 label_visibility="collapsed")
         with kc2:
-            searched = st.button("🔍 분석", use_container_width=True,
+            searched = st.button("분석하기", use_container_width=True,
                                  key="research_go", type="primary")
+
+    _empty = not (kw_input or "").strip() and not st.session_state.get("active_kw")
+    if _empty:
+        with _hero_slot:
+            ui.hero()
+        # 오늘 수집된 것 중 뜨는 키워드를 예시로 보여준다 (누르는 게 아니라 참고용)
+        _ex = []
+        try:
+            if not df.empty:
+                _hot = latest_snapshot(df[df['source'] == 'google_trend'], hours=24)
+                _ex = [k for k in _hot['keyword'].head(4).tolist() if k]
+        except Exception:
+            _ex = []
+        _stat = ""
+        if not df.empty:
+            _stat = (f"지금까지 <b>{len(df):,}</b>개 키워드를 재뒀습니다"
+                     f" · 마지막 수집 <b>{_fresh or '—'}</b>")
+        ui.hero_after(
+            "".join(f'<span class="hero-chip">{e}</span>' for e in _ex), _stat)
 
     if searched and kw_input.strip():
         st.session_state["active_kw"] = kw_input.strip()
@@ -659,20 +731,35 @@ with sub_research[0]:
         if not _registered:
             st.caption("블로그 주소를 입력하시면 키워드마다 뚫을 수 있는지 보여드립니다.")
 
-    ui.section("단일 키워드 진단", "이 키워드, 지금 뛰어들어도 될까")
-
     kw = research_kw
-    if not kw:
-        ui.note("위 칸에 키워드를 넣어보세요. 이 화면과 "
-                "<b>상위노출 해부</b>, <b>글감 만들기</b>가 한꺼번에 채워집니다.", gold=True)
+    if kw:
+        ui.section("단일 키워드 진단", "이 키워드, 지금 뛰어들어도 될까")
 
     if kw:
         with st.spinner(f"'{kw}' 측정 중"):
             r = analyze_keyword(kw.strip())
 
-        # 추적 중인 키워드라면 '추세' 축을 채워 기회 점수를 다시 낸다.
-        # (추적기 자세히에서만 보이던 값이 여기서도 보이게)
-        _chg = tracked_change_pct(kw.strip())
+        # --- 추세 ---------------------------------------------
+        # ⚠️ 예전에는 추적 기록이 있어야만 '추세'가 채워졌다.
+        # 이제 데이터랩에서 1년치를 바로 받아오므로, 처음 보는 키워드도
+        # 첫 조회에 추세가 나온다. 데이터랩이 막히면 추적 기록으로 물러난다.
+        # ⚠️ 추이와 광고 단가는 서로 다른 서버라 순서대로 부르면 두 번 기다린다.
+        # 동시에 던지면 둘 중 느린 것만큼만 걸린다.
+        with ThreadPoolExecutor(max_workers=2) as _pool:
+            _f_trend = _pool.submit(keyword_trend, kw.strip(),
+                                    r.get('total_search'))
+            _f_bid = _pool.submit(keyword_min_bid, kw.strip())
+            try:
+                _trend = _f_trend.result()
+            except Exception:
+                _trend = None
+            try:
+                _bid = _f_bid.result()
+            except Exception:
+                _bid = None
+        _chg = _trend.get('change_pct') if _trend else None
+        if _chg is None:
+            _chg = tracked_change_pct(kw.strip())
         if _chg is not None:
             try:
                 r['opportunity'] = calc_opportunity(
@@ -734,6 +821,21 @@ with sub_research[0]:
         with d2:
             if opp.get("breakdown"):
                 ui.score_breakdown(opp["breakdown"], opp["score"])
+
+        # --- 1년 추이 + 황금 키워드 -----------------------------
+        st.write("")
+        if _trend and _trend.get("points"):
+            ui.trend_chart(_trend["points"],
+                           title="1년 검색 추이",
+                           change_pct=_trend.get("change_pct"),
+                           abs_points=_trend.get("abs"))
+
+        _gold = calc_gold_score(r.get('total_search'), r.get('doc_count'),
+                                _bid, r.get('comp_ratio'))
+        if _gold:
+            ui.gold_card(_gold, min_bid=_bid,
+                         income=estimate_monthly_income(r.get('total_search'), 3),
+                         season=seasonality_note(_trend) if _trend else None)
 
         st.write("")
         if r.get('comp_ratio') is not None:
@@ -1007,6 +1109,7 @@ with sub_research[0]:
                     # 막대는 한눈에 보라고, 표는 숫자를 정확히 보라고 둔다.
                     st.write("")
                     show_table(rel_df)
+                    csv_button(rel_df, f"기회키워드_{r['keyword']}", "csv_rank")
 
         # --- 연관 키워드 전체 ---
         # 네이버가 주는 걸 다 보여준다. 사냥 지도는 문서수까지 재느라
@@ -1061,7 +1164,11 @@ with sub_research[0]:
                         lambda v: f"{int(v):,}" if pd.notna(v) else "—")
                     adf.index = adf.index + 1
                     show_table(adf, height=440)
-                    st.caption(f"{len(rows_all)}개 표시 · 전체 {len(all_rel)}개")
+                    ec1, ec2 = st.columns([3, 1])
+                    with ec1:
+                        st.caption(f"{len(rows_all)}개 표시 · 전체 {len(all_rel)}개")
+                    with ec2:
+                        csv_button(adf, f"연관키워드_{r['keyword']}", "csv_rel_all")
 
 
 # ------------------------------------------------------------
@@ -1097,6 +1204,13 @@ with sub_research[1]:
         if not serp:
             ui.note("검색 결과를 가져오지 못했습니다. API 키 설정을 확인해주세요.")
         else:
+            # 💡 상위 10칸을 한 칸씩 채점 — 이 제품에서 가장 눈에 띄는 화면
+            _base = serp if sort_key == "sim" else None
+            if _base is None:
+                _base = load_serp(serp_kw.strip(), "sim")[0]
+            ui.weak_strip(weak_spots(_base, serp_kw.strip()), serp_kw)
+            st.write("")
+
             head = "최신 발행순 10개" if sort_key == "date" else "노출 순위 상위 10개"
             ui.section(head, "제목과 발행 시점")
             if my_blog_id:
@@ -1403,6 +1517,41 @@ with tabs[1]:
                 "opp_note": opp.get("note", ""),
             })
 
+        # --- 우리 점수, 맞았을까 --------------------------------
+        # ⚠️ 이 화면이 이 제품의 유일한 해자다.
+        # 모든 경쟁사가 경쟁강도 점수를 팔지만, "그 점수를 믿고 썼을 때
+        # 실제로 몇 위에 갔는지"를 되짚어주는 곳은 한 곳도 없다.
+        # 우리는 예측(기회 점수)과 결과(실제 순위)를 이미 나란히 갖고 있다.
+        # ⚠️ summary의 "opportunity"는 점수(정수)다. 딕셔너리가 아니다.
+        _judged = [x for x in summary
+                   if x.get("has_post") and x.get("opportunity") is not None]
+        if len(_judged) >= 3:
+            def _hit(x):
+                # 30위 안에 들었으면 '맞춘 것'으로 본다 (1페이지 언저리)
+                return x.get("rank") is not None and x["rank"] <= 30
+
+            _buckets = [("70점 이상", 70, 101), ("40~69점", 40, 70),
+                        ("40점 미만", 0, 40)]
+            rows_b = []
+            for lbl, lo, hi in _buckets:
+                grp = [x for x in _judged if lo <= int(x["opportunity"]) < hi]
+                rows_b.append((lbl, len(grp), sum(1 for x in grp if _hit(x))))
+
+            _hits = sum(1 for x in _judged if _hit(x))
+            _ranked = [x["rank"] for x in _judged if x.get("rank")]
+            ui.hit_rate({
+                "n": len(_judged),
+                "hit": _hits,
+                "rate": _hits / len(_judged) * 100,
+                "avg_rank": (sum(_ranked) / len(_ranked)) if _ranked else None,
+                "buckets": rows_b,
+            })
+            st.write("")
+        elif _judged:
+            ui.note(f"발행한 키워드가 <b>{len(_judged)}개</b> 모였습니다. "
+                    "<b>3개</b>부터 우리 점수의 적중률을 계산해 보여드립니다.", gold=True)
+            st.write("")
+
         # ⚠️ 예전에는 '내가 쓴'과 '지켜보는'을 위아래로 갈라 두 묶음으로 그렸다.
         # 그런데 개수가 적을 땐 화면만 두 번 끊길 뿐이고, 어차피 카드 색과
         # 딱지로 구분이 된다. 한 줄로 이어 붙이되 쓴 것을 앞으로 보낸다.
@@ -1708,8 +1857,37 @@ else:
                 "<small>검색량이 오르는 중이면 위로 올라옵니다. 다만 네이버 검색량은 "
                 "월 단위 집계라 며칠로는 잘 안 변합니다.</small>", gold=True)
         st.write("")
-        _, h = period_picker("gt_period", kind="slow", default="일별")
+        gc1, gc2 = st.columns([1, 1])
+        with gc1:
+            _, h = period_picker("gt_period", kind="slow", default="일별")
+        with gc2:
+            money_first = st.checkbox(
+                "💰 돈 되는 순서로 보기", value=False, key="gt_money",
+                help="광고 최소 입찰가를 함께 조회해 '찾는 사람 × 안 붐빔 × 단가'로 다시 줄 세웁니다. "
+                     "네이버 호출을 한 번 더 씁니다.")
         golden = latest_snapshot(df[df['source'] == 'golden_time'], hours=h)
+
+        # 💰 광고 단가를 붙여 '황금 점수'로 다시 정렬한다.
+        # ⚠️ 국내 어떤 도구도 최소노출입찰가를 키워드 발굴에 쓰지 않는다.
+        # 100개까지 한 번의 호출로 끝나므로 비용이 거의 들지 않는다.
+        if money_first and not golden.empty:
+            _kws = golden['keyword'].head(100).tolist()
+            with st.spinner("광고 단가를 조회하는 중"):
+                _bids = cached_min_bids(tuple(_kws))
+            if _bids:
+                golden = golden.copy()
+                golden['광고단가'] = golden['keyword'].map(_bids)
+                golden['황금 점수'] = [
+                    (calc_gold_score(row['총 검색량'],
+                                     row.get('blog_total_docs'),
+                                     _bids.get(row['keyword']),
+                                     row.get('comp_ratio')) or {}).get('score')
+                    for _, row in golden.iterrows()]
+                golden = golden.sort_values('황금 점수', ascending=False)
+            else:
+                ui.note("광고 단가를 가져오지 못했습니다. "
+                        "검색광고 API 키를 확인하거나 잠시 후 다시 시도해주세요.")
+                money_first = False
         # ⚠️ 비어 있을 때 수집 안내를 띄우면 고장 난 것처럼 보인다.
         # 실제로는 '조건을 통과한 키워드가 없는' 정상 상태다.
         GT_EMPTY = "추천할만한 키워드가 아직은 없습니다."
@@ -1724,18 +1902,22 @@ else:
             # 실제로 건질 게 있는 '파생 키워드'를 맨 앞으로 둔다.
             sub = st.tabs(["🔍 파생 키워드", "🔥 오늘 트렌드", "전체"])
             _extra = [('blog_competition', '최근 30일 글')]
+            _sort = 'rise_score'
+            if money_first and '황금 점수' in golden.columns:
+                _extra = [('황금 점수', '황금 점수'), ('광고단가', '광고단가')] + _extra
+                _sort = '황금 점수' 
             with sub[0]:
                 render_table(golden[golden['keyword_category'] == '세부'],
-                             sort_col='rise_score', show_docs=False,
+                             sort_col=_sort, show_docs=False,
                              limit=20, extra_cols=_extra,
                              empty_msg=GT_EMPTY)
             with sub[1]:
                 render_table(golden[golden['keyword_category'] == '트렌드'],
-                             sort_col='rise_score', show_docs=False,
+                             sort_col=_sort, show_docs=False,
                              limit=20, extra_cols=_extra,
                              empty_msg=GT_EMPTY)
             with sub[2]:
-                render_table(golden, sort_col='rise_score', show_docs=False,
+                render_table(golden, sort_col=_sort, show_docs=False,
                              limit=40, extra_cols=_extra,
                              empty_msg=GT_EMPTY)
 

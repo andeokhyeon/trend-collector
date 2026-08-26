@@ -1808,3 +1808,300 @@ def autocomplete_keywords(keyword, expand=True, limit=60):
         out.append(t)
 
     return _cache_put(ck, out[:limit])
+
+# ============================================================
+# 💡 신규 ① 데이터랩 검색어트렌드 — '추세'를 추적 없이 바로 얻는다
+# ============================================================
+#
+# ⚠️ 왜 필요한가.
+# 기회 점수 네 축 중 '추세'만 한 번의 조회로는 알 수 없었다.
+# 같은 키워드를 여러 날 재봐야 나오는 값이라, 추적기에 넣지 않은 키워드는
+# 영원히 '추적하면 표시'로 비어 있었다.
+#
+# 그런데 네이버 데이터랩은 2016년 1월부터의 일별 추이를 그냥 준다.
+# 인증도 지금 블로그 검색에 쓰는 오픈API 키(HUB)와 같은 것을 쓴다.
+#
+# ⚠️ 한 가지 함정 — 응답의 ratio는 '그 요청 안에서의 최댓값=100' 상대값이다.
+# 그래서 서로 다른 호출의 ratio끼리 비교하면 안 된다. (성별/연령 비교가
+# 불가능한 이유도 이것이다. 필터를 걸면 그 안에서 다시 정규화된다.)
+# 대신 한 응답 안에서의 시점 간 비교는 정확하고,
+# 검색광고가 주는 '월간 절대 검색량'을 앵커로 삼으면 절대값 복원이 된다.
+
+DATALAB_URL = "https://openapi.naver.com/v1/datalab/search"
+
+
+def get_search_trend(keyword, days=365, time_unit="date", total_search=None):
+    """
+    검색어트렌드. 반환:
+      {
+        "points":   [(YYYY-MM-DD, ratio), ...],
+        "abs":      [(YYYY-MM-DD, 추정 검색수), ...]   # total_search를 준 경우만
+        "change_pct": 최근 30일 vs 직전 30일 변화율(%) | None,
+        "peak":     ("YYYY-MM-DD", ratio)  # 1년 중 가장 높았던 날
+      }
+    실패하면 None. (키가 없거나 한도 초과여도 앱은 그대로 돌아가야 한다)
+    """
+    if not keyword or not keyword.strip():
+        return None
+    if not NAVER_HUB_CLIENT_ID or not NAVER_HUB_CLIENT_SECRET:
+        return None
+
+    kw = keyword.strip()
+    ck = ("trend", kw, days, time_unit)
+    cached = _cache_get(ck)
+    if cached is None:
+        end = datetime.now(timezone.utc) + timedelta(hours=9)      # KST
+        start = end - timedelta(days=days)
+        body = {
+            "startDate": start.strftime("%Y-%m-%d"),
+            "endDate": end.strftime("%Y-%m-%d"),
+            "timeUnit": time_unit,
+            # ⚠️ 그룹 이름에 특수문자가 있으면 400이 난다. 키워드를 그대로 쓰되
+            # 조회 대상은 keywords 배열이므로 이름은 안전한 값으로 고정한다.
+            "keywordGroups": [{"groupName": "kw", "keywords": [kw]}],
+        }
+        headers = {
+            "X-Naver-Client-Id": NAVER_HUB_CLIENT_ID,
+            "X-Naver-Client-Secret": NAVER_HUB_CLIENT_SECRET,
+            "Content-Type": "application/json",
+        }
+        try:
+            _count_call()
+            res = requests.post(DATALAB_URL, headers=headers,
+                                json=body, timeout=8)
+            if res.status_code != 200:
+                return None
+            results = res.json().get("results") or []
+            data = (results[0].get("data") if results else []) or []
+            cached = [(d.get("period"), float(d.get("ratio") or 0))
+                      for d in data if d.get("period")]
+            _cache_put(ck, cached)
+        except Exception:
+            return None
+
+    pts = cached or []
+    if len(pts) < 8:
+        return None
+
+    def _avg(seq):
+        return (sum(v for _, v in seq) / len(seq)) if seq else 0.0
+
+    # 최근 30일 vs 직전 30일. 일별이 아니면 구간을 비례해 잡는다.
+    span = 30 if time_unit == "date" else max(4, len(pts) // 12)
+    recent, prev = pts[-span:], pts[-span * 2:-span]
+    change = None
+    if prev and _avg(prev) > 0:
+        change = round((_avg(recent) - _avg(prev)) / _avg(prev) * 100, 1)
+
+    out = {"points": pts, "change_pct": change,
+           "peak": max(pts, key=lambda x: x[1])}
+
+    # 절대값 복원 — 최근 30일 ratio 합이 곧 월간 검색량이라고 보고 배율을 낸다
+    if total_search:
+        s = sum(v for _, v in recent) or 0
+        if s > 0:
+            k = total_search / s
+            out["abs"] = [(d, int(v * k)) for d, v in pts]
+    return out
+
+
+def seasonality_note(trend):
+    """
+    1년 추이에서 '이 키워드가 지금 어느 계절인지'를 한 줄로 말해준다.
+    peak가 몇 달 뒤면 '미리 써두면 유리한 키워드'라는 뜻이다.
+    """
+    if not trend or not trend.get("points"):
+        return None
+    try:
+        peak_day = datetime.strptime(trend["peak"][0][:10], "%Y-%m-%d")
+    except Exception:
+        return None
+    now = datetime.now(timezone.utc) + timedelta(hours=9)
+    # 작년 같은 시기의 고점을 올해로 옮겨 본다
+    nxt = peak_day.replace(year=now.year)
+    if nxt < now.replace(tzinfo=None):
+        nxt = nxt.replace(year=now.year + 1)
+    gap = (nxt - now.replace(tzinfo=None)).days
+    if gap <= 14 or gap >= 351:
+        return ("지금이 성수기",
+                f"작년 고점이 {peak_day.strftime('%m월 %d일')}이었습니다", "now")
+    if gap <= 120:
+        return (f"{gap}일 뒤가 성수기",
+                f"작년 고점 {peak_day.strftime('%m월')} · 지금 써두면 선점됩니다", "soon")
+    return (f"성수기는 {peak_day.strftime('%m월')}",
+            f"지금은 비수기입니다 ({gap}일 뒤 고점)", "off")
+
+
+# ============================================================
+# 💡 신규 ② 최소노출입찰가 — 키워드의 '돈값'을 잰다
+# ============================================================
+#
+# 검색광고 Estimate API는 광고를 집행하지 않아도, 키워드를 등록하지 않아도
+# "이 키워드에 광고를 띄우려면 최소 얼마가 드는가"를 알려준다.
+# 광고주가 그 돈을 낸다는 건 그 검색어에 그만한 상업적 가치가 있다는 뜻이다.
+#
+# 국내 키워드 도구 중 이 값을 '키워드 발굴'에 쓰는 곳이 없다.
+
+def get_min_bids(keywords, device="PC"):
+    """
+    여러 키워드의 최소노출입찰가(원)를 한 번에. 반환 {키워드: 입찰가}.
+    실패하면 빈 dict — 없으면 없는 대로 화면이 돌아가야 한다.
+    """
+    items = [k.strip() for k in (keywords or []) if k and k.strip()][:100]
+    if not items:
+        return {}
+    if not NAVER_API_KEY or not NAVER_SECRET_KEY or not NAVER_CUSTOMER_ID:
+        return {}
+
+    ck = ("minbid", device, "|".join(sorted(items)))
+    cached = _cache_get(ck)
+    if cached is not None:
+        return cached
+
+    path = "/estimate/exposure-minimum-bid/keyword"
+    out = {}
+    try:
+        _count_call()
+        res = requests.post(
+            NAVER_BASE_URL + path,
+            headers={**get_naver_headers("POST", path),
+                     "Content-Type": "application/json; charset=UTF-8"},
+            json={"device": device, "keywordplus": False, "items": items},
+            timeout=10)
+        if res.status_code == 200:
+            body = res.json()
+            rows = body.get("estimate") or body.get("estimates") or []
+            for i, row in enumerate(rows):
+                # 응답이 키워드를 안 돌려주는 버전이 있어서 순서로도 맞춘다
+                k = row.get("keyword") or (items[i] if i < len(items) else None)
+                bid = row.get("bid")
+                if k and bid is not None:
+                    out[k] = int(bid)
+    except Exception:
+        return {}
+    return _cache_put(ck, out)
+
+
+# 애드포스트 1,000회 노출당 대략 수익(원). 주제·계절에 따라 크게 흔들리므로
+# 단정하지 않고 범위로 보여주기 위한 기준값이다.
+ADPOST_RPM_LOW = 500
+ADPOST_RPM_HIGH = 1500
+
+
+def calc_gold_score(total_search, doc_count, min_bid, comp_ratio=None):
+    """
+    황금 키워드 점수(0~100) — '찾는 사람 × 안 붐빔 × 돈이 되는가'.
+
+    ⚠️ 기존 기회 점수와 무엇이 다른가.
+    기회 점수는 '내가 상위에 갈 수 있는가'만 본다. 그래서 아무도 돈을 안 쓰는
+    키워드도 1등 하기 쉬우면 높은 점수가 나온다. 여기서는 광고주가 실제로
+    지불하는 금액을 곱해, '가서 이겨봤자 남는 게 있는가'까지 본다.
+    """
+    import math
+    if not total_search:
+        return None
+
+    demand = min(1.0, math.log10(max(total_search, 1)) / 5.0)     # 10만이면 1.0
+    if comp_ratio is None and doc_count:
+        comp_ratio = doc_count / total_search
+    room = 1.0 / (1.0 + max(comp_ratio or 0, 0))                  # 낮을수록 좋음
+
+    if min_bid:
+        # 70원(최저) ~ 3,000원 구간을 로그로 편다
+        value = min(1.0, max(0.0, (math.log10(max(min_bid, 70)) - math.log10(70))
+                             / (math.log10(3000) - math.log10(70))))
+    else:
+        value = None
+
+    if value is None:
+        score = 100 * (0.55 * demand + 0.45 * room)
+        basis = "입찰가 없음"
+    else:
+        score = 100 * (0.32 * demand + 0.30 * room + 0.38 * value)
+        basis = "입찰가 반영"
+    return {"score": int(round(score)), "demand": demand,
+            "room": room, "value": value, "basis": basis}
+
+
+def estimate_monthly_income(total_search, rank=3):
+    """
+    이 키워드로 특정 순위에 올랐을 때의 월 수익 추정 범위(원).
+    ⚠️ 추정이다. 애드포스트 단가는 주제·계절·클릭 성향에 따라 크게 흔들린다.
+    """
+    visits = expected_visits(total_search, rank)
+    if not visits:
+        return None
+    return (int(visits * ADPOST_RPM_LOW / 1000),
+            int(visits * ADPOST_RPM_HIGH / 1000), visits)
+
+
+# ============================================================
+# 💡 신규 ③ 약한 고리 — 상위 10칸을 한 칸씩 채점한다
+# ============================================================
+#
+# ⚠️ 왜 평균이 아니라 칸별인가.
+# 경쟁강도를 하나의 평균 점수로 뭉개면 "이 키워드는 어렵다"까지만 알 수 있다.
+# 그런데 신규 블로거가 노리는 건 SERP 전체가 아니라 '10칸 중 한 칸'이다.
+# 평균 62점짜리 키워드라도 그 안에 2007년 글이 세 자리 있으면 들어갈 만하다.
+#
+# ⚠️ 무엇으로 '약하다'고 보는가 — 공개 검색 API가 주는 것만 쓴다.
+#   · 제목에 키워드가 없다      → 그 자리는 이 주제의 글이 아니다 (가장 큰 빈틈)
+#   · 2년 넘게 안 고쳐진 글      → 정보가 낡았다
+#   · 1년 넘은 글               → 밀어낼 여지가 있다
+#   · 최근 3개월 안의 글         → 지금 경쟁 중이라 어렵다
+#   · 한 블로거가 여러 자리      → 그 주제의 강자가 버티고 있다
+# 본문 길이·이미지 수는 검색 API가 주지 않으므로 쓰지 않는다. (지어내지 않는다)
+
+def weak_spots(serp, keyword, top_n=10):
+    """
+    반환:
+      {"slots":[{"rank","kind","label","title","blogger","age_days"}],
+       "open": 공략 가능한 칸 수, "total": 본 칸 수, "verdict": 한 줄 판정}
+    kind: open(초록) / mid(노랑) / hard(빨강) / boss(강자)
+    """
+    top = (serp or [])[:top_n]
+    if not top:
+        return None
+
+    key = (keyword or "").replace(" ", "")
+    counts = {}
+    for s in top:
+        b = s.get("blog_id") or ""
+        if b:
+            counts[b] = counts.get(b, 0) + 1
+    bosses = {b for b, n in counts.items() if n >= 3}
+
+    slots = []
+    for s in top:
+        title = (s.get("title") or "").replace(" ", "")
+        age = s.get("age_days")
+        bid = s.get("blog_id") or ""
+
+        if bid and bid in bosses:
+            kind, label = "boss", "이 주제 강자"
+        elif key and key not in title:
+            kind, label = "open", "주제가 다름"
+        elif age is not None and age >= 730:
+            kind, label = "open", f"{age // 365}년 전 글"
+        elif age is not None and age >= 365:
+            kind, label = "open", "1년 넘은 글"
+        elif age is not None and age <= 90:
+            kind, label = "hard", "최근 글"
+        else:
+            kind, label = "mid", "보통"
+
+        slots.append({"rank": s.get("rank"), "kind": kind, "label": label,
+                      "title": s.get("title"), "blogger": s.get("blogger"),
+                      "age_days": age})
+
+    open_n = sum(1 for x in slots if x["kind"] == "open")
+    if open_n >= 4:
+        verdict = "들어갈 자리가 넉넉합니다"
+    elif open_n >= 2:
+        verdict = "노려볼 만한 자리가 있습니다"
+    elif open_n == 1:
+        verdict = "자리는 하나뿐입니다"
+    else:
+        verdict = "빈 자리가 없습니다"
+    return {"slots": slots, "open": open_n, "total": len(slots),
+            "verdict": verdict}
