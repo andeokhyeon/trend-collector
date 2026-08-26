@@ -213,10 +213,11 @@ def compact_num(v):
 
 COL_WIDTH = {
     # 이름 : (폭, 표시형식)
-    '키워드': ("large", None),
-    '이벤트': ("large", None),
+    # 키워드는 대개 20자 안쪽이라 large면 남는 공간을 다 먹는다.
+    '키워드': ("medium", None),
+    '이벤트': ("medium", None),
     '제목': ("large", None),
-    '세부 주제': ("large", None),
+    '세부 주제': ("medium", None),
     '진단': ("medium", None),
     '판단': ("medium", None),
     '월 검색량': ("small", "%d"),
@@ -678,13 +679,9 @@ with sub_research[0]:
                     "측정된 숫자를 읽고 '써라 / 조건부 / 피해라'를 근거와 함께 알려줍니다.",
                     gold=True)
 
-        if r.get("related"):
-            ui.note("↓ 아래에 <b>🏹 사냥 지도</b>가 있습니다. "
-                    "연관 키워드를 검색량·문서수 좌표에 흩뿌려서, "
-                    "어느 키워드가 노려볼 만한 구역에 있는지 색으로 구분해 보여줍니다.")
 
         st.divider()
-        ui.section("사냥 순위", "노려볼 만한 연관 키워드 10개")
+        ui.section("노려볼 만한 연관 키워드", "")
 
         rel = r.get("related", [])
         if not rel:
@@ -716,12 +713,6 @@ with sub_research[0]:
             if not avail:
                 ui.note("이 키워드를 포함한 연관어가 없습니다. "
                         "위 체크를 끄면 같은 업종의 다른 키워드까지 볼 수 있습니다.")
-            else:
-                _no_vol = sum(1 for i in pool_rel
-                              if (i["monthly_pc"] + i["monthly_mobile"]) == 0)
-                if _no_vol:
-                    st.caption(f"후보 {len(avail)}개 중 {_no_vol}개는 검색량을 "
-                               "아직 모릅니다. 순위를 매길 때 함께 조회합니다.")
             # 버튼을 눌렀을 때만 잰다.
             # 키워드를 칠 때마다 자동으로 API를 쓰면 호출 한도가 금방 닳는다.
             # 10개 고정. 고를 이유가 없고, 선택지가 늘면 화면만 복잡해진다.
@@ -878,8 +869,6 @@ with sub_research[0]:
                           "docs": r.get("doc_count")},
                     limit=10)
 
-                with st.expander("표로 보기"):
-                    show_table(rel_df)
 
         # --- 연관 키워드 전체 ---
         # 네이버가 주는 걸 다 보여준다. 사냥 지도는 문서수까지 재느라
@@ -893,12 +882,6 @@ with sub_research[0]:
             # 네이버는 띄어쓰기에 민감해서 '반딧불축제'와 '반딧불 축제'가
             # 다른 결과를 준다. 그래서 여러 형태로 나눠 묻는다.
             _hints = r.get("hints") or []
-            _ac_count = sum(1 for i in all_rel if i.get("source") == "자동완성")
-            if _ac_count:
-                ui.note(f"이 중 <b>{_ac_count}개</b>는 네이버 검색창 자동완성에서 "
-                        "가져왔습니다. 검색광고 데이터에 없는 이슈·뉴스 키워드까지 "
-                        "찾기 위해서입니다. 검색량은 그 키워드를 직접 조회해야 나옵니다.")
-
             if len(_hints) > 1:
                 chips = " ".join(
                     f'<span class="hint-chip">{h}</span>' for h in _hints)
@@ -931,42 +914,6 @@ with sub_research[0]:
             if not rows_all:
                 ui.note("조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요.")
             else:
-                # 자동완성으로 온 것은 검색량을 모른다.
-                # 한 번에 채워주면 어느 게 쓸 만한지 바로 판단할 수 있다.
-                _unknown = [x["키워드"] for x in rows_all
-                            if x["월 검색량"] is None]
-                if _unknown:
-                    uc1, uc2 = st.columns([1, 3])
-                    with uc1:
-                        fill = st.button(f"검색량 채우기 ({len(_unknown)}개)",
-                                         key="fill_vol",
-                                         use_container_width=True)
-                    with uc2:
-                        st.caption("자동완성으로 찾은 키워드의 검색량을 한 번에 조회합니다. "
-                                   f"약 {max(1, (len(_unknown) + 4) // 5)}회 조회가 필요합니다.")
-
-                    if fill:
-                        @st.cache_data(ttl=1800, show_spinner=False)
-                        def fill_volumes(words):
-                            """5개씩 묶어 조회한다 (한 번에 5개까지 가능)."""
-                            out = {}
-                            for i in range(0, len(words), 5):
-                                try:
-                                    out.update(get_volumes(words[i:i + 5]))
-                                except Exception:
-                                    pass
-                            return out
-
-                        with st.spinner("검색량을 조회하는 중..."):
-                            found = fill_volumes(tuple(_unknown))
-                        for x in rows_all:
-                            if x["월 검색량"] is None:
-                                v = found.get(x["키워드"].replace(" ", "").upper())
-                                if v is not None:
-                                    x["월 검색량"] = v
-                        st.success(f"{sum(1 for v in found.values() if v)}개의 "
-                                   "검색량을 찾았습니다.")
-
                 adf = pd.DataFrame(rows_all).sort_values(
                     "월 검색량", ascending=False,
                     na_position="last").reset_index(drop=True)

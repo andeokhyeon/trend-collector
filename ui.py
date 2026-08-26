@@ -846,7 +846,7 @@ font-family: 'IBM Plex Mono', monospace;
 }}
 .hb-row {{
 display: grid;
-grid-template-columns: 130px 1fr 150px;
+grid-template-columns: 130px 1fr 190px;
 align-items: center; gap: 11px;
 padding: 7px 0;
 }}
@@ -873,6 +873,17 @@ font-family: 'IBM Plex Mono', monospace;
 font-size: .76rem; color: {MUTED};
 font-family: 'IBM Plex Mono', monospace;
 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}}
+/* 표 — 컬럼이 화면 전체로 벌어지지 않게 */
+.stDataFrame {{ max-width: 100%; }}
+.stDataFrame [role="columnheader"],
+.stDataFrame [role="gridcell"] {{
+padding-left: 10px !important; padding-right: 10px !important;
+}}
+/* 첫 컬럼(대개 키워드)이 지나치게 넓어지는 것을 막는다 */
+.stDataFrame [role="row"] > [role="gridcell"]:nth-child(2),
+.stDataFrame [role="row"] > [role="columnheader"]:nth-child(2) {{
+max-width: 320px;
 }}
 /* 상단 정보 줄 *//* 상단 정보 줄 */
 .topbar {{
@@ -2034,6 +2045,18 @@ def since_compare(data, since_label=""):
         f'</div>', unsafe_allow_html=True)
 
 
+def _short_num(v):
+    """큰 수를 짧게. 막대 옆 좁은 자리에 그대로 쓰면 잘린다."""
+    if v is None:
+        return "—"
+    v = int(v)
+    if v >= 100_000_000:
+        return f"{v / 100_000_000:.1f}억"
+    if v >= 10_000:
+        return f"{v / 10_000:.1f}만"
+    return f"{v:,}"
+
+
 def hunt_rank(items, main=None, limit=10):
     """
     🏹 사냥 순위 — 노려볼 만한 순서대로 가로 막대로 세운다.
@@ -2052,31 +2075,38 @@ def hunt_rank(items, main=None, limit=10):
     top = max((r.get("score", 0) for r in rows), default=1) or 1
 
     parts = []
-    for it in rows:
+    for rank, it in enumerate(rows, 1):
         score = it.get("score", 0)
         label = it.get("label", "")
-        # 진단 색을 기본으로 쓰되, 없으면 점수대로 색을 정한다.
-        # 막대만 보고도 좋고 나쁨이 바로 읽혀야 한다.
-        color = GRADE_COLORS.get(label)
-        if not color:
-            color = (GOOD if score >= 70 else
-                     (GOLD if score >= 55 else
-                      (WARN if score >= 40 else BAD)))
+        # 1~3위는 눈에 띄는 색을 쓰고, 그 아래는 점수대로 정한다.
+        if rank <= 3:
+            color = (GOLD, "#7B9E8B", "#A8A093")[rank - 1]
+        else:
+            color = GRADE_COLORS.get(label)
+            if not color:
+                color = (GOOD if score >= 70 else
+                         (GOLD if score >= 55 else
+                          (WARN if score >= 40 else BAD)))
         width = max(6, int(score / top * 100))
 
         search = it.get("search") or 0
         docs = it.get("docs")
-        docs_txt = f"{docs:,}" if docs is not None else "—"
-        tip = f"{it['keyword']} · {label} · 검색 {search:,} · 글 {docs_txt}"
+        # 큰 수는 줄여서 표시한다. 그대로 두면 오른쪽에서 잘린다.
+        search_txt = _short_num(search)
+        docs_txt = _short_num(docs) if docs is not None else "—"
+        tip = (f"{it['keyword']} · {label} · "
+               f"검색 {search:,} · 글 {docs:,}" if docs is not None
+               else f"{it['keyword']} · {label} · 검색 {search:,}")
 
         parts.append(
             f'<div class="hb-row" title="{_esc(tip)}">'
             f'<span class="hb-kw">{_esc(it["keyword"])}</span>'
             f'<div class="hb-track">'
-            f'<div class="hb-fill" style="width:{width}%;background:{color}">'
+            f'<div class="hb-fill" style="width:{width}%;'
+            f'background:linear-gradient(90deg,{color}B3,{color})">'
             f'<span class="hb-score">{score}</span></div>'
             f'</div>'
-            f'<span class="hb-sub">검색 {search:,} · 글 {docs_txt}</span>'
+            f'<span class="hb-sub">검색 {search_txt} · 글 {docs_txt}</span>'
             f'</div>')
 
     head = ""
