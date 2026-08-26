@@ -573,11 +573,19 @@ tabs = _all_tabs[:4]
 admin_tab = _all_tabs[4] if _has_admin else None
 
 with tabs[0]:
+    sub_research = st.tabs(["키워드 분석", "상위노출 해부", "글감 만들기"])
+with tabs[3]:
+    sub_discover = st.tabs(["구글 트렌드", "골든타임", "주간 캘린더", "뉴스"])
+
+# ------------------------------------------------------------
+# 1. 키워드 분석
+# ------------------------------------------------------------
+with sub_research[0]:
     # --- 검색창 ---
     # ⚠️ 예전에는 탭 바깥(맨 위)에 뒀다. 그런데 Streamlit은 탭 내용이
     # 탭 막대 바로 아래에 붙어서, 검색창을 위에 두면 로고 줄과 탭 줄
     # 사이에 끼어 한 줄짜리 상단바를 만들 수 없다.
-    # 검색어를 쓰는 곳이 '키워드 조사' 탭뿐이라 이 안으로 옮겼다.
+    # 검색어를 쓰는 곳이 이 하위 탭 세 개뿐이라 여기 맨 위로 옮겼다.
     with st.container(border=True):
         kc1, kc2 = st.columns([5, 1])
         with kc1:
@@ -622,28 +630,13 @@ with tabs[0]:
                     st.session_state.pop("blog_id", None)
                 st.rerun()
         if not _registered:
-            st.caption("등록하면 키워드마다 '내 블로그로 뚫을 수 있는지'까지 계산합니다.")
+            st.caption("블로그 주소를 입력하시면 키워드마다 뚫을 수 있는지 보여드립니다.")
 
-    sub_research = st.tabs(["키워드 분석", "상위노출 해부", "글감 만들기"])
-with tabs[3]:
-    sub_discover = st.tabs(["구글 트렌드", "골든타임", "주간 캘린더", "뉴스"])
-
-# ------------------------------------------------------------
-# 1. 키워드 분석
-# ------------------------------------------------------------
-with sub_research[0]:
     ui.section("단일 키워드 진단", "이 키워드, 지금 뛰어들어도 될까")
-    ui.note(
-        "두 가지를 따로 봅니다.<br>"
-        "<b>누적 문서수</b> — 지금까지 쌓인 글. 시장이 얼마나 포화됐는지<br>"
-        "<b>최근 30일 발행</b> — 요즘 쓰이는 글. 지금 사람들이 몰리고 있는지<br>"
-        "둘 다 월 검색량과 비교합니다. 특히 <b>누적은 많은데 최근이 한산한</b> 키워드는, "
-        "오래된 글만 남아 있다는 뜻이라 새 글로 밀어낼 여지가 있습니다.")
-    st.write("")
 
     kw = research_kw
     if not kw:
-        ui.note("위쪽 입력칸에 키워드를 넣으면 이 탭과 "
+        ui.note("위 칸에 키워드를 넣어보세요. 이 화면과 "
                 "<b>상위노출 해부</b>, <b>글감 만들기</b>가 한꺼번에 채워집니다.", gold=True)
 
     if kw:
@@ -689,6 +682,10 @@ with sub_research[0]:
         st.write("")
 
         # --- 검색량 구성 + 경쟁률 눈금 --------------------------
+        # ⚠️ 눈금 막대(경쟁률·기회 점수)는 가로로 길수록 읽기 쉽다.
+        # 좁은 오른쪽 칸에 몰아넣으면 눈금 글씨가 서로 붙는다.
+        # 그래서 도넛 옆에는 항목이 짧은 '기회 점수 구성'만 두고,
+        # 막대 두 개는 가로 전체를 쓰게 아래로 내렸다.
         d1, d2 = st.columns([1, 2])
         with d1:
             ui.donut(
@@ -696,16 +693,18 @@ with sub_research[0]:
                  ("PC", r['monthly_pc'], ui.GOLD)],
                 compact_num(r['total_search']), "월 검색량")
         with d2:
-            if r.get('comp_ratio') is not None:
-                ui.scale_gauge(
-                    r['comp_ratio'],
-                    [(0.1, "아주 좋음", ui.GOOD), (0.5, "좋음", ui.GOOD),
-                     (2, "보통", ui.WARN), (10, "나쁨", ui.BAD), (None, "최악", ui.BAD)],
-                    title="경쟁률 — 쓰인 글 ÷ 찾는 사람",
-                    note="낮을수록 유리합니다. 1이면 찾는 사람 수만큼 글이 있다는 뜻")
-            ui.gauge("기회 점수", opp['score'], ("불리", "보통", "유리"))
             if opp.get("breakdown"):
                 ui.score_breakdown(opp["breakdown"], opp["score"])
+
+        st.write("")
+        if r.get('comp_ratio') is not None:
+            ui.scale_gauge(
+                r['comp_ratio'],
+                [(0.1, "아주 좋음", ui.GOOD), (0.5, "좋음", ui.GOOD),
+                 (2, "보통", ui.WARN), (10, "나쁨", ui.BAD), (None, "최악", ui.BAD)],
+                title="경쟁률 — 쓰인 글 ÷ 찾는 사람",
+                note="낮을수록 유리합니다. 1이면 찾는 사람 수만큼 글이 있다는 뜻")
+        ui.gauge("기회 점수", opp['score'], ("불리", "보통", "유리"))
 
         st.write("")
 
@@ -731,8 +730,8 @@ with sub_research[0]:
                 st.markdown(f'<div class="note" style="margin-top:6px">{rank_txt}</div>',
                             unsafe_allow_html=True)
         else:
-            ui.note("사이드바나 <b>내 블로그</b> 탭에서 블로그를 등록하면 "
-                    "<b>내 블로그로 이 키워드를 뚫을 수 있는지</b>까지 계산합니다.", gold=True)
+            ui.note("블로그 주소를 입력하시면 <b>내 블로그로 이 키워드를 "
+                    "뚫을 수 있는지</b>까지 보여드립니다.", gold=True)
 
         # --- AI 판단 브리핑 ---------------------------------
         st.write("")

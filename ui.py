@@ -1320,21 +1320,28 @@ margin-bottom: 14px !important; padding: 0 !important;
 [role="tabpanel"] [role="tab"] {{
 min-height: 32px !important; padding: 6px 13px !important;
 background: #F1F3F6 !important; border-radius: 999px !important;
-border-bottom: 0 !important; color: #55606D !important;
+border: 0 !important; color: #55606D !important;
+/* ⚠️ 옛 규칙이 선택된 알약에 금색 그림자를 깔아둬서
+   밑줄이 그어진 것처럼 보였다. 여기서 확실히 지운다. */
+box-shadow: none !important;
 }}
 [role="tabpanel"] [role="tab"] *,
 [role="tabpanel"] [role="tab"] p {{
 font-size: .87rem !important; font-weight: 600 !important; color: inherit !important;
 }}
 [role="tabpanel"] [role="tab"]:hover {{
-background: #E6EAEF !important; border-bottom: 0 !important; color: {INK} !important;
+background: #E6EAEF !important; border: 0 !important;
+box-shadow: none !important; color: {INK} !important;
 }}
 [role="tabpanel"] [role="tab"][aria-selected="true"] {{
-background: #EAF1FD !important; color: {DEEP} !important; border-bottom: 0 !important;
+background: #EAF1FD !important; color: {DEEP} !important;
+border: 0 !important; box-shadow: none !important;
 }}
 [role="tabpanel"] [role="tab"][aria-selected="true"] *,
 [role="tabpanel"] [role="tab"][aria-selected="true"] p {{ color: {DEEP} !important; }}
-[role="tabpanel"] [role="tab"][aria-selected="true"]:hover {{ background: #DCE8FB !important; }}
+[role="tabpanel"] [role="tab"][aria-selected="true"]:hover {{
+background: #DCE8FB !important; box-shadow: none !important; border: 0 !important;
+}}
 
 /* 카드 · 입력 · 버튼 */
 .kpi {{ border: 1px solid {LINE}; border-radius: 12px; padding: 15px 17px; }}
