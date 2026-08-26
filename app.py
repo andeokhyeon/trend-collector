@@ -474,6 +474,30 @@ def render_table(data, sort_col='총 검색량', extra_cols=None, limit=30,
     show_table(out)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def tracked_change_pct(keyword):
+    """
+    이 키워드를 추적기에 넣어뒀다면, 쌓인 기록으로 검색량 추세(%)를 낸다.
+
+    ⚠️ 기회 점수의 네 축 중 '추세'만 한 번의 조회로는 알 수 없다.
+    같은 키워드를 여러 날 재봐야 나오는 값이라, 추적 기록이 있을 때만
+    채워진다. 추적 중이 아니면 None(= '추적하면 표시').
+    """
+    if not keyword:
+        return None
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        rows = (supabase.table("tracking_history")
+                .select("total_search,created_at")
+                .eq("keyword", keyword)
+                .gte("created_at", since)
+                .order("created_at").execute().data or [])
+    except Exception:
+        return None
+    return calc_search_change([int(x["total_search"]) for x in rows
+                               if x.get("total_search")])
+
+
 df = load_data()
 
 SEASONAL_CALENDAR = {
@@ -645,6 +669,18 @@ with sub_research[0]:
     if kw:
         with st.spinner(f"'{kw}' 측정 중"):
             r = analyze_keyword(kw.strip())
+
+        # 추적 중인 키워드라면 '추세' 축을 채워 기회 점수를 다시 낸다.
+        # (추적기 자세히에서만 보이던 값이 여기서도 보이게)
+        _chg = tracked_change_pct(kw.strip())
+        if _chg is not None:
+            try:
+                r['opportunity'] = calc_opportunity(
+                    r.get('comp_ratio'), r.get('recent_ratio'),
+                    total_search=r.get('total_search'),
+                    search_change_pct=_chg)
+            except Exception:
+                pass
 
         recent_docs = r.get('recent_docs')
         recent_grade = r.get('recent_grade', '정보없음')

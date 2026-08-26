@@ -1489,6 +1489,8 @@ padding-top: 9px; line-height: 1.6;
 /* 글씨도 로고와 같은 색으로 맞춰 한 덩어리로 보이게 */
 .mast-name {{ color: #0057A7 !important; }}
 .mast-name b {{ color: #F96F00 !important; }}
+.donut-box {{ overflow: hidden; }}
+.donut-box svg {{ max-width: 100%; height: auto; }}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -1911,7 +1913,11 @@ def donut(segments, center_top="", center_bottom="", size=170):
         f'<b>{v / total * 100:.0f}%</b></span>'
         for l, v, c in segments if v > 0)
 
+    # ⚠️ 폭을 픽셀로 못 박으면 모바일에서 칸보다 커져 오른쪽이 잘린다.
+    # 칸이 좁으면 그림도 같이 줄어들게 한다. (viewBox가 있어 비율은 유지)
     svg = (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
+           f'style="max-width:100%;height:auto;display:block;margin:0 auto" '
+           f'preserveAspectRatio="xMidYMid meet" '
            f'xmlns="http://www.w3.org/2000/svg">' + "".join(parts) + '</svg>')
     st.markdown(f'<div class="chart-box donut-box">{svg}<div class="legend">{legend}</div></div>',
                 unsafe_allow_html=True)
