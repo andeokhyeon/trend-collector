@@ -766,52 +766,75 @@ with sub_research[0]:
                 """
                 연관 키워드를 한꺼번에 측정한다.
 
-                검색량은 이미 알고 있으므로 문서수만 새로 조회한다.
-                목록은 1건만 받아서 응답을 가볍게 하고, 동시에 4개씩 처리한다.
-                (더 늘리면 네이버가 거절해서 오히려 전부 실패한다)
+                ⚠️ 검색량을 모르는 키워드(자동완성으로 온 것)를
+                analyze_keyword에 그냥 넘기면, 내부에서 힌트로 쪼개지면서
+                응답 첫 항목이 원래 키워드가 아니게 되어 0이 나온다.
+                그래서 모르는 것들은 get_volumes로 5개씩 묶어 먼저 채운 뒤
+                측정에 넘긴다. (get_volumes는 쪼개지 않는다)
                 """
                 smap = dict(stats)
+
+                # ① 검색량을 모르는 것부터 채운다 (5개씩, 호출 1회로 5개)
+                unknown = [k for k in keywords if k not in smap]
+                for i in range(0, len(unknown), 5):
+                    try:
+                        vols = get_volumes(unknown[i:i + 5])
+                    except Exception:
+                        continue
+                    for k in unknown[i:i + 5]:
+                        v = vols.get(k.replace(" ", "").upper())
+                        if v:
+                            smap[k] = {"monthly_pc": int(v * 0.3),
+                                       "monthly_mobile": v - int(v * 0.3),
+                                       "comp_level": "-", "pl_avg_depth": 0}
+
+                # ② 문서수를 잰다 (검색량은 이미 알고 있다)
                 out, failed = {}, []
                 with ThreadPoolExecutor(max_workers=4) as pool:
                     futures = {
-                        # light=True — 문서수만 필요하니 목록은 1건만 받는다.
-                        # 100건씩 받아오는 것보다 응답이 훨씬 가볍다.
                         pool.submit(analyze_keyword, k, True, False, False,
                                     smap.get(k), True): k
-                        for k in keywords
+                        for k in keywords if k in smap
                     }
                     for fut in as_completed(futures):
                         k = futures[fut]
                         try:
                             res = fut.result()
-                            # 문서수를 못 가져와도 지도에는 찍을 수 있다.
-                            # 검색량만 있으면 가로축은 그려진다.
                             if res and res.get("total_search", 0) > 0:
                                 out[k] = res
                             else:
                                 failed.append(k)
                         except Exception:
                             failed.append(k)
-                return [out[k] for k in keywords if k in out], failed
 
-            subs, failed = [], []
+                # 검색량이 정말 0인 것은 '실패'가 아니라 '수요 없음'이다
+                no_demand = [k for k in keywords if k not in smap]
+                return ([out[k] for k in keywords if k in out],
+                        failed, no_demand)
+
+            subs, failed, no_demand = [], [], []
             if targets:
                 _stats = tuple(sorted(
                     (k, tuple(sorted(known[k].items())))
                     for k in targets if k in known))
-                _unknown_n = sum(1 for k in targets if k not in known)
                 try:
                     with st.status(f"연관 키워드 {len(targets)}개 측정 중...",
                                    expanded=True) as status:
-                        st.markdown('<div class="prog-label">문서수를 조회하고 '
-                                    '있습니다. 잠시만 기다려주세요.</div>',
+                        st.markdown('<div class="prog-label">검색량과 문서수를 '
+                                    '조회하고 있습니다. 잠시만 기다려주세요.</div>',
                                     unsafe_allow_html=True)
-                        subs, failed = measure_batch(tuple(targets), _stats)
+                        subs, failed, no_demand = measure_batch(
+                            tuple(targets), _stats)
                         status.update(label=f"측정 완료 · {len(subs)}개",
                                       state="complete", expanded=False)
                 except AttributeError:
                     with st.spinner(f"연관 키워드 {len(targets)}개 측정 중..."):
-                        subs, failed = measure_batch(tuple(targets), _stats)
+                        subs, failed, no_demand = measure_batch(
+                            tuple(targets), _stats)
+
+            if no_demand:
+                st.caption(f"{len(no_demand)}개는 검색량이 확인되지 않아 "
+                           "순위에서 제외했습니다.")
 
             if failed:
                 ui.note(f"{len(failed)}개는 조회하지 못했습니다. "
