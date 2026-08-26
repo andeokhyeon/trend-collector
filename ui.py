@@ -47,7 +47,11 @@ LEVEL_COLORS = {
 
 
 def inject_css():
-    st.markdown(f"""<link rel="preconnect" href="https://fonts.googleapis.com">
+    # ⚠️ 이 문자열 안에 빈 줄이 있으면 안 된다.
+    # 마크다운 규칙상 빈 줄을 만나면 HTML 덩어리가 거기서 끝난 것으로 보고,
+    # 그 뒤의 CSS가 화면에 글자로 쏟아진다. (실제로 한 번 그렇게 터졌다)
+    # 사람이 매번 조심하는 대신, 아래에서 빈 줄을 자동으로 걷어낸다.
+    _css = f"""<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1384,7 +1388,9 @@ gap: .5rem !important; flex-wrap: wrap !important;
 min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
 }}
 }}
-</style>""", unsafe_allow_html=True)
+</style>"""
+    st.markdown("\n".join(ln for ln in _css.splitlines() if ln.strip()),
+                unsafe_allow_html=True)
 
 
 def hunter_icon(size=34):
