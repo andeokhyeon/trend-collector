@@ -297,6 +297,15 @@ GRADE_TINT = {
     '매우낮음': ('#F1F1EC', '#6B7280'),
     '높음': ('#EDF1F4', '#2E5468'), '매우높음': ('#E3EAEF', '#1B3A4B'),
     '낮음': ('#FBF2E1', '#8A6420'),
+    # 주간 캘린더의 '종류' — 성격이 다른 재료라 색으로 갈라 보이게 한다.
+    # 한눈에 '오늘은 세무 글이 있구나'가 읽히는 게 목적이다.
+    # (전부 옅은 바탕 + 진한 글자라 대비는 5:1 위로 잡았다)
+    '공휴일': ('#FCE7E7', '#9B2C2C'),      # 달력의 빨간 날
+    '절기': ('#E3F1E4', '#2C6B36'),        # 계절
+    '세무/마감': ('#FBF0DA', '#845413'),    # 돈
+    '축제/행사': ('#F1E9F9', '#67399E'),
+    '공연/행사': ('#E1F0F2', '#1C5F67'),
+    '청약': ('#E5EDFB', '#1F4590'),        # 부동산
 }
 
 TINT_COLS = {'검색량', '경쟁률', '진단', '판단', '등급', '종류', '경쟁'}
@@ -712,6 +721,34 @@ with sub_research[0]:
             searched = st.button("분석하기", use_container_width=True,
                                  key="research_go", type="primary")
 
+    # --- 내 블로그 등록 ---
+    # ⚠️ 예전에는 접힌 서랍으로 화면 아래쪽에 뒀는데, 그러면 '이걸 넣으면
+    # 뭐가 좋아지는지'를 모른 채 지나친다. 검색창 바로 밑에 같은 모양으로
+    # 놓아 한 쌍처럼 보이게 한다. (넣으면 키워드마다 내 승산이 붙는다)
+    _registered = bool(st.session_state.get("blog_id"))
+    with st.container(border=True):
+        bc1, bc2 = st.columns([5, 1])
+        with bc1:
+            blog_input = st.text_input(
+                "블로그 주소",
+                value=st.session_state.get("blog_id", ""),
+                placeholder="내 블로그 주소  ·  예) blog.naver.com/myid  또는  myid",
+                key="blog_input_main",
+                label_visibility="collapsed")
+        with bc2:
+            if st.button("등록", use_container_width=True, key="blog_save_main"):
+                if blog_input.strip():
+                    st.session_state["blog_id"] = extract_blog_id(blog_input)
+                else:
+                    st.session_state.pop("blog_id", None)
+                st.rerun()
+    # ⚠️ 설명은 상자 밖에 둔다. 안에 넣으면 그만큼 키가 커져서
+    # 위 검색창과 높이가 어긋나 한 쌍으로 안 보인다.
+    st.caption(
+        f"✅ {st.session_state['blog_id']} · 키워드마다 내 승산을 함께 보여드립니다"
+        if _registered
+        else "주소를 넣으시면 키워드마다 내 블로그로 뚫을 수 있는지 함께 보여드립니다")
+
     _empty = not (kw_input or "").strip() and not st.session_state.get("active_kw")
     if _empty:
         with _hero_slot:
@@ -743,31 +780,6 @@ with sub_research[0]:
         st.session_state.pop("active_kw", None)
 
     research_kw = st.session_state.get("active_kw", "")
-
-    # --- 내 블로그 등록 ---
-    # 한 번 등록하면 다시 열 일이 없어서 접어둔다.
-    _registered = bool(st.session_state.get("blog_id"))
-    with st.expander(
-            f"🏠 내 블로그  ·  {st.session_state['blog_id']}" if _registered
-            else "🏠 내 블로그 주소 입력하기",
-            expanded=False):
-        bc1, bc2 = st.columns([4, 1])
-        with bc1:
-            blog_input = st.text_input(
-                "블로그 주소",
-                value=st.session_state.get("blog_id", ""),
-                placeholder="blog.naver.com/myid   또는   myid",
-                key="blog_input_main",
-                label_visibility="collapsed")
-        with bc2:
-            if st.button("등록", use_container_width=True, key="blog_save_main"):
-                if blog_input.strip():
-                    st.session_state["blog_id"] = extract_blog_id(blog_input)
-                else:
-                    st.session_state.pop("blog_id", None)
-                st.rerun()
-        if not _registered:
-            st.caption("블로그 주소를 입력하시면 키워드마다 뚫을 수 있는지 보여드립니다.")
 
     kw = research_kw
 

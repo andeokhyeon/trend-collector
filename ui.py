@@ -1522,6 +1522,19 @@ font-size: clamp(.9rem, 1.9vw, 1.02rem); color: {MUTED}; line-height: 1.7;
 }}
 /* 좁은 화면에서 접힐 때 강조 문구가 '지금 / 이길 키워드'로 갈라지지 않게 */
 .hero-p b {{ color: {INK}; font-weight: 600; white-space: nowrap; }}
+.hero-cap {{
+display: inline-block; margin: 15px auto 0; padding: 8px 18px;
+background: #EDF2FD; border: 1px solid #D6E1F8; border-radius: 999px;
+font-size: clamp(.86rem, 1.9vw, 1rem); color: {INK}; font-weight: 700;
+letter-spacing: -.01em; line-height: 1.55;
+}}
+.hero-cap b {{ font-weight: 700; }}
+.hero-cap i {{ font-style: normal; color: #9CB0D4; margin: 0 7px; }}
+.hero-cap em {{ font-style: normal; color: {DEEP}; font-weight: 800; }}
+/* 제목 옆에 뜨는 스트림릿 앵커(고리 모양)를 감춘다 — 문구가 지저분해 보인다 */
+.hero h1 a, .hero-h a, .hero [data-testid="stHeaderActionElements"] {{
+display: none !important;
+}}
 .hero-chips {{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin-top:12px; }}
 .hero-chip {{
 font-size:.82rem; color:{MUTED}; background:{SURFACE};
@@ -1716,9 +1729,18 @@ min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
    입력칸이 절반으로 줄어 '분석할 키워드를 입…'까지밖에 안 보인다.
    키워드 칸을 한 줄 통째로 주고 버튼을 그 아래로 내린다. */
 [data-testid="stHorizontalBlock"]:has(input[aria-label="조사할 키워드"])
+> [data-testid="stColumn"],
+[data-testid="stHorizontalBlock"]:has(input[aria-label="블로그 주소"])
 > [data-testid="stColumn"] {{
 min-width: 100% !important; flex: 1 1 100% !important;
 }}
+/* 강조 한 줄은 좁은 화면에서 두 줄이 된다. 그때 알약 모양을 유지하면
+   풍선처럼 부풀어 오르므로, 테두리를 걷고 글자만 남긴다. */
+.hero-cap {{
+display: block; padding: 0; margin-top: 12px;
+background: none; border: none; line-height: 1.65;
+}}
+.hero-cap i {{ margin: 0 4px; }}
 }}
 /* 키워드 발굴 위쪽 '새로고침' — 있는지 없는지 모를 만큼 작게, 그리고
    아래 탭 사이에 빈 공간이 크게 뜨지 않게 당겨 붙인다. */
@@ -2603,10 +2625,16 @@ def hero(placeholder_chips=()):
     st.markdown(
         f'<div class="hero">'
         f'<h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>'
+        # 제목 바로 밑 한 줄 — 이 도구가 어디까지 해주는지.
+        # 제목은 '왜 필요한가'를 말하고, 이 줄이 '무엇을 주는가'를 말한다.
+        f'<p class="hero-cap">'
+        f'<b>키워드 검색</b><i>·</i><b>추적</b><i>·</i><b>비교</b><i>·</i>'
+        f'<b>발굴</b><i>·</i><b>AI 진단</b>까지 <em>한 번에</em></p>'
         # ⚠️ 예전에는 두 문장을 <br>로 나눠 두 줄로 뒀는데,
         # 첫 화면 문구가 두 줄이면 눈이 한 번 더 머문다.
         # 두 문장의 뜻을 한 문장으로 줄여 한 줄에 담는다.
-        f'<p class="hero-p">검색량 · 문서수 · 발행량 · 단가를 한 번에 재서 '
+        # ⚠️ 위 한 줄이 이미 '한 번에'라고 말한다. 여기서 또 쓰면 메아리가 된다.
+        f'<p class="hero-p">검색량 · 문서수 · 발행량 · 단가까지 재서 '
         f'<b>지금 이길 키워드</b>를 찾습니다.</p>'
         f'</div>', unsafe_allow_html=True)
     return chips
