@@ -745,6 +745,8 @@ def _consume_oauth_code():
         pass
     if ok:
         st.session_state["user"] = user
+        for _k in ("oauth_url_kakao", "oauth_url_google", "oauth_verifier"):
+            st.session_state.pop(_k, None)
         st.rerun()
     else:
         st.session_state["oauth_error"] = msg
@@ -769,27 +771,45 @@ def _eun(word):
 
 
 def _social_box():
-    """카카오·구글 버튼. 눌러야 주소를 만든다(미리 만들면 낭비다)."""
+    """
+    카카오·구글 버튼.
+
+    ⚠️ 예전에는 버튼을 누르면 <meta refresh>로 튕겨 보냈다. 그런데 스트림릿이
+    그 태그를 걸러낼 수 있어서 안 움직이거나 엉뚱하게 도는 일이 생긴다.
+    누르면 주소를 만들어 '진짜 링크 버튼'을 띄우고, 이동은 그 링크가 한다.
+    한 단계 더 누르게 되지만 어디로 가는지 눈에 보여서 오히려 안전하다.
+    """
     if accounts is None:
         return
     _site = getattr(config, "SITE_URL", "") or ""
     cols = st.columns(len(accounts.PROVIDERS))
     for col, (pid, (label, bg, fg)) in zip(cols, accounts.PROVIDERS.items()):
         with col:
-            if st.button(f"{label}로 시작하기", key=f"oauth_{pid}",
-                         use_container_width=True):
+            _ready = st.session_state.get(f"oauth_url_{pid}")
+            if _ready:
+                st.link_button(f"{label} 로그인 창 열기", _ready,
+                               use_container_width=True, type="primary")
+            elif st.button(f"{label}로 시작하기", key=f"oauth_{pid}",
+                           use_container_width=True):
                 url, verifier, msg = accounts.oauth_url(pid, _site)
                 if url:
                     if verifier:
                         st.session_state["oauth_verifier"] = verifier
-                    st.markdown(
-                        f'<meta http-equiv="refresh" content="0;url={url}">'
-                        f'<a href="{url}" target="_self">'
-                        f'{label} 로그인으로 이동합니다…</a>',
-                        unsafe_allow_html=True)
-                    st.stop()
+                    st.session_state[f"oauth_url_{pid}"] = url
+                    st.rerun()
                 else:
                     st.error(msg)
+    # 주소를 만들었는데 안 열린다면, 눈으로 확인할 수 있게 그대로 보여준다.
+    _made = [v for k, v in st.session_state.items()
+             if k.startswith("oauth_url_")]
+    if _made:
+        with st.expander("안 열리나요? 이동할 주소 확인"):
+            for u in _made:
+                st.code(u, language=None)
+            st.caption("이 주소를 새 탭에 붙여넣어도 됩니다. "
+                       "'연결을 거부했습니다'가 뜨면 주소 문제가 아니라 "
+                       "그 사이트에 접속 자체가 막힌 것입니다 "
+                       "(회사망·백신·VPN·DNS를 확인해보세요).")
 
 
 def login_gate(what="이 기능"):
@@ -2026,7 +2046,9 @@ with tabs[2]:
             if st.button("로그아웃", use_container_width=True, key="logout"):
                 if accounts is not None:
                     accounts.sign_out()
-                for _k in ("user", "charged_kw", "admin_ok"):
+                for _k in ("user", "charged_kw", "admin_ok",
+                           "oauth_verifier", "oauth_url_kakao",
+                           "oauth_url_google"):
                     st.session_state.pop(_k, None)
                 my_profile.clear()
                 st.rerun()
