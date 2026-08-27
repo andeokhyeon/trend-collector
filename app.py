@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 from html import escape
 import pandas as pd
@@ -701,6 +702,53 @@ def _write_cookie(name, value, max_age):
         pass
 
 
+@st.cache_resource(show_spinner=False)
+def _verifier_store():
+    """
+    확인코드(code_verifier)를 서버에 잠깐 맡아두는 곳. {번호표: (코드, 시각)}
+
+    ⚠️ 왜 이게 필요한가.
+    로그인하러 나갔다 오면 페이지가 새로 열리고 스트림릿은 기억을 다 버린다.
+    그래서 쿠키에 넣어뒀는데, 실제 배포에서 그 쿠키가 안 돌아왔다
+    ('both auth code and code verifier should be non-empty').
+    브라우저·프록시가 어디서 걸러내는지는 우리가 못 고친다.
+    그래서 브라우저를 믿지 않고 서버가 들고 있기로 한다.
+    나갈 때 주소에 '번호표'만 달아 보내고, 돌아온 번호표로 찾아 쓴다.
+    번호표가 새어도 서버 보관함이 없으면 아무 쓸모가 없다.
+
+    ⚠️ cache_resource라 화면이 다시 그려져도, 사람이 달라져도 같은 상자다.
+    """
+    return {}
+
+
+_VSTORE_TTL = 1200          # 20분이면 로그인하고도 남는다
+_VSTORE_MAX = 300
+
+
+def _verifier_keep(verifier):
+    """확인코드를 맡기고 번호표를 받는다."""
+    import secrets
+    box = _verifier_store()
+    now = time.time()
+    # 오래된 것 치우기 (안 치우면 계속 쌓인다)
+    for k in [k for k, (_, t) in box.items() if now - t > _VSTORE_TTL]:
+        box.pop(k, None)
+    if len(box) > _VSTORE_MAX:
+        for k in sorted(box, key=lambda k: box[k][1])[:len(box) - _VSTORE_MAX]:
+            box.pop(k, None)
+    vid = secrets.token_urlsafe(9)
+    box[vid] = (verifier, now)
+    return vid
+
+
+def _verifier_take(vid):
+    """번호표로 확인코드를 찾는다. 없으면 None."""
+    if not vid:
+        return None
+    got = _verifier_store().get(vid)
+    return got[0] if got else None
+
+
 def _vcookie(_pid=None):
     """로그인 '확인코드'를 담아둘 쿠키 이름 (제공자 공통 하나)."""
     return "kh_v"
@@ -768,20 +816,38 @@ def _consume_oauth_code():
     #
     # ⚠️ 반드시 '쿠키'에서도 찾아야 한다. 로그인하러 나갔다 오면
     #    페이지가 새로 열리고, 스트림릿은 그때 session_state를 통째로 버린다.
+    # 찾는 순서: ① 주소에 붙어 온 번호표(가장 확실) ② 이 화면의 기억
+    #            ③ 쿠키 ④ 서버가 최근에 내준 것들 ⑤ 없이 시도
+    _vid = qp.get("khv")
+    if isinstance(_vid, list):
+        _vid = _vid[0] if _vid else None
     _vs = []
-    for _v in (st.session_state.get("oauth_verifier"), _cookie(_vcookie())):
+    for _v in (_verifier_take(_vid),
+               st.session_state.get("oauth_verifier"),
+               _cookie(_vcookie())):
         if _v and _v not in _vs:
             _vs.append(_v)
+    if not _vs:
+        # 보관함이 비워졌을 수도 있다(서버 재시작 등). 최근 것부터 대본다.
+        _box = _verifier_store()
+        for _k in sorted(_box, key=lambda k: _box[k][1], reverse=True)[:3]:
+            _vs.append(_box[_k][0])
     _vs.append(None)
     ok = False
     msg, user = "로그인하지 못했습니다.", None
+    # ⚠️ 실패했을 때 어디까지 왔는지 화면에 남긴다.
+    #    이게 없어서 지난 이틀을 추측으로 헤맸다.
+    _note = "표=%s 후보=%d 쿠키=%d" % (
+        "있음" if _vid else "없음", len(_vs) - 1,
+        len(dict(getattr(st.context, "cookies", None) or {})))
     for _v in _vs:
-        ok, msg, user = accounts.exchange(code, _v)
+        ok, msg, user = accounts.exchange(code, _v, _note)
         if ok:
             break
     # 코드는 한 번만 쓸 수 있다. 성공했든 아니든 주소에서 지운다.
     try:
         st.query_params.pop("code", None)
+        st.query_params.pop("khv", None)
     except Exception:
         pass
     if ok:
@@ -789,7 +855,8 @@ def _consume_oauth_code():
         _remember(user)
         if _cookie(_vcookie()):            # 다 쓴 확인코드는 지운다
             _write_cookie(_vcookie(), "", 0)
-        for _k in ("oauth_url_kakao", "oauth_url_google", "oauth_verifier"):
+        for _k in ("oauth_url_kakao", "oauth_url_google", "oauth_verifier",
+                   "oauth_challenge", "oauth_vid"):
             st.session_state.pop(_k, None)
         st.rerun()
     else:
@@ -913,16 +980,22 @@ def _social_box():
         _v, _c = accounts.new_verifier()
         st.session_state["oauth_verifier"] = _v
         st.session_state["oauth_challenge"] = _c
-        # 로그인하러 나갔다 오면 이 화면의 기억은 사라지고 쿠키만 남는다.
+        # ⚠️ 서버에 맡기고 번호표를 받는다. 이게 본줄이다.
+        st.session_state["oauth_vid"] = _verifier_keep(_v)
+        # 쿠키는 보조 (혹시 서버가 재시작되면 이쪽으로 산다)
         _write_cookie(_vcookie(), _v, 900)
     _pair = (st.session_state["oauth_verifier"],
              st.session_state["oauth_challenge"])
+    # 돌아올 주소에 번호표를 달아둔다 → ?khv=xxx&code=yyy 로 돌아온다
+    _back = _site
+    if _back and st.session_state.get("oauth_vid"):
+        _back += ("&" if "?" in _back else "?") + "khv=" + st.session_state["oauth_vid"]
 
     items, errs = [], []
     for pid, (label, _bg, _fg) in accounts.PROVIDERS.items():
         key = f"oauth_url_{pid}"
         if key not in st.session_state:
-            url, _vr, msg = accounts.oauth_url(pid, _site, _pair)
+            url, _vr, msg = accounts.oauth_url(pid, _back, _pair)
             st.session_state[key] = url or ""
             if not url and msg:
                 st.session_state[f"oauth_err_{pid}"] = msg
@@ -2180,7 +2253,7 @@ with tabs[2]:
                 st.session_state["cookie_set"] = ""
                 for _k in ("user", "charged_kw", "admin_ok",
                            "oauth_url_kakao", "oauth_url_google",
-                           "oauth_verifier_kakao", "oauth_verifier_google",
+                           "oauth_verifier", "oauth_challenge", "oauth_vid",
                            "oauth_err_kakao", "oauth_err_google"):
                     st.session_state.pop(_k, None)
                 my_profile.clear()

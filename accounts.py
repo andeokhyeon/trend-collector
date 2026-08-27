@@ -472,7 +472,7 @@ def oauth_url(provider, redirect_to, verifier_pair=None):
         return None, None, _msg(e)
 
 
-def exchange(code, verifier=None):
+def exchange(code, verifier=None, note=""):
     """돌아온 code를 세션으로 바꾼다. 반환 (성공, 메시지, 사용자|None)"""
     if not ready() or not code:
         return False, "로그인 정보를 받지 못했습니다.", None
@@ -496,7 +496,8 @@ def exchange(code, verifier=None):
             # ⚠️ 원문을 뒤에 붙여둔다. 이게 없어서 지난번에 원인을 못 찾고
             #    며칠을 헤맸다. 짧게라도 남겨야 화면만 보고 짚을 수 있다.
             return False, ("로그인 확인에 실패했습니다. 다시 한 번 눌러주세요.\n\n"
-                           "(사유: %s)" % str(e)[:200]), None
+                           "(사유: %s%s)" % (str(e)[:180],
+                                             (" / " + note) if note else "")), None
         return False, _msg(e), None
 
 
