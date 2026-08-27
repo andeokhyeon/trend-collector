@@ -794,22 +794,31 @@ def _consume_oauth_code():
         qp = dict(st.query_params)
     except Exception:
         qp = {}
-    code = qp.get("code")
-    if isinstance(code, list):
-        code = code[0] if code else None
+    def _one(name):
+        v = qp.get(name)
+        if isinstance(v, list):
+            v = v[0] if v else None
+        return v
+
+    # ⚠️ 로그인이 실패하면 code 대신 error가 붙어 돌아온다.
+    #    예전에는 이걸 안 보고 그냥 넘겨서, 화면이 '아무 일도 안 일어난 것처럼'
+    #    보였다. 카카오가 왜 거절했는지 여기 다 적혀 있는데 버리고 있었다.
+    _err = _one("error") or _one("error_code")
+    if _err:
+        _desc = (_one("error_description") or "").replace("+", " ")
+        st.session_state["oauth_error"] = (
+            "로그인이 거절됐습니다.\n\n(%s%s)"
+            % (_err, (" — " + _desc) if _desc else ""))
+        for _k in ("error", "error_code", "error_description", "khv"):
+            try:
+                st.query_params.pop(_k, None)
+            except Exception:
+                pass
+        return
+
+    code = _one("code")
     if not code:
         return
-    # ⚠️ 확인코드(code_verifier)는 제공자마다 다르게 만들어진다.
-    #    돌아온 주소만 봐서는 카카오인지 구글인지 알 수 없으므로
-    #    가지고 있는 것들을 차례로 대본다 (많아야 두 번).
-    #
-    # ⚠️ 그리고 반드시 '쿠키'에서 찾아야 한다.
-    #    로그인하러 나갔다 오면 페이지가 새로 열리고, 스트림릿은 그때
-    #    session_state를 통째로 버린다. 세션에만 넣어두면 돌아왔을 때
-    #    빈손이라 '로그인 확인에 실패했습니다'가 뜬다.
-    #    (라이브러리 안쪽에 남아 있는 값에 기대는 것도 안 된다.
-    #     버튼을 둘 그리면 나중에 만든 쪽 것으로 덮여서,
-    #     카카오로 눌러도 구글 것을 대게 된다 — 실제로 그렇게 터졌다.)
     # ⚠️ 확인코드(code_verifier)는 카카오·구글이 똑같은 것을 쓴다.
     #    (accounts.new_verifier 설명 참고 — 제공자마다 다르게 만들면
     #     나중에 만든 쪽이 앞의 것을 덮어써서 카카오만 안 되는 사고가 난다)
