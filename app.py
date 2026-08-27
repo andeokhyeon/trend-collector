@@ -670,25 +670,25 @@ def _cookie(name):
         return None
 
 
-def _write_cookie(token):
+def _write_cookie(name, value, max_age):
     """
-    쿠키를 심거나(토큰) 지운다(빈 값).
+    쿠키를 심거나(값 있음) 지운다(빈 값 + max_age 0).
 
     ⚠️ 파이썬 쪽에서는 쿠키를 못 쓴다. 브라우저에서 한 줄 돌려야 한다.
     st.markdown 안의 <script>는 스트림릿이 걸러내므로 작은 틀(iframe)에 담아
-    돌린다. 높이 0이라 화면에는 안 보인다.
+    돌린다. 높이 1픽셀이라 눈에 안 보인다.
 
     ⚠️ st.iframe이 새 이름이고, components.v1.html은 없어질 예정이다.
     둘 다 받아두어야 스트림릿이 올라가도 로그인 유지가 안 깨진다.
     """
-    if token:
+    if value:
         body = ("'%s=' + %r + '; path=/; max-age=%d; SameSite=Lax'"
-                % (accounts.COOKIE, token, accounts.TOKEN_DAYS * 86400))
+                % (name, value, int(max_age)))
     else:
-        body = "'%s=; path=/; max-age=0; SameSite=Lax'" % accounts.COOKIE
+        body = "'%s=; path=/; max-age=0; SameSite=Lax'" % name
     html = ("<script>try{document.cookie=" + body +
             " + (location.protocol==='https:'?'; Secure':'');}catch(e){}</script>")
-    # ⚠️ st.iframe은 높이 0을 안 받는다(1이 최소). 1픽셀은 눈에 안 보인다.
+    # ⚠️ st.iframe은 높이 0을 안 받는다(1이 최소).
     try:
         st.iframe(html, height=1)
         return
@@ -701,12 +701,18 @@ def _write_cookie(token):
         pass
 
 
+def _vcookie(pid):
+    """제공자별 '확인코드'를 담아둘 쿠키 이름."""
+    return "kh_v_" + pid
+
+
 def _sync_cookie():
     """이번 화면에서 심거나 지울 쿠키가 있으면 처리한다."""
     if accounts is None:
         return
     if "cookie_set" in st.session_state:
-        _write_cookie(st.session_state.pop("cookie_set"))
+        _write_cookie(accounts.COOKIE, st.session_state.pop("cookie_set"),
+                      accounts.TOKEN_DAYS * 86400)
 
 
 def _restore_login():
@@ -748,9 +754,21 @@ def _consume_oauth_code():
     # ⚠️ 확인코드(code_verifier)는 제공자마다 다르게 만들어진다.
     #    돌아온 주소만 봐서는 카카오인지 구글인지 알 수 없으므로
     #    가지고 있는 것들을 차례로 대본다 (많아야 두 번).
-    _vs = [st.session_state.get(f"oauth_verifier_{p}")
-           for p in ("kakao", "google")]
-    _vs = [v for v in _vs if v] + [None]
+    #
+    # ⚠️ 그리고 반드시 '쿠키'에서 찾아야 한다.
+    #    로그인하러 나갔다 오면 페이지가 새로 열리고, 스트림릿은 그때
+    #    session_state를 통째로 버린다. 세션에만 넣어두면 돌아왔을 때
+    #    빈손이라 '로그인 확인에 실패했습니다'가 뜬다.
+    #    (라이브러리 안쪽에 남아 있는 값에 기대는 것도 안 된다.
+    #     버튼을 둘 그리면 나중에 만든 쪽 것으로 덮여서,
+    #     카카오로 눌러도 구글 것을 대게 된다 — 실제로 그렇게 터졌다.)
+    _vs = []
+    for _p in accounts.PROVIDERS:
+        for _v in (st.session_state.get(f"oauth_verifier_{_p}"),
+                   _cookie(_vcookie(_p))):
+            if _v and _v not in _vs:
+                _vs.append(_v)
+    _vs.append(None)
     ok = False
     msg, user = "로그인하지 못했습니다.", None
     for _v in _vs:
@@ -765,6 +783,9 @@ def _consume_oauth_code():
     if ok:
         st.session_state["user"] = user
         _remember(user)
+        for _p in accounts.PROVIDERS:      # 다 쓴 확인코드는 지운다
+            if _cookie(_vcookie(_p)):
+                _write_cookie(_vcookie(_p), "", 0)
         for _k in ("oauth_url_kakao", "oauth_url_google",
                    "oauth_verifier_kakao", "oauth_verifier_google"):
             st.session_state.pop(_k, None)
@@ -892,6 +913,10 @@ def _social_box():
             st.session_state[key] = url or ""
             if verifier:
                 st.session_state[f"oauth_verifier_{pid}"] = verifier
+                # ⚠️ 여기서 쿠키에 넣어둬야 한다. 로그인하러 나갔다 오면
+                #    이 화면의 기억은 사라지고 쿠키만 남는다.
+                #    15분이면 충분하고, 로그인에 성공하면 바로 지운다.
+                _write_cookie(_vcookie(pid), verifier, 900)
             if not url and msg:
                 st.session_state[f"oauth_err_{pid}"] = msg
         u = st.session_state.get(key)
