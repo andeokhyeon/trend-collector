@@ -670,6 +670,15 @@ admin_tab = _all_tabs[4] if _has_admin else None
 with tabs[0]:
     sub_research = st.tabs(["키워드 분석", "상위노출 해부", "글감 만들기"])
 with tabs[3]:
+    # ⚠️ 수집 결과를 15분 캐시한다(왕복을 줄이려고).
+    # 그래서 수집기를 막 돌린 직후에는 화면이 그대로라 '안 들어왔나' 싶다.
+    # 기다리지 않고 바로 확인할 수 있게 버튼 하나를 둔다.
+    _rc1, _rc2 = st.columns([6, 1])
+    with _rc2:
+        if st.button("새로고침", use_container_width=True, key="discover_reload"):
+            st.cache_data.clear()
+            st.rerun()
+
     sub_discover = st.tabs(["구글 트렌드", "골든타임", "주간 캘린더", "뉴스"])
 
 # ------------------------------------------------------------

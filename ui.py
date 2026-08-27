@@ -1720,6 +1720,19 @@ min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
 min-width: 100% !important; flex: 1 1 100% !important;
 }}
 }}
+/* 키워드 발굴 위쪽 '새로고침' — 있는지 없는지 모를 만큼 작게, 그리고
+   아래 탭 사이에 빈 공간이 크게 뜨지 않게 당겨 붙인다. */
+[data-testid="stHorizontalBlock"]:has(.st-key-discover_reload) {{
+margin-bottom: -22px !important; margin-top: -8px !important;
+}}
+.st-key-discover_reload .stButton button {{
+font-size: .8rem !important; min-height: 30px !important;
+padding: 3px 10px !important; color: {MUTED} !important;
+border-color: {LINE} !important; background: transparent !important;
+}}
+.st-key-discover_reload .stButton button:hover {{
+color: {DEEP} !important; border-color: {DEEP} !important;
+}}
 </style>"""
     return "\n".join(ln for ln in _css.splitlines() if ln.strip())
 

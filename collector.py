@@ -1081,11 +1081,24 @@ INTERVAL_HOURS = {
 }
 
 
+# ⚠️ 명령줄에서 항목 이름을 주면 그것만, 간격을 무시하고 돌린다.
+#    (예: python collector.py weekly)
+#
+#    왜 필요했나. 주간 캘린더는 24시간에 한 번만 수집한다.
+#    그래서 캘린더에 새 재료(청약·절기 같은 것)를 붙여도
+#    "최근 24시간 안에 이미 수집함"으로 건너뛰어, 하루를 기다려야
+#    화면에 나타났다. 고쳐놓고도 안 나오니 안 고쳐진 줄 알게 된다.
+ONLY = None          # None이면 평소대로 전부
+
+
 def _should_run(name):
     """
     이 항목을 지금 돌려야 하는지.
     마지막 수집 시각을 DB에서 보고 판단한다.
     """
+    if ONLY is not None:
+        # 지목한 항목은 간격을 무시하고 돌리고, 나머지는 건너뛴다
+        return name == ONLY
     hours = INTERVAL_HOURS.get(name, 0)
     if hours <= 0:
         return True
@@ -1215,5 +1228,34 @@ def main():
     print("\n🎉 전체 수집 프로세스 종료")
 
 
+ALIASES = {
+    "weekly": "weekly_event", "캘린더": "weekly_event",
+    "golden": "golden_time", "골든타임": "golden_time",
+    "google": "google_trend", "트렌드": "google_trend",
+    "news": "news", "뉴스": "news",
+    "tracking": "tracking", "추적": "tracking",
+}
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    arg = (sys.argv[1] if len(sys.argv) > 1 else "").strip().lower()
+    if arg in ("-h", "--help", "help", "?"):
+        print("\n사용법:")
+        print("  python collector.py           전부 수집 (평소대로)")
+        print("  python collector.py weekly    주간 캘린더만, 지금 바로")
+        print("  python collector.py golden    골든타임만, 지금 바로")
+        print("\n  쓸 수 있는 이름: " + ", ".join(sorted(set(ALIASES))))
+        print()
+    elif arg:
+        picked = ALIASES.get(arg)
+        if not picked:
+            print(f"\n'{arg}'는 모르는 항목입니다.")
+            print("  쓸 수 있는 이름: " + ", ".join(sorted(set(ALIASES))) + "\n")
+        else:
+            ONLY = picked
+            print(f"\n▶ '{picked}'만 지금 바로 수집합니다 "
+                  f"(수집 간격을 무시합니다)\n")
+            main()
+    else:
+        main()
