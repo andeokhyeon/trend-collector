@@ -721,33 +721,9 @@ with sub_research[0]:
             searched = st.button("분석하기", use_container_width=True,
                                  key="research_go", type="primary")
 
-    # --- 내 블로그 등록 ---
-    # ⚠️ 예전에는 접힌 서랍으로 화면 아래쪽에 뒀는데, 그러면 '이걸 넣으면
-    # 뭐가 좋아지는지'를 모른 채 지나친다. 검색창 바로 밑에 같은 모양으로
-    # 놓아 한 쌍처럼 보이게 한다. (넣으면 키워드마다 내 승산이 붙는다)
-    _registered = bool(st.session_state.get("blog_id"))
-    with st.container(border=True):
-        bc1, bc2 = st.columns([5, 1])
-        with bc1:
-            blog_input = st.text_input(
-                "블로그 주소",
-                value=st.session_state.get("blog_id", ""),
-                placeholder="내 블로그 주소  ·  예) blog.naver.com/myid  또는  myid",
-                key="blog_input_main",
-                label_visibility="collapsed")
-        with bc2:
-            if st.button("등록", use_container_width=True, key="blog_save_main"):
-                if blog_input.strip():
-                    st.session_state["blog_id"] = extract_blog_id(blog_input)
-                else:
-                    st.session_state.pop("blog_id", None)
-                st.rerun()
-    # ⚠️ 설명은 상자 밖에 둔다. 안에 넣으면 그만큼 키가 커져서
-    # 위 검색창과 높이가 어긋나 한 쌍으로 안 보인다.
-    st.caption(
-        f"✅ {st.session_state['blog_id']} · 키워드마다 내 승산을 함께 보여드립니다"
-        if _registered
-        else "주소를 넣으시면 키워드마다 내 블로그로 뚫을 수 있는지 함께 보여드립니다")
+    # ⚠️ 블로그 주소는 여기서 받지 않는다.
+    # 한 번 넣으면 다시 건드릴 일이 없는 값이라, 조사할 때마다 보이면
+    # 검색창 옆에서 자리만 차지한다. 위쪽 '내 블로그' 탭에서 받는다.
 
     _empty = not (kw_input or "").strip() and not st.session_state.get("active_kw")
     if _empty:
@@ -943,8 +919,9 @@ with sub_research[0]:
                 st.markdown(f'<div class="note" style="margin-top:6px">{rank_txt}</div>',
                             unsafe_allow_html=True)
         else:
-            ui.note("블로그 주소를 입력하시면 <b>내 블로그로 이 키워드를 "
-                    "뚫을 수 있는지</b>까지 보여드립니다.", gold=True)
+            ui.note("위쪽 <b>내 블로그</b> 탭에서 주소를 넣으시면, "
+                    "<b>내 블로그로 이 키워드를 뚫을 수 있는지</b>까지 "
+                    "보여드립니다.", gold=True)
 
         # --- AI 판단 브리핑 ---------------------------------
         st.write("")
@@ -1803,9 +1780,14 @@ with tabs[1]:
 with tabs[2]:
     ui.section("내 블로그 진단", "지금 내 블로그는 어떤 상태인가")
 
+    # ⚠️ 블로그 주소를 받는 곳은 이제 여기 하나다.
+    # (예전에는 키워드 조사 탭에도 같은 칸이 있었는데,
+    #  한 번 넣으면 다시 건드릴 일이 없는 값이라 거기서는 자리만 차지했다)
     tab_blog_input = st.text_input(
         "내 블로그 주소 입력",
         value=my_blog_id,
+        placeholder="blog.naver.com/myid  또는  myid",
+        help="넣어두시면 키워드 조사에서 '내 승산'이 함께 나옵니다.",
         key="blog_input_tab",
     )
 

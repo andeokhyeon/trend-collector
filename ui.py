@@ -1512,21 +1512,22 @@ word-break: normal !important;
 .hero {{ text-align:center; padding: 30px 10px 22px; }}
 .hero-h {{
 font-family:'Gothic A1','Pretendard',sans-serif;
-font-size: clamp(1.6rem, 4.6vw, 2.7rem); font-weight: 900;
-letter-spacing: -.035em; line-height: 1.24; color: {INK}; margin: 0;
+font-size: clamp(1.9rem, 5.4vw, 3.2rem); font-weight: 900;
+letter-spacing: -.035em; line-height: 1.22; color: {INK}; margin: 0;
 }}
 .hero-h em {{ font-style: normal; color: {DEEP}; }}
+/* 제목과 아래 두 줄 사이는 넉넉히 띄우고, 두 줄끼리는 바싹 붙인다.
+   그래야 '제목 / 설명 한 덩어리'로 읽힌다. */
+.hero-lead {{ margin-top: 30px; }}
 .hero-p {{
-margin: 14px auto 0; max-width: 70ch;
-font-size: clamp(.9rem, 1.9vw, 1.02rem); color: {MUTED}; line-height: 1.7;
+margin: 7px auto 0; max-width: 70ch;
+font-size: clamp(.92rem, 1.95vw, 1.05rem); color: {MUTED}; line-height: 1.7;
 }}
 /* 좁은 화면에서 접힐 때 강조 문구가 '지금 / 이길 키워드'로 갈라지지 않게 */
 .hero-p b {{ color: {INK}; font-weight: 600; white-space: nowrap; }}
 .hero-cap {{
-display: inline-block; margin: 15px auto 0; padding: 8px 18px;
-background: #EDF2FD; border: 1px solid #D6E1F8; border-radius: 999px;
-font-size: clamp(.86rem, 1.9vw, 1rem); color: {INK}; font-weight: 700;
-letter-spacing: -.01em; line-height: 1.55;
+margin: 0; font-size: clamp(1rem, 2.3vw, 1.22rem); color: {INK};
+font-weight: 700; letter-spacing: -.012em; line-height: 1.55;
 }}
 .hero-cap b {{ font-weight: 700; }}
 .hero-cap i {{ font-style: normal; color: #9CB0D4; margin: 0 7px; }}
@@ -1734,12 +1735,8 @@ min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
 > [data-testid="stColumn"] {{
 min-width: 100% !important; flex: 1 1 100% !important;
 }}
-/* 강조 한 줄은 좁은 화면에서 두 줄이 된다. 그때 알약 모양을 유지하면
-   풍선처럼 부풀어 오르므로, 테두리를 걷고 글자만 남긴다. */
-.hero-cap {{
-display: block; padding: 0; margin-top: 12px;
-background: none; border: none; line-height: 1.65;
-}}
+.hero-lead {{ margin-top: 20px; }}
+.hero-cap {{ line-height: 1.6; }}
 .hero-cap i {{ margin: 0 4px; }}
 }}
 /* 키워드 발굴 위쪽 '새로고침' — 있는지 없는지 모를 만큼 작게, 그리고
@@ -2625,17 +2622,17 @@ def hero(placeholder_chips=()):
     st.markdown(
         f'<div class="hero">'
         f'<h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>'
-        # 제목 바로 밑 한 줄 — 이 도구가 어디까지 해주는지.
-        # 제목은 '왜 필요한가'를 말하고, 이 줄이 '무엇을 주는가'를 말한다.
+        # 제목 밑 두 줄은 한 덩어리다. 위가 '무엇을 해주는가',
+        # 아래가 '그래서 무엇을 재는가'. 붙여 두고 위쪽만 띄운다.
+        # ⚠️ 예전에는 위 줄을 알약 모양 상자에 넣었는데, 테두리가 있으면
+        # 두 줄이 남남처럼 보이고 좁은 화면에서는 풍선처럼 부푼다.
+        f'<div class="hero-lead">'
         f'<p class="hero-cap">'
         f'<b>키워드 검색</b><i>·</i><b>추적</b><i>·</i><b>비교</b><i>·</i>'
         f'<b>발굴</b><i>·</i><b>AI 진단</b>까지 <em>한 번에</em></p>'
-        # ⚠️ 예전에는 두 문장을 <br>로 나눠 두 줄로 뒀는데,
-        # 첫 화면 문구가 두 줄이면 눈이 한 번 더 머문다.
-        # 두 문장의 뜻을 한 문장으로 줄여 한 줄에 담는다.
-        # ⚠️ 위 한 줄이 이미 '한 번에'라고 말한다. 여기서 또 쓰면 메아리가 된다.
         f'<p class="hero-p">검색량 · 문서수 · 발행량 · 단가까지 재서 '
         f'<b>지금 이길 키워드</b>를 찾습니다.</p>'
+        f'</div>'
         f'</div>', unsafe_allow_html=True)
     return chips
 
