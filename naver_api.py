@@ -131,11 +131,17 @@ def get_blog_doc_count(keyword):
     if not NAVER_HUB_CLIENT_ID or not NAVER_HUB_CLIENT_SECRET:
         return None
 
+    # 이번 화면에서 이미 잰 값이 있으면 그대로 쓴다
+    _dk = ("docs", keyword.strip())
+    _hit = _local_get(_dk)
+    if _hit is not None:
+        return _hit
+
     # 풀에 최근에 잰 값이 있으면 다시 부르지 않는다
     if _shared is not None:
         cached_docs = _shared.pool_get_docs(keyword)
         if cached_docs is not None:
-            return cached_docs
+            return _local_put(_dk, cached_docs)
 
     headers = {
         "X-NCP-APIGW-API-KEY-ID": NAVER_HUB_CLIENT_ID,
@@ -155,7 +161,7 @@ def get_blog_doc_count(keyword):
             total = int(res.json().get("total", 0))
             if _shared is not None:
                 _shared.pool_put_docs(keyword, total)
-            return total
+            return _local_put(_dk, total)
         else:
             print(f"블로그 문서수 조회 오류(status {res.status_code}): {res.text[:150]}")
     except Exception as e:
@@ -254,6 +260,21 @@ def _cache_get(key):
             _CALL_CACHE[k] = (time.time(), val)
             return val
     return None
+
+
+def _local_get(key):
+    """이 프로세스 안에서만 잠깐 기억한다.
+    순위·문서수처럼 '지금 시점'이 중요한 값은 공용 캐시(24시간)에 넣으면
+    어제 것을 보여주게 되므로, 화면 한 번 그리는 동안만 재사용한다."""
+    hit = _CALL_CACHE.get(_key(key))
+    if hit and time.time() - hit[0] <= 300:
+        return hit[1]
+    return None
+
+
+def _local_put(key, val):
+    _CALL_CACHE[_key(key)] = (time.time(), val)
+    return val
 
 
 def _cache_put(key, val):
@@ -646,21 +667,80 @@ def get_blog_stats(keyword, days=30, exact=True, light=False):
 
     lo, hi = len(items), upper
     edge_age = None          # 마지막으로 확인한 위치의 글 나이
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        page = _fetch_serp_page(keyword, start=mid, display=1, sort="date")
+
+    # ⚠️ 예전에는 한 자리씩 찍어보는 순수 이분탐색이었다.
+    # 왕복이 열 번 넘게 줄을 서니 '측정 중' 대기의 큰 몫이 여기였다.
+    #
+    # 검색 API는 한 번에 100건까지 준다. 한 칸만 보지 말고
+    # 100칸짜리 '창'을 통째로 받으면, 경계가 그 창 안에 있을 때
+    # 추가 호출 없이 그 자리에서 정확한 답이 나온다.
+    # 창 몇 개를 동시에 던지면 왕복이 두세 번으로 줄고,
+    # 호출 수도 이분탐색보다 적거나 비슷하다.
+    def _window(pos):
+        """pos부터 최대 100칸의 글 나이 목록. 실패하면 None."""
+        want = max(1, min(100, upper - pos + 1))
+        page = _fetch_serp_page(keyword, start=pos, display=want, sort="date")
         if page is None:
+            return None
+        return [_postdate_age(it, now) for it in page.get("items", [])]
+
+    def _scan(positions):
+        if len(positions) <= 1:
+            return [_window(p) for p in positions]
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=len(positions)) as pool:
+                return list(pool.map(_window, positions))
+        except Exception:
+            return [_window(p) for p in positions]
+
+    found = None             # 경계를 확정했으면 그 위치
+    for _round in range(5):
+        span = hi - lo
+        if span <= 0:
             break
-        arr = page.get("items", [])
-        if not arr:
-            hi = mid - 1
-            continue
-        age = _postdate_age(arr[0], now)
-        if age is not None and age <= days:
-            lo = mid
-            edge_age = age
+        if span <= 100:
+            positions = [lo + 1]
         else:
-            hi = mid - 1
+            n = 5
+            positions = sorted({min(hi, lo + 1 + span * i // n) for i in range(n)})
+
+        new_lo, new_hi = lo, hi
+        for pos, ages in zip(positions, _scan(positions)):
+            if ages is None:
+                continue
+            if not ages:                        # 여기까지 글이 없다
+                new_hi = min(new_hi, pos - 1)
+                continue
+            last = None                         # 창 안 마지막 '최근 글' 위치
+            for i, a in enumerate(ages):
+                if a is not None and a <= days:
+                    last = pos + i
+                else:
+                    break
+            if last is None:                    # 창 첫 칸부터 옛 글
+                new_hi = min(new_hi, pos - 1)
+            elif last < pos + len(ages) - 1:    # 창 안에서 옛 글로 바뀜 → 확정
+                found = last
+                edge_age = ages[last - pos]
+                break
+            else:                               # 창 끝까지 전부 최근 글
+                new_lo = max(new_lo, last)
+                edge_age = ages[-1]
+                if len(ages) < 100:             # 결과가 여기서 끝났다
+                    found = last
+                    break
+        if found is not None:
+            break
+        if new_lo == lo and new_hi == hi:       # 더 좁혀지지 않는다
+            break
+        lo, hi = max(lo, new_lo), min(hi, new_hi)
+        if lo >= hi:
+            lo = max(len(items), min(lo, hi))
+            break
+
+    if found is not None:
+        lo = found
 
     capped = lo >= MAX_START and total_docs > MAX_START
 
@@ -715,21 +795,42 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
     # 이미 검색량을 아는 경우(연관 키워드 목록에서 넘어온 경우) 재조회하지 않는다.
     # 다시 물으면 호출만 낭비될 뿐 아니라, 힌트로 쪼개지면서
     # 응답 첫 항목이 원래 키워드가 아니게 되어 0이 나올 수 있다.
-    if known_stat is not None:
-        data = {"stat": known_stat, "related": [], "hints": []}
-        stat = known_stat
-    else:
-        data = get_keyword_data(keyword,
-                                related_limit=200 if with_related else 1)
-        stat = data["stat"]
-    total_search = stat["monthly_pc"] + stat["monthly_mobile"]
+    # ⚠️ 세 가지를 순서대로 부르면 기다리는 시간이 그대로 더해진다.
+    #   ① 검색광고 키워드도구  ② 블로그 검색   ③ 자동완성
+    # 서로 다른 서버라 서로를 기다릴 이유가 없다. 한꺼번에 던진다.
+    from concurrent.futures import ThreadPoolExecutor
+    _pool = ThreadPoolExecutor(max_workers=3)
+    _f_stat = _f_blog = _f_ac = None
+    try:
+        if known_stat is None:
+            _f_stat = _pool.submit(get_keyword_data, keyword,
+                                   200 if with_related else 1)
+        if with_recent:
+            _f_blog = _pool.submit(get_blog_stats, keyword,
+                                   30, exact_recent, light)
+        if with_related and USE_AUTOCOMPLETE:
+            _f_ac = _pool.submit(autocomplete_keywords, keyword)
 
-    doc_count = None
-    recent, recent_ratio, recent_grade = None, None, "정보없음"
-    recent_capped = recent_estimated = False
+        if known_stat is not None:
+            data = {"stat": known_stat, "related": [], "hints": []}
+            stat = known_stat
+        else:
+            data = _f_stat.result()
+            stat = data["stat"]
+        total_search = stat["monthly_pc"] + stat["monthly_mobile"]
+
+        doc_count = None
+        recent, recent_ratio, recent_grade = None, None, "정보없음"
+        recent_capped = recent_estimated = False
+
+        if with_recent:
+            blog = _f_blog.result()
+        else:
+            blog = None
+    finally:
+        _pool.shutdown(wait=False)
 
     if with_recent:
-        blog = get_blog_stats(keyword, exact=exact_recent, light=light)
         doc_count = blog["total_docs"]
         recent = blog["recent"]
         recent_capped = blog["capped"]
@@ -750,7 +851,11 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
     # 자동완성은 실제 검색어라 그런 것까지 잡힌다.
     if with_related and USE_AUTOCOMPLETE:
         have = {r["keyword"].replace(" ", "") for r in related}
-        for t in autocomplete_keywords(keyword):
+        try:
+            _ac_list = _f_ac.result() if _f_ac is not None else []
+        except Exception:
+            _ac_list = []
+        for t in _ac_list:
             if t.replace(" ", "") in have:
                 continue
             have.add(t.replace(" ", ""))
@@ -1386,6 +1491,13 @@ def get_serp(keyword, display=30, sort="sim"):
     """
     if not NAVER_HUB_CLIENT_ID or not NAVER_HUB_CLIENT_SECRET:
         return []
+    # ⚠️ 상위 글 목록은 '경쟁 분석' 탭과 '글감 만들기' 탭이 각자 따로 불러왔다.
+    # 같은 키워드의 같은 목록을 화면 한 번 그리는 동안 두세 번 받아온 셈이다.
+    # 여기서 한 겹 기억해두면 두 번째부터는 왕복도, 한도 차감도 없다.
+    _sk = ("serp", keyword.strip(), int(display), "date" if sort == "date" else "sim")
+    _hit = _local_get(_sk)
+    if _hit is not None:
+        return _hit
     headers = {
         "X-NCP-APIGW-API-KEY-ID": NAVER_HUB_CLIENT_ID,
         "X-NCP-APIGW-API-KEY": NAVER_HUB_CLIENT_SECRET,
@@ -1422,7 +1534,8 @@ def get_serp(keyword, display=30, sort="sim"):
             })
     except Exception as e:
         print(f"SERP 조회 실패({keyword}): {e}")
-    return out
+        return out
+    return _local_put(_sk, out)
 
 
 def analyze_serp(serp, top_n=10):
@@ -1798,13 +1911,26 @@ def autocomplete_keywords(keyword, expand=True, limit=60):
     found = list(_ac_fetch(base))
 
     if expand and len(found) < limit:
-        # 자모를 붙여 가지치기. 호출이 늘지만 네이버 광고 API 한도와는
-        # 무관하고, 응답도 가벼워서 부담이 적다.
-        for ch in "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ":
-            if len(found) >= limit:
-                break
-            found += _ac_fetch(f"{base} {ch}")
-            time.sleep(0.05)
+        # 자모를 붙여 가지치기.
+        #
+        # ⚠️ 예전에는 14글자를 하나씩 순서대로 물어봤다.
+        # 한 번에 0.25초라도 14번이면 3.5초, 여기에 0.05초 쉬는 것까지
+        # 더해져 이 함수 하나가 키워드 분석 대기시간의 대부분을 먹고 있었다.
+        # 자동완성은 광고 API 한도와 무관하고 응답도 가벼우니 동시에 던진다.
+        # (14줄을 한꺼번에 → 14번이 왕복 한 번으로 줄어든다)
+        from concurrent.futures import ThreadPoolExecutor
+        jamo = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ"
+        try:
+            with ThreadPoolExecutor(max_workers=len(jamo)) as pool:
+                for chunk in pool.map(lambda c: _ac_fetch(f"{base} {c}"), jamo):
+                    found += chunk
+                    if len(found) >= limit * 3:
+                        break
+        except Exception:
+            for ch in jamo:                      # 동시 실행이 막히면 예전 방식
+                if len(found) >= limit:
+                    break
+                found += _ac_fetch(f"{base} {ch}")
 
     # 원본과 무관한 것, 원본 자체는 제외
     norm = base.replace(" ", "")

@@ -46,7 +46,7 @@ LEVEL_COLORS = {
 }
 
 
-def inject_css():
+def _build_css():
     # ⚠️ 이 문자열 안에 빈 줄이 있으면 안 된다.
     # 마크다운 규칙상 빈 줄을 만나면 HTML 덩어리가 거기서 끝난 것으로 보고,
     # 그 뒤의 CSS가 화면에 글자로 쏟아진다. (실제로 한 번 그렇게 터졌다)
@@ -1711,10 +1711,28 @@ gap: .5rem !important; flex-wrap: wrap !important;
 [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
 min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
 }}
+/* 다만 검색줄만은 반반으로 나누면 안 된다.
+   입력칸이 절반으로 줄어 '분석할 키워드를 입…'까지밖에 안 보인다.
+   키워드 칸을 한 줄 통째로 주고 버튼을 그 아래로 내린다. */
+[data-testid="stHorizontalBlock"]:has(input[aria-label="조사할 키워드"])
+> [data-testid="stColumn"] {{
+min-width: 100% !important; flex: 1 1 100% !important;
+}}
 }}
 </style>"""
-    st.markdown("\n".join(ln for ln in _css.splitlines() if ln.strip()),
-                unsafe_allow_html=True)
+    return "\n".join(ln for ln in _css.splitlines() if ln.strip())
+
+
+_CSS_CACHE = None
+
+
+def inject_css():
+    """스타일 주입. 55KB짜리 문자열을 새로고침마다 다시 조립할 이유가 없어서
+    한 번 만든 것을 그대로 재사용한다."""
+    global _CSS_CACHE
+    if _CSS_CACHE is None:
+        _CSS_CACHE = _build_css()
+    st.markdown(_CSS_CACHE, unsafe_allow_html=True)
 
 
 def hunter_icon(size=34):

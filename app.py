@@ -15,7 +15,7 @@ try:
     calc_opportunity, calc_search_change, expected_visits, ad_density_pct,
     get_search_trend, seasonality_note, get_min_bids, calc_gold_score,
     estimate_monthly_income, weak_spots,
-    calc_since_registered,
+    calc_since_registered, get_blog_doc_count,
     )
 except ImportError as _e:
     import streamlit as _st
@@ -76,7 +76,10 @@ else:
                "같은 키워드를 여러 번 조회해도 네이버를 다시 부르지 않습니다.")
 
 
-@st.cache_data(ttl=60)
+# 수집은 몇 시간에 한 번 돌아간다. 60초마다 DB를 다시 읽을 이유가 없다.
+# 키워드 추가·중단 같은 변경 지점은 모두 st.cache_data.clear()를 부르므로
+# 수명을 늘려도 화면이 낡아 보이지 않는다. (새로고침 때마다 왕복 한 번씩 줄어든다)
+@st.cache_data(ttl=900)
 def load_data():
     """
     최근 30일치 원본 데이터를 그대로 반환한다.
@@ -521,6 +524,15 @@ def keyword_min_bid(keyword):
         return None
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def cached_my_feed(blog_id):
+    """내 블로그 최근 글 목록. 탭을 옮길 때마다 다시 읽을 이유가 없어서 30분 캐시."""
+    try:
+        return get_my_blog_feed(blog_id)
+    except Exception:
+        return {"posts": [], "error": "블로그를 읽지 못했습니다"}
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def tracked_change_pct(keyword):
     """
@@ -736,6 +748,24 @@ with sub_research[0]:
             st.caption("블로그 주소를 입력하시면 키워드마다 뚫을 수 있는지 보여드립니다.")
 
     kw = research_kw
+
+    # ⚠️ Streamlit은 어떤 탭을 보고 있든 스크립트 전체를 다시 실행한다.
+    # 그래서 아래 '경쟁 분석'·'글감 만들기' 탭도 매번 같은 키워드의
+    # 상위 글 목록을 각자 불러왔고, 그 왕복이 한 줄로 늘어서 있었다.
+    #
+    # 여기서 미리 백그라운드로 던져두면, 아래 탭들이 실행될 때쯤엔
+    # 이미 받아둔 것을 그대로 쓴다. (naver_api가 응답을 기억해둔다)
+    # 화면에 쓰지 않고 창고만 채우는 일이라 Streamlit과 부딪히지 않는다.
+    if kw:
+        try:
+            _warm = ThreadPoolExecutor(max_workers=3)
+            _warm.submit(get_serp, kw.strip(), 30, "sim")
+            _warm.submit(get_serp, kw.strip(), 30, "date")
+            _warm.submit(get_blog_doc_count, kw.strip())
+            _warm.shutdown(wait=False)
+        except Exception:
+            pass
+
     if kw:
         ui.section("단일 키워드 진단", "이 키워드, 지금 뛰어들어도 될까")
 
@@ -861,11 +891,15 @@ with sub_research[0]:
         power, my_rank, win = None, None, None
         if my_blog_id:
             with st.spinner("내 블로그와 대조 중"):
-                feed = get_my_blog_feed(my_blog_id)
+                # 내 글 목록과 내 순위는 서로 필요 없는 조회다. 줄 세우지 않는다.
+                with ThreadPoolExecutor(max_workers=2) as _wp:
+                    _f_feed = _wp.submit(cached_my_feed, my_blog_id)
+                    _f_rank = _wp.submit(check_my_rank, kw.strip(), my_blog_id)
+                    feed = _f_feed.result()
+                    my_rank = _f_rank.result()
                 power = estimate_blog_power(feed["posts"])
                 win = calc_win_score(r['comp_ratio'], power["score"],
                                      opportunity_score=opp['score'])
-                my_rank = check_my_rank(kw.strip(), my_blog_id)
 
             if win["score"] is not None:
                 ui.gauge(f"내 승산 · {win['verdict']}", win["score"],
@@ -994,22 +1028,34 @@ with sub_research[0]:
                             for k, v in stats}
 
                     # ① 검색량을 모르는 것부터 채운다 (5개씩, 호출 1회로 5개)
+                    # ⚠️ 예전에는 이 묶음들을 순서대로 물어봤다.
+                    # 서른 개면 여섯 번을 줄 세워 기다린 셈이라, 묶음끼리
+                    # 서로 상관이 없으니 한꺼번에 던진다.
                     unknown = [k for k in keywords if k not in smap]
-                    for i in range(0, len(unknown), 5):
+                    chunks = [unknown[i:i + 5] for i in range(0, len(unknown), 5)]
+
+                    def _vols(chunk):
                         try:
-                            vols = get_volumes(unknown[i:i + 5])
+                            return chunk, get_volumes(chunk)
                         except Exception:
-                            continue
-                        for k in unknown[i:i + 5]:
-                            v = vols.get(k.replace(" ", "").upper())
-                            if v:
-                                smap[k] = {"monthly_pc": int(v * 0.3),
-                                           "monthly_mobile": v - int(v * 0.3),
-                                           "comp_level": "-", "pl_avg_depth": 0}
+                            return chunk, {}
+
+                    if chunks:
+                        with ThreadPoolExecutor(max_workers=min(6, len(chunks))) as vp:
+                            for chunk, vols in vp.map(_vols, chunks):
+                                for k in chunk:
+                                    v = vols.get(k.replace(" ", "").upper())
+                                    if v:
+                                        smap[k] = {"monthly_pc": int(v * 0.3),
+                                                   "monthly_mobile": v - int(v * 0.3),
+                                                   "comp_level": "-",
+                                                   "pl_avg_depth": 0}
 
                     # ② 문서수를 잰다 (검색량은 이미 알고 있다)
                     out, failed = {}, []
-                    with ThreadPoolExecutor(max_workers=4) as pool:
+                    # 한 키워드당 가벼운 조회 한 번이라 여덟 줄까지 늘려도
+                    # 네이버가 버거워하지 않는다. 대기시간이 절반으로 준다.
+                    with ThreadPoolExecutor(max_workers=8) as pool:
                         futures = {
                             pool.submit(analyze_keyword, k, True, False, False,
                                         smap.get(k), True): k
@@ -1194,12 +1240,25 @@ with sub_research[1]:
                              horizontal=True, key="serp_sort")
         sort_key = "date" if serp_sort == "최신 발행순" else "sim"
 
+        # ⚠️ 예전에는 '최신순'을 볼 때 순위순 목록을 한 번 더 불러왔고,
+        # 아래에서 또 한 번 불러서 같은 응답을 세 번 받아왔다.
+        # 목록 자체를 한 겹 캐시해 두면 두 번째부터는 왕복이 사라진다.
+        @st.cache_data(ttl=1800, show_spinner=False)
+        def cached_serp(k, sort_key):
+            return get_serp(k, display=30, sort=sort_key)
+
         @st.cache_data(ttl=1800, show_spinner=False)
         def load_serp(k, sort_key):
-            data = get_serp(k, display=30, sort=sort_key)
+            if sort_key == "sim":
+                data = cached_serp(k, "sim")
+                return data, analyze_serp(data, top_n=10)
             # 판정은 항상 '노출 순위순' 기준으로 낸다.
             # 최신순 목록으로 판정하면 당연히 최신 글만 나와 의미가 없다.
-            base = data if sort_key == "sim" else get_serp(k, display=30, sort="sim")
+            # 두 목록은 서로 상관이 없으니 동시에 부른다.
+            with ThreadPoolExecutor(max_workers=2) as _sp:
+                _f_d = _sp.submit(cached_serp, k, sort_key)
+                _f_b = _sp.submit(cached_serp, k, "sim")
+                data, base = _f_d.result(), _f_b.result()
             return data, analyze_serp(base, top_n=10)
 
         with st.spinner(f"'{serp_kw}' 상위 글을 분석하는 중..."):
@@ -1209,9 +1268,7 @@ with sub_research[1]:
             ui.note("검색 결과를 가져오지 못했습니다. API 키 설정을 확인해주세요.")
         else:
             # 💡 상위 10칸을 한 칸씩 채점 — 이 제품에서 가장 눈에 띄는 화면
-            _base = serp if sort_key == "sim" else None
-            if _base is None:
-                _base = load_serp(serp_kw.strip(), "sim")[0]
+            _base = serp if sort_key == "sim" else cached_serp(serp_kw.strip(), "sim")
             ui.weak_strip(weak_spots(_base, serp_kw.strip()), serp_kw)
             st.write("")
 
@@ -1441,7 +1498,7 @@ with tabs[1]:
 
     st.divider()
 
-    @st.cache_data(ttl=60)
+    @st.cache_data(ttl=600)
     def load_tracking():
         try:
             tk = supabase.table("tracked_keywords").select("*") \
@@ -1729,7 +1786,7 @@ with tabs[2]:
                 "예: <code>blog.naver.com/myid</code> 또는 <code>myid</code>", gold=True)
     else:
         with st.spinner("블로그를 읽는 중"):
-            feed = get_my_blog_feed(my_blog_id)
+            feed = cached_my_feed(my_blog_id)
 
         if feed["error"]:
             ui.note(f"{feed['error']}<br>아이디가 맞는지, 블로그가 공개 상태인지 확인해주세요.")
@@ -2014,8 +2071,8 @@ if admin_tab is not None:
                 # 그래서 이 조회들을 그냥 두면 키워드 분석 탭을 쓰는 동안에도
                 # 매번 DB를 6번씩 두드린다. 두 가지로 막는다.
                 #   ① 버튼을 눌렀을 때만 불러온다
-                #   ② 불러온 뒤에는 60초간 캐시한다
-                @st.cache_data(ttl=60, show_spinner=False)
+                #   ② 불러온 뒤에는 5분간 캐시한다
+                @st.cache_data(ttl=300, show_spinner=False)
                 def load_admin(sort_key):
                     return {
                         "stats": cache.pool_stats(),
