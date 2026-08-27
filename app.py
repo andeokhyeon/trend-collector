@@ -30,6 +30,12 @@ except ImportError as _e:
 import ui
 import ai_brief
 
+# 회원 기능. 없어도 앱은 돌아가야 한다 (테이블을 아직 안 만들었을 수 있다).
+try:
+    import accounts
+except ImportError:
+    accounts = None
+
 # cache.py가 없어도 앱은 돌아가야 한다.
 # (공용 캐시가 없으면 사용자끼리 결과를 나눠 쓰지 못할 뿐이다)
 try:
@@ -69,6 +75,8 @@ if _missing:
 
 supabase = init_connection()
 # 사용자끼리 조회 결과를 나눠 쓰도록 공용 캐시에 연결한다.
+if accounts is not None:
+    accounts.attach(supabase)
 if cache is not None:
     cache.attach(supabase)
 else:
@@ -77,8 +85,12 @@ else:
 
 
 # 수집은 몇 시간에 한 번 돌아간다. 60초마다 DB를 다시 읽을 이유가 없다.
-# 키워드 추가·중단 같은 변경 지점은 모두 st.cache_data.clear()를 부르므로
-# 수명을 늘려도 화면이 낡아 보이지 않는다. (새로고침 때마다 왕복 한 번씩 줄어든다)
+#
+# ⚠️ 예전에는 추적기에서 '변경'·'중단'을 누를 때마다 st.cache_data.clear()로
+# 모든 캐시를 통째로 버렸다. 바뀐 건 추적 목록 한 줄인데 30일치 수만 건을
+# 다시 읽어왔고, 밑에 깔린 네이버 캐시까지 위험해졌다.
+# 이제는 바뀐 것(load_tracking)만 버린다. 전체를 비우는 건
+# '키워드 발굴'의 새로고침 버튼 하나뿐이다.
 # ⚠️ show_spinner=False가 없으면 스트림릿이 'Running load_data().'를
 # 화면에 띄운다. 영어에 함수 이름까지 나와서 처음 온 사람은 오류로 읽는다.
 # 기다리는 티는 각 화면의 우리말 안내로 충분하다.
@@ -616,7 +628,37 @@ if not df.empty:
     _mins = int((datetime.now(timezone.utc) - _last).total_seconds() // 60)
     _fresh = f"{_mins}분 전" if _mins < 120 else f"{_mins // 60}시간 전"
 
+@st.cache_data(ttl=60, show_spinner=False)
+def my_profile(uid):
+    """
+    이름과 남은 크레딧. 화면마다 DB를 두드리지 않게 1분 캐시.
+
+    ⚠️ 카카오 로그인은 이메일을 안 줄 수도 있다(비즈앱이라야 준다).
+    그래서 이름은 이메일이 아니라 프로필의 닉네임에서 가져온다.
+    """
+    if accounts is None or not uid:
+        return None
+    return accounts.profile(uid)
+
+
+def my_credits(uid):
+    p = my_profile(uid)
+    return None if p is None else int(p.get("credits") or 0)
+
+
+def my_name(u):
+    p = my_profile(u["id"]) if u else None
+    return ((p or {}).get("nickname")
+            or (u or {}).get("email", "").split("@")[0]
+            or "회원")
+
+
 _meta = []
+_u = st.session_state.get("user")
+if _u:
+    _c = my_credits(_u["id"])
+    _meta.append(my_name(_u)
+                 + (f" · 크레딧 {_c:,}" if _c is not None else ""))
 if st.session_state.get("blog_id"):
     _meta.append(f"내 블로그 · {st.session_state['blog_id']}")
 if _fresh:
@@ -670,6 +712,135 @@ if "debug" in _get_query_params():
         f"- 비밀번호 설정됨: `{bool(config.ADMIN_PASSWORD)}`\n"
         f"- 모듈 버전: `{__import__('naver_api').MODULE_VERSION}`"
     )
+
+# ------------------------------------------------------------
+# 회원 — 로그인 / 가입
+#
+# ⚠️ 로그인 벽을 첫 화면에 세우지 않는다. 처음 온 사람이 무엇을 주는
+# 도구인지 보기도 전에 가입부터 요구하면 대부분 그냥 닫는다.
+# '키워드 발굴'(이미 수집해둔 것)은 로그인 없이 열어두고,
+# 네이버를 실제로 부르는 조사·추적기·내 블로그만 로그인을 받는다.
+# ------------------------------------------------------------
+# ⚠️ 소셜 로그인은 '갔다가 ?code=… 를 달고 돌아온다'. 그 코드를 세션으로
+# 바꾸는 일을 화면 그리기 전에 먼저 해치운다. 안 그러면 로그인 상자가
+# 한 번 깜빡였다가 사라진다.
+def _consume_oauth_code():
+    if accounts is None or st.session_state.get("user"):
+        return
+    try:
+        qp = dict(st.query_params)
+    except Exception:
+        qp = {}
+    code = qp.get("code")
+    if isinstance(code, list):
+        code = code[0] if code else None
+    if not code:
+        return
+    ok, msg, user = accounts.exchange(
+        code, st.session_state.pop("oauth_verifier", None))
+    # 코드는 한 번만 쓸 수 있다. 성공했든 아니든 주소에서 지운다.
+    try:
+        st.query_params.pop("code", None)
+    except Exception:
+        pass
+    if ok:
+        st.session_state["user"] = user
+        st.rerun()
+    else:
+        st.session_state["oauth_error"] = msg
+
+
+_consume_oauth_code()
+
+
+def _me():
+    return st.session_state.get("user")
+
+
+def _eun(word):
+    """받침에 따라 '은/는'을 고른다. ('키워드 조사은'처럼 되지 않게)"""
+    w = (word or "").strip()
+    if not w:
+        return "는"
+    ch = w[-1]
+    if "가" <= ch <= "힣":
+        return "은" if (ord(ch) - 0xAC00) % 28 else "는"
+    return "는"
+
+
+def _social_box():
+    """카카오·구글 버튼. 눌러야 주소를 만든다(미리 만들면 낭비다)."""
+    if accounts is None:
+        return
+    _site = getattr(config, "SITE_URL", "") or ""
+    cols = st.columns(len(accounts.PROVIDERS))
+    for col, (pid, (label, bg, fg)) in zip(cols, accounts.PROVIDERS.items()):
+        with col:
+            if st.button(f"{label}로 시작하기", key=f"oauth_{pid}",
+                         use_container_width=True):
+                url, verifier, msg = accounts.oauth_url(pid, _site)
+                if url:
+                    if verifier:
+                        st.session_state["oauth_verifier"] = verifier
+                    st.markdown(
+                        f'<meta http-equiv="refresh" content="0;url={url}">'
+                        f'<a href="{url}" target="_self">'
+                        f'{label} 로그인으로 이동합니다…</a>',
+                        unsafe_allow_html=True)
+                    st.stop()
+                else:
+                    st.error(msg)
+
+
+def login_gate(what="이 기능"):
+    """로그인했으면 True. 아니면 가입/로그인 상자를 그리고 False."""
+    if _me():
+        return True
+    if accounts is None or not accounts.table_ready():
+        return True          # 회원 기능이 아직 없으면 막지 않는다
+
+    ui.pitch("먼저 로그인해주세요",
+             f"{what}{_eun(what)} 회원만 쓸 수 있습니다",
+             "가입은 이메일 하나면 됩니다. 무료로 30번 조사할 수 있습니다.")
+    if st.session_state.get("oauth_error"):
+        st.error(st.session_state.pop("oauth_error"))
+
+    _social_box()
+    st.markdown('<div class="or-line"><span>또는 이메일로</span></div>',
+                unsafe_allow_html=True)
+
+    tab_in, tab_up = st.tabs(["로그인", "회원가입"])
+    with tab_in:
+        with st.container(border=True):
+            e = st.text_input("이메일", key="li_email",
+                              placeholder="you@example.com")
+            pw = st.text_input("비밀번호", type="password", key="li_pw")
+            if st.button("로그인", type="primary", key="li_go",
+                         use_container_width=True):
+                ok, msg, user = accounts.sign_in(e, pw)
+                if ok:
+                    st.session_state["user"] = user
+                    st.rerun()
+                else:
+                    st.error(msg)
+    with tab_up:
+        with st.container(border=True):
+            e2 = st.text_input("이메일", key="su_email",
+                               placeholder="you@example.com")
+            n2 = st.text_input("닉네임 (선택)", key="su_nick")
+            p2 = st.text_input("비밀번호 (6자 이상)", type="password", key="su_pw")
+            if st.button("가입하기", type="primary", key="su_go",
+                         use_container_width=True):
+                ok, msg, user = accounts.sign_up(e2, p2, n2)
+                if ok and user:
+                    st.session_state["user"] = user
+                    st.rerun()
+                elif ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+    return False
+
 
 _tab_names = ["키워드 조사", "추적기", "내 블로그", "키워드 발굴"]
 # 한 번 들어오면 조작하는 동안 유지된다 (주소가 지워져도 탭이 사라지지 않게)
@@ -761,6 +932,31 @@ with sub_research[0]:
     research_kw = st.session_state.get("active_kw", "")
 
     kw = research_kw
+
+    # ⚠️ 로그인은 '조사를 시작할 때' 받는다. 빈 첫 화면까지 막으면
+    # 무엇을 주는 도구인지 보기도 전에 가입부터 요구하는 꼴이 된다.
+    if kw and not login_gate("키워드 조사"):
+        kw = ""
+
+    # 💳 크레딧은 '새 키워드를 처음 잴 때' 한 번만 깎는다.
+    # ⚠️ 스트림릿은 글자 하나 칠 때마다 스크립트를 다시 돌린다.
+    # 그때마다 깎으면 30크레딧이 삼십 초 만에 사라진다.
+    # 이번 접속에서 이미 낸 키워드는 기억해두고 다시 받지 않는다.
+    if kw and accounts is not None and _me():
+        _paid = st.session_state.setdefault("charged_kw", set())
+        _k = kw.strip()
+        if _k not in _paid:
+            _ok, _left, _why = accounts.spend(
+                _me()["id"], reason="analyze", keyword=_k)
+            if not _ok:
+                my_profile.clear()
+                ui.pitch("크레딧을 다 쓰셨습니다",
+                         "충전하면 이어서 볼 수 있습니다",
+                         "관리자에게 문의하시거나 잠시 후 다시 시도해주세요.")
+                kw = ""
+            else:
+                _paid.add(_k)
+                my_profile.clear()
 
     # ⚠️ Streamlit은 어떤 탭을 보고 있든 스크립트 전체를 다시 실행한다.
     # 그래서 아래 '경쟁 분석'·'글감 만들기' 탭도 매번 같은 키워드의
@@ -1482,6 +1678,34 @@ with tabs[1]:
         ui.note("블로그를 등록하면 <b>내 글의 순위 변화</b>까지 함께 기록합니다. "
                 "등록하지 않아도 검색량·문서수 변화는 추적됩니다.", gold=True)
 
+    # ⚠️ 추적 목록을 읽는 곳. 아래 추가·변경·중단이 모두 이 캐시만 버리면 되도록
+    # 쓰는 곳보다 먼저 정의해 둔다.
+    @st.cache_data(ttl=600, show_spinner=False)
+    def load_tracking():
+        try:
+            # ⚠️ 회원이 생겼으니 남의 추적 목록이 섞이면 안 된다.
+            # user_id 칸이 아직 없는 예전 DB에서도 돌아가야 하므로,
+            # 걸러보고 실패하면 예전처럼 전부 읽는다.
+            q = supabase.table("tracked_keywords").select("*")
+            uid = (st.session_state.get("user") or {}).get("id")
+            try:
+                if uid:
+                    tk = (q.eq("user_id", uid)
+                          .order("created_at", desc=True).execute().data or [])
+                else:
+                    tk = (supabase.table("tracked_keywords").select("*")
+                          .is_("user_id", "null")
+                          .order("created_at", desc=True).execute().data or [])
+            except Exception:
+                tk = (supabase.table("tracked_keywords").select("*")
+                      .order("created_at", desc=True).execute().data or [])
+            since = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+            hist = supabase.table("tracking_history").select("*") \
+                .gte("created_at", since).order("created_at").execute().data or []
+            return tk, hist, None
+        except Exception as e:
+            return [], [], str(e)
+
     with st.container(border=True):
         add_c1, add_c2 = st.columns([3, 1])
         with add_c1:
@@ -1496,15 +1720,25 @@ with tabs[1]:
 
     if add_clicked and new_kw.strip():
         try:
-            supabase.table("tracked_keywords").insert({
-                "keyword": new_kw.strip(), "blog_id": my_blog_id or "",
-                "has_post": bool(wrote),
-            }).execute()
+            _row = {"keyword": new_kw.strip(), "blog_id": my_blog_id or "",
+                    "has_post": bool(wrote)}
+            _uid = (st.session_state.get("user") or {}).get("id")
+            if _uid:
+                _row["user_id"] = _uid
+            try:
+                supabase.table("tracked_keywords").insert(_row).execute()
+            except Exception as _e:
+                # user_id 칸이 없는 예전 DB — 그 칸만 빼고 다시
+                if "user_id" in str(_e):
+                    _row.pop("user_id", None)
+                    supabase.table("tracked_keywords").insert(_row).execute()
+                else:
+                    raise
             st.success(f"'{new_kw.strip()}' 추적을 시작합니다. "
                        + ("글을 쓰셨으니 순위를 추적합니다. "
                           if wrote else "검색량 변화를 지켜봅니다. ")
                        + "다음 수집부터 기록이 쌓입니다.")
-            st.cache_data.clear()
+            load_tracking.clear()
         except Exception as e:
             msg = str(e)
             if "duplicate" in msg.lower() or "unique" in msg.lower():
@@ -1520,17 +1754,6 @@ with tabs[1]:
 
     st.divider()
 
-    @st.cache_data(ttl=600, show_spinner=False)
-    def load_tracking():
-        try:
-            tk = supabase.table("tracked_keywords").select("*") \
-                .order("created_at", desc=True).execute().data or []
-            since = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
-            hist = supabase.table("tracking_history").select("*") \
-                .gte("created_at", since).order("created_at").execute().data or []
-            return tk, hist, None
-        except Exception as e:
-            return [], [], str(e)
 
     tracked, history, err = load_tracking()
 
@@ -1662,7 +1885,7 @@ with tabs[1]:
                     supabase.table("tracked_keywords") \
                         .update({"has_post": not bool(tgt.get("has_post"))}) \
                         .eq("id", tgt["id"]).execute()
-                    st.cache_data.clear()
+                    load_tracking.clear()
                     st.rerun()
                 except Exception as e:
                     st.error(f"전환 실패: {e}")
@@ -1675,7 +1898,7 @@ with tabs[1]:
                 try:
                     supabase.table("tracked_keywords").delete() \
                         .eq("id", target["id"]).execute()
-                    st.cache_data.clear()
+                    load_tracking.clear()
                     st.success(f"'{stopped}' 추적을 중단했습니다.")
                     st.rerun()
                 except Exception as e:
@@ -1789,6 +2012,26 @@ with tabs[1]:
 # 2. 내 블로그
 # ------------------------------------------------------------
 with tabs[2]:
+    # 로그인 상태와 로그아웃은 여기 — '내 것'을 다루는 유일한 탭이다.
+    if _me():
+        _ac1, _ac2 = st.columns([4, 1])
+        with _ac1:
+            _cr = my_credits(_me()["id"])
+            _mail = _me().get("email") or ""
+            st.caption(
+                f"**{my_name(_me())}**" + (f" ({_mail})" if _mail else "")
+                + " 로 로그인 중"
+                + (f"　·　남은 크레딧 **{_cr:,}**" if _cr is not None else ""))
+        with _ac2:
+            if st.button("로그아웃", use_container_width=True, key="logout"):
+                if accounts is not None:
+                    accounts.sign_out()
+                for _k in ("user", "charged_kw", "admin_ok"):
+                    st.session_state.pop(_k, None)
+                my_profile.clear()
+                st.rerun()
+        st.write("")
+
     ui.section("내 블로그 진단", "지금 내 블로그는 어떤 상태인가")
 
     # ⚠️ 블로그 주소를 받는 곳은 이제 여기 하나다.
@@ -2132,8 +2375,26 @@ else:
 # ------------------------------------------------------------
 if admin_tab is not None:
     with admin_tab:
+        # ⚠️ 관리자용 아이디를 따로 두지 않는다. 계정이 둘이면 비밀번호도 둘이고,
+        # 누가 무엇을 했는지도 안 남는다. 회원 계정에 '관리자' 표시를 다는 쪽이
+        # 사람마다 주고 뺄 수 있고 기록도 남는다.
+        # 다만 아직 아무도 지정 안 됐을 수 있으니, 예전 비밀번호도 그대로 남긴다.
+        # (그래야 스스로 문을 잠그고 못 들어가는 일이 없다)
+        if (accounts is not None and _me()
+                and accounts.is_admin(_me()["id"])):
+            st.session_state["admin_ok"] = True
+
         if not st.session_state.get("admin_ok"):
             ui.section("관리자 화면", "비밀번호를 입력하세요")
+            if accounts is not None and accounts.table_ready():
+                if _me():
+                    ui.note("지금 계정에는 <b>관리자 표시</b>가 없습니다. "
+                            "아래 비밀번호로 들어간 뒤 회원 탭에서 지정하거나, "
+                            "<code>회원_DB설정.sql</code> 맨 아래 한 줄을 "
+                            "Supabase에서 실행해주세요.")
+                else:
+                    ui.note("회원으로 로그인한 뒤 <b>관리자</b>로 지정해두면 "
+                            "비밀번호 없이 바로 들어옵니다.")
             ui.note("이 탭은 주소에 열쇠말을 붙였을 때만 나타납니다. "
                     "주소를 즐겨찾기에 저장해두면 편합니다.")
             with st.container(border=True):
@@ -2145,102 +2406,353 @@ if admin_tab is not None:
                     else:
                         st.error("비밀번호가 맞지 않습니다.")
         else:
-            ui.section("관리자 화면", "수집 상태와 키워드 풀 현황")
+            ui.section("관리자 콘솔", "회원 · 비용 · 사용량 한 화면에")
 
-            if cache is None:
-                ui.note("cache.py가 없어 현황을 볼 수 없습니다.")
-            else:
-                # ⚠️ Streamlit은 어떤 탭을 보고 있든 스크립트 전체를 다시 실행한다.
-                # 그래서 이 조회들을 그냥 두면 키워드 분석 탭을 쓰는 동안에도
-                # 매번 DB를 6번씩 두드린다. 두 가지로 막는다.
-                #   ① 버튼을 눌렀을 때만 불러온다
-                #   ② 불러온 뒤에는 5분간 캐시한다
-                @st.cache_data(ttl=300, show_spinner=False)
-                def load_admin(sort_key):
-                    return {
-                        "stats": cache.pool_stats(),
-                        "usage": cache.usage(),
-                        "hist": cache.usage_history(7),
-                        "rows": (cache.pool_recent(100) if sort_key == "최근 추가순"
-                                 else cache.pool_top(100)),
-                    }
+            _adm = st.tabs(["회원", "비용", "수집·풀"])
 
-                sort_by = st.radio("정렬", ["최근 추가순", "검색량 많은순"],
-                                   horizontal=True, key="pool_sort")
-
-                b1, b2 = st.columns([1, 4])
-                with b1:
-                    if st.button("불러오기", key="admin_load",
-                                 use_container_width=True):
-                        st.session_state["admin_loaded"] = True
-                        load_admin.clear()
-
-                if not st.session_state.get("admin_loaded"):
-                    ui.note("<b>불러오기</b>를 누르면 현황을 조회합니다. "
-                            "자동으로 부르지 않는 이유는, 이 화면을 안 보고 있을 때도 "
-                            "DB를 계속 두드리면 대시보드 전체가 느려지기 때문입니다.")
+            # ── 회원 ────────────────────────────────────────
+            with _adm[0]:
+                if accounts is None or not accounts.table_ready():
+                    ui.pitch("회원 테이블이 아직 없습니다",
+                             "SQL 한 번만 실행하면 됩니다",
+                             "함께 드린 `회원_DB설정.sql`을 Supabase의 "
+                             "SQL Editor에 붙여넣고 실행해주세요.")
                 else:
-                    with st.spinner("현황을 불러오는 중..."):
-                        d = load_admin(sort_by)
-                    stats, u, hist, rows = d["stats"], d["usage"], d["hist"], d["rows"]
+                    @st.cache_data(ttl=120, show_spinner=False)
+                    def load_members():
+                        return (accounts.all_members(300),
+                                accounts.usage_by_user(7),
+                                accounts.recent_credit_log(40))
 
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1:
-                        ui.kpi("쌓인 키워드", compact_num(stats["total"]),
-                               f"오늘 +{stats['today']:,}개")
-                    with c2:
-                        # 문서수는 미리 안 쌓는다. 조회된 것만 채워지므로
-                        # '전체의 0%'로 보이면 잘못된 것처럼 오해하기 쉽다.
-                        ui.kpi("문서수 잰 키워드", compact_num(stats["with_docs"]),
-                               "조회된 것만 채워집니다")
-                    with c3:
-                        ui.kpi("오늘 API 호출", f"{u['calls']:,}",
-                               f"한도 {u['limit']:,}회의 {u['pct']}%")
-                    with c4:
-                        ui.kpi("남은 조회", f"{u['remaining']:,}",
-                               f"{cache.reset_time()} 초기화")
-
-                    ui.note("<b>검색량</b>은 한 번 호출에 연관어 20개가 딸려와 빠르게 쌓입니다. "
-                            "<b>문서수</b>는 키워드마다 따로 불러야 해서, "
-                            "실제로 조회된 것만 채워집니다. 두 숫자가 크게 차이나는 건 정상입니다.")
-
-                    st.write("")
-                    ui.gauge("오늘 사용량", min(100, int(u["pct"])),
-                             ("여유", "보통", "한도"),
-                             color=(ui.BAD if u["pct"] >= 70 else
-                                    (ui.WARN if u["pct"] >= 40 else ui.GOOD)))
-
-                    if hist:
-                        st.write("")
-                        ui.bar_series(
-                            [(h["day"][5:], int(h["calls"] or 0))
-                             for h in reversed(hist)],
-                            "최근 7일 API 호출", height=170, accent=ui.DEEP)
-
-                    st.write("")
-                    ui.section("키워드 풀", "실제로 어떤 단어가 쌓였나")
-
-                    if not rows:
-                        ui.note("아직 쌓인 키워드가 없습니다. "
-                                "<b>7_키워드_미리쌓기.bat</b>을 돌리거나 "
-                                "GitHub Actions의 <b>seed-pool</b>을 실행해보세요.")
+                    _mc1, _mc2 = st.columns([1, 4])
+                    with _mc1:
+                        if st.button("불러오기", key="mem_load",
+                                     use_container_width=True):
+                            load_members.clear()
+                            st.session_state["mem_loaded"] = True
+                    if not st.session_state.get("mem_loaded"):
+                        ui.note("<b>불러오기</b>를 누르면 회원 현황을 조회합니다.")
                     else:
-                        df_pool = pd.DataFrame([{
-                            "키워드": r["keyword"],
-                            "월 검색량": (r.get("monthly_pc") or 0)
-                                       + (r.get("monthly_mobile") or 0),
-                            "경쟁": r.get("comp_level") or "-",
-                            "문서수": r.get("blog_total_docs") or None,
-                            "쌓인 시각": (r.get("updated_at") or "")[:16].replace("T", " "),
-                        } for r in rows])
-                        df_pool.index = df_pool.index + 1
-                        show_table(df_pool, height=420)
-                        st.caption(f"{len(rows)}개 표시 중 · 전체 {stats['total']:,}개 "
-                                   "· 60초간 저장된 값을 씁니다")
+                        members, uu, clog = load_members()
+                        _paid = [m for m in members
+                                 if (m.get("plan") or "free") != "free"]
+                        _act = [m for m in members if m.get("last_seen")]
+                        _k1, _k2, _k3, _k4 = st.columns(4)
+                        with _k1:
+                            ui.kpi("전체 회원", f"{len(members):,}", "가입한 사람")
+                        with _k2:
+                            ui.kpi("유료 회원", f"{len(_paid):,}",
+                                   "무료가 아닌 플랜")
+                        with _k3:
+                            ui.kpi("한 번이라도 쓴 사람", f"{len(_act):,}",
+                                   "로그인 기록 있음")
+                        with _k4:
+                            _tot = sum(sum(v.values()) for v in uu.values())
+                            ui.kpi("7일 호출(회원분)", f"{_tot:,}",
+                                   "회원별로 기록된 것만")
 
+                        st.write("")
+                        if not members:
+                            ui.note("아직 가입한 회원이 없습니다.")
+                        else:
+                            _rows = []
+                            for m in members:
+                                u = uu.get(m["id"], {})
+                                _rows.append({
+                                    "회원": (m.get("nickname")
+                                             or (m.get("email") or "")
+                                             .split("@")[0] or "-"),
+                                    "이메일": m.get("email") or "(카카오)",
+                                    "플랜": accounts.PLANS.get(
+                                        m.get("plan") or "free",
+                                        {}).get("name", m.get("plan") or "-"),
+                                    "크레딧": int(m.get("credits") or 0),
+                                    "7일 호출": sum(u.values()),
+                                    "가입": str(m.get("created_at") or "")[:10],
+                                    "마지막 접속": str(m.get("last_seen")
+                                                     or "-")[:10],
+                                })
+                            _mf = pd.DataFrame(_rows)
+                            # 번호는 1부터. 안 맞추면 첫 줄이 '0'으로 나온다.
+                            _mf.index = range(1, len(_mf) + 1)
+                            show_table(_mf, center_cols=("플랜", "가입",
+                                                         "마지막 접속"))
+                            csv_button(_mf, "회원목록", "csv_members")
+
+                            st.write("")
+                            ui.section("크레딧 손보기", "충전하거나 플랜을 바꿉니다")
+                            _opts = {f"{(m.get('nickname') or m.get('email') or m['id'])[:24]}"
+                                     f"  ·  {int(m.get('credits') or 0):,}크레딧": m["id"]
+                                     for m in members}
+                            with st.container(border=True):
+                                _g1, _g2, _g3 = st.columns([3, 1, 1])
+                                with _g1:
+                                    _pick = st.selectbox(
+                                        "회원", list(_opts.keys()),
+                                        key="adm_member",
+                                        label_visibility="collapsed")
+                                with _g2:
+                                    _amt = st.number_input(
+                                        "크레딧", value=100, step=50,
+                                        key="adm_amt",
+                                        label_visibility="collapsed")
+                                with _g3:
+                                    if st.button("충전", key="adm_grant",
+                                                 use_container_width=True,
+                                                 type="primary"):
+                                        if accounts.grant(_opts[_pick],
+                                                          int(_amt)):
+                                            load_members.clear()
+                                            my_profile.clear()
+                                            st.success("충전했습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("충전하지 못했습니다.")
+                                _p1, _p2 = st.columns([3, 1])
+                                with _p1:
+                                    _plan = st.selectbox(
+                                        "플랜", list(accounts.PLANS.keys()),
+                                        format_func=lambda k: (
+                                            f"{accounts.PLANS[k]['name']} · "
+                                            f"{accounts.PLANS[k]['credits']:,}크레딧 · "
+                                            f"{accounts.PLANS[k]['price']:,}원"),
+                                        key="adm_plan",
+                                        label_visibility="collapsed")
+                                with _p2:
+                                    if st.button("플랜 변경", key="adm_setplan",
+                                                 use_container_width=True):
+                                        if accounts.set_plan(_opts[_pick],
+                                                             _plan):
+                                            load_members.clear()
+                                            my_profile.clear()
+                                            st.success("바꿨습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("바꾸지 못했습니다.")
+
+                            st.write("")
+                            ui.section("관리자 지정",
+                                       "이 사람은 관리 콘솔에 들어올 수 있습니다")
+                            _admins = [m for m in members if m.get("is_admin")]
+                            if not _admins:
+                                ui.note("아직 관리자가 없습니다. 지금은 비밀번호로만 "
+                                        "들어올 수 있습니다. 아래에서 본인 계정을 "
+                                        "관리자로 지정해두면 다음부터는 그냥 들어옵니다.")
+                            else:
+                                ui.note("현재 관리자: <b>"
+                                        + "</b>, <b>".join(
+                                            (a.get("email") or a["id"])
+                                            for a in _admins) + "</b>")
+                            with st.container(border=True):
+                                _a1, _a2, _a3 = st.columns([3, 1, 1])
+                                with _a1:
+                                    _apick = st.selectbox(
+                                        "관리자로 지정할 회원",
+                                        list(_opts.keys()), key="adm_who",
+                                        label_visibility="collapsed")
+                                with _a2:
+                                    if st.button("관리자로", key="adm_on",
+                                                 use_container_width=True):
+                                        if accounts.set_admin(_opts[_apick],
+                                                              True):
+                                            load_members.clear()
+                                            st.success("지정했습니다.")
+                                            st.rerun()
+                                with _a3:
+                                    if st.button("해제", key="adm_off",
+                                                 use_container_width=True):
+                                        if accounts.set_admin(_opts[_apick],
+                                                              False):
+                                            load_members.clear()
+                                            st.success("해제했습니다.")
+                                            st.rerun()
+
+                            if clog:
+                                st.write("")
+                                ui.section("최근 크레딧 변동", "누가 언제 얼마나")
+                                _emap = {m["id"]: (m.get("nickname")
+                                                   or m.get("email") or "-")
+                                         for m in members}
+                                _cf = pd.DataFrame([{
+                                    "회원": _emap.get(c.get("user_id"), "-"),
+                                    "변동": f"{int(c.get('delta') or 0):+,}",
+                                    "잔액": int(c.get("balance") or 0),
+                                    "사유": c.get("reason") or "-",
+                                    "키워드": c.get("keyword") or "-",
+                                    "때": str(c.get("created_at") or "")[:16]
+                                            .replace("T", " "),
+                                } for c in clog])
+                                _cf.index = range(1, len(_cf) + 1)
+                                show_table(_cf,
+                                           center_cols=("변동", "사유", "때"))
+
+            # ── 비용 ────────────────────────────────────────
+            with _adm[1]:
+                ui.section("Claude 비용", "Anthropic Admin API로 직접 읽습니다")
+                if st.button("불러오기", key="cost_load"):
+                    st.session_state["cost_loaded"] = True
+                if not st.session_state.get("cost_loaded"):
+                    ui.note("<b>불러오기</b>를 누르면 조회합니다. "
+                            "Anthropic 쪽 호출이라 자동으로 부르지 않습니다.")
+                else:
+                    try:
+                        import claude_usage
+                        _cost, _cmsg = claude_usage.cost(14)
+                        _tok, _tmsg = claude_usage.tokens(7)
+                    except Exception as _e:
+                        _cost = _tok = None
+                        _cmsg = _tmsg = str(_e)
+                    if _cost is None:
+                        ui.note(_cmsg)
+                    else:
+                        _sum = sum(d["usd"] for d in _cost)
+                        _last = _cost[-1]["usd"] if _cost else 0
+                        _c1, _c2 = st.columns(2)
+                        with _c1:
+                            ui.kpi("최근 14일 비용", f"${_sum:,.2f}",
+                                   f"약 {int(_sum * 1400):,}원")
+                        with _c2:
+                            ui.kpi("어제 비용", f"${_last:,.2f}",
+                                   "하루치")
+                        st.write("")
+                        ui.bar_series([(d["day"], int(d["usd"] * 100))
+                                       for d in _cost],
+                                      "일별 비용 (센트)", height=170,
+                                      accent=ui.DEEP)
+                    if _tok:
+                        st.write("")
+                        _tf = pd.DataFrame([{
+                            "날짜": t["day"],
+                            "입력 토큰": t["input"],
+                            "출력 토큰": t["output"],
+                            "캐시 읽기": t["cache_read"],
+                        } for t in _tok])
+                        _tf.index = range(1, len(_tf) + 1)
+                        show_table(_tf, center_cols=("날짜",))
+
+                st.write("")
+                ui.section("네이버 사용량", "우리가 직접 센 숫자입니다")
+                ui.note("네이버 콘솔은 종류별로 나눠 보여주지 않습니다. "
+                        "여기 숫자는 앱이 부를 때마다 직접 센 것이라 "
+                        "<b>어떤 기능이 한도를 먹는지</b>까지 보입니다.")
+                if cache is not None:
+                    _u2 = cache.usage()
+                    _n1, _n2, _n3 = st.columns(3)
+                    with _n1:
+                        ui.kpi("오늘 호출", f"{_u2['calls']:,}",
+                               f"한도 {_u2['limit']:,}회")
+                    with _n2:
+                        ui.kpi("남은 조회", f"{_u2['remaining']:,}",
+                               f"{cache.reset_time()} 초기화")
+                    with _n3:
+                        ui.kpi("사용률", f"{_u2['pct']}%",
+                               "70%를 넘으면 조회를 아낍니다")
+                    _h2 = cache.usage_history(14)
+                    if _h2:
+                        st.write("")
+                        ui.bar_series([(h["day"][5:], int(h["calls"] or 0))
+                                       for h in reversed(_h2)],
+                                      "최근 14일 네이버 호출", height=170,
+                                      accent=ui.GOOD)
+
+            # ── 수집·풀 ─────────────────────────────────────
+            with _adm[2]:
+                if cache is None:
+                    ui.note("cache.py가 없어 현황을 볼 수 없습니다.")
+                else:
+                    # ⚠️ Streamlit은 어떤 탭을 보고 있든 스크립트 전체를 다시 실행한다.
+                    # 그래서 이 조회들을 그냥 두면 키워드 분석 탭을 쓰는 동안에도
+                    # 매번 DB를 6번씩 두드린다. 두 가지로 막는다.
+                    #   ① 버튼을 눌렀을 때만 불러온다
+                    #   ② 불러온 뒤에는 5분간 캐시한다
+                    @st.cache_data(ttl=300, show_spinner=False)
+                    def load_admin(sort_key):
+                        return {
+                            "stats": cache.pool_stats(),
+                            "usage": cache.usage(),
+                            "hist": cache.usage_history(7),
+                            "rows": (cache.pool_recent(100) if sort_key == "최근 추가순"
+                                     else cache.pool_top(100)),
+                        }
+
+                    sort_by = st.radio("정렬", ["최근 추가순", "검색량 많은순"],
+                                       horizontal=True, key="pool_sort")
+
+                    b1, b2 = st.columns([1, 4])
+                    with b1:
+                        if st.button("불러오기", key="admin_load",
+                                     use_container_width=True):
+                            st.session_state["admin_loaded"] = True
+                            load_admin.clear()
+
+                    if not st.session_state.get("admin_loaded"):
+                        ui.note("<b>불러오기</b>를 누르면 현황을 조회합니다. "
+                                "자동으로 부르지 않는 이유는, 이 화면을 안 보고 있을 때도 "
+                                "DB를 계속 두드리면 대시보드 전체가 느려지기 때문입니다.")
+                    else:
+                        with st.spinner("현황을 불러오는 중..."):
+                            d = load_admin(sort_by)
+                        stats, u, hist, rows = d["stats"], d["usage"], d["hist"], d["rows"]
+
+                        c1, c2, c3, c4 = st.columns(4)
+                        with c1:
+                            ui.kpi("쌓인 키워드", compact_num(stats["total"]),
+                                   f"오늘 +{stats['today']:,}개")
+                        with c2:
+                            # 문서수는 미리 안 쌓는다. 조회된 것만 채워지므로
+                            # '전체의 0%'로 보이면 잘못된 것처럼 오해하기 쉽다.
+                            ui.kpi("문서수 잰 키워드", compact_num(stats["with_docs"]),
+                                   "조회된 것만 채워집니다")
+                        with c3:
+                            ui.kpi("오늘 API 호출", f"{u['calls']:,}",
+                                   f"한도 {u['limit']:,}회의 {u['pct']}%")
+                        with c4:
+                            ui.kpi("남은 조회", f"{u['remaining']:,}",
+                                   f"{cache.reset_time()} 초기화")
+
+                        ui.note("<b>검색량</b>은 한 번 호출에 연관어 20개가 딸려와 빠르게 쌓입니다. "
+                                "<b>문서수</b>는 키워드마다 따로 불러야 해서, "
+                                "실제로 조회된 것만 채워집니다. 두 숫자가 크게 차이나는 건 정상입니다.")
+
+                        st.write("")
+                        ui.gauge("오늘 사용량", min(100, int(u["pct"])),
+                                 ("여유", "보통", "한도"),
+                                 color=(ui.BAD if u["pct"] >= 70 else
+                                        (ui.WARN if u["pct"] >= 40 else ui.GOOD)))
+
+                        if hist:
+                            st.write("")
+                            ui.bar_series(
+                                [(h["day"][5:], int(h["calls"] or 0))
+                                 for h in reversed(hist)],
+                                "최근 7일 API 호출", height=170, accent=ui.DEEP)
+
+                        st.write("")
+                        ui.section("키워드 풀", "실제로 어떤 단어가 쌓였나")
+
+                        if not rows:
+                            ui.note("아직 쌓인 키워드가 없습니다. "
+                                    "<b>7_키워드_미리쌓기.bat</b>을 돌리거나 "
+                                    "GitHub Actions의 <b>seed-pool</b>을 실행해보세요.")
+                        else:
+                            df_pool = pd.DataFrame([{
+                                "키워드": r["keyword"],
+                                "월 검색량": (r.get("monthly_pc") or 0)
+                                           + (r.get("monthly_mobile") or 0),
+                                "경쟁": r.get("comp_level") or "-",
+                                "문서수": r.get("blog_total_docs") or None,
+                                "쌓인 시각": (r.get("updated_at") or "")[:16].replace("T", " "),
+                            } for r in rows])
+                            df_pool.index = df_pool.index + 1
+                            show_table(df_pool, height=420)
+                            st.caption(f"{len(rows)}개 표시 중 · 전체 {stats['total']:,}개 "
+                                       "· 60초간 저장된 값을 씁니다")
+
+            # 잠그기는 세 탭 어디에 있든 보여야 하므로 탭 바깥에 둔다.
             st.write("")
             if st.button("잠그기", key="admin_lock"):
-                for k in ("admin_ok", "admin_loaded", "admin_visible"):
+                for k in ("admin_ok", "admin_loaded", "admin_visible",
+                          "mem_loaded", "cost_loaded"):
                     st.session_state.pop(k, None)
                 # 주소에서도 열쇠말을 지운다
                 try:

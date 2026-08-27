@@ -1547,6 +1547,23 @@ font-size: 1.16em; letter-spacing: -.02em;
 .st-key-serp_sort [role="radiogroup"] {{ gap: 2px !important; }}
 .st-key-serp_sort label {{ font-size: .84rem !important; }}
 .st-key-serp_sort label p {{ font-size: .84rem !important; }}
+/* 소셜 로그인 버튼 — 카카오는 제 색이라야 한눈에 알아본다 */
+.st-key-oauth_kakao .stButton button {{
+background: #FEE500 !important; border-color: #F2DA00 !important;
+color: #191600 !important; font-weight: 700 !important;
+}}
+.st-key-oauth_google .stButton button {{
+background: #FFFFFF !important; color: #3C4043 !important;
+font-weight: 700 !important;
+}}
+/* '또는 이메일로' — 상자가 아니라 가로줄 가운데 얹힌 글씨로 */
+.or-line {{
+display: flex; align-items: center; gap: 12px;
+margin: 18px 0 6px; color: {MUTED}; font-size: .84rem;
+}}
+.or-line::before, .or-line::after {{
+content: ""; flex: 1; height: 1px; background: {LINE};
+}}
 /* 탭 첫머리 한 방 문구 — 히어로와 같은 어법, 크기만 한 단계 아래 */
 .pitch {{ margin: 2px 0 16px; }}
 .pitch-h {{

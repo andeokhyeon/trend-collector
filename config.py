@@ -111,6 +111,21 @@ ANTHROPIC_API_KEY = get("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
+# --- Anthropic Admin (관리 화면의 크레딧·비용 조회) ---
+# ⚠️ 위의 일반 키(sk-ant-api…)와 다른 키다. 이걸로는 비용 조회가 안 된다.
+#    Admin 키는 platform.claude.com → Settings → Admin keys 에서 발급하며
+#    sk-ant-admin01- 로 시작한다. 조직(Organization)이 있어야 발급된다.
+#    없어도 앱은 그대로 돈다 — 관리 화면에 안내만 뜬다.
+ANTHROPIC_ADMIN_KEY = get("ANTHROPIC_ADMIN_KEY")
+
+# --- 소셜 로그인이 돌아올 주소 ---
+# ⚠️ 카카오·구글 로그인은 '갔다가 여기로 돌아오는' 방식이다.
+#    그래서 이 앱의 주소를 알려줘야 한다. 배포 주소와 정확히 같아야 하고,
+#    Supabase → Authentication → URL Configuration 의
+#    'Redirect URLs'에도 같은 주소를 넣어줘야 한다.
+#    (내 컴퓨터에서 시험할 때는 http://localhost:8501)
+SITE_URL = get("SITE_URL", "https://trend-collector.streamlit.app")
+
 
 def check():
     """
@@ -129,6 +144,7 @@ def check():
         "NAVER_HUB_CLIENT_SECRET": NAVER_HUB_CLIENT_SECRET,
         "TOUR_API_SERVICE_KEY": TOUR_API_SERVICE_KEY,
         "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
+        "ANTHROPIC_ADMIN_KEY": ANTHROPIC_ADMIN_KEY,
     }
     return ([k for k, v in required.items() if not v],
             [k for k, v in optional.items() if not v])
