@@ -270,8 +270,16 @@ def _count_call(n=1):
         _shared.add_calls(n)
 
 
+# ⚠️ 우리가 스스로 걸어둔 안전선을 끄는 스위치.
+# 씨앗 채우기를 '한도 무시'로 돌릴 때만 켠다.
+# 켜면 네이버가 실제로 거절할 때까지 계속 부른다. 기본은 꺼짐.
+IGNORE_QUOTA = False
+
+
 def _quota_ok(n=1):
     """한도에 여유가 있는지. 공용 캐시가 없으면 항상 통과."""
+    if IGNORE_QUOTA:
+        return True
     return _shared.can_call(n) if _shared is not None else True
 
 

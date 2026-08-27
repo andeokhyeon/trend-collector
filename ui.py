@@ -1493,10 +1493,21 @@ padding-top: 9px; line-height: 1.6;
 .donut-box svg {{ max-width: 100%; height: auto; }}
 /* 한국어는 단어 중간에서 줄이 바뀌면 읽기가 확 나빠진다.
    ('찾습니 / 다.' 처럼 잘리는 것) 어절 단위로만 끊는다. */
-body, .stApp, p, div, span, li, td, th, h1, h2, h3, h4 {{
-word-break: keep-all; overflow-wrap: break-word;
+/* ⚠️ Streamlit이 [data-testid="stMarkdownContainer"] p 에
+   word-break: break-all 을 걸어둔다. 우선순위가 우리보다 높아서
+   그냥 두면 '찾습니 / 다.' 처럼 단어 한가운데가 잘린다.
+   그래서 여기서는 !important 로 확실히 덮는다. */
+body, .stApp, p, div, span, li, td, th, h1, h2, h3, h4,
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] div {{
+word-break: keep-all !important;
+overflow-wrap: break-word !important;
 }}
-.mono, code, .kh-num, .tc-rank {{ word-break: normal; }}
+/* 숫자·코드·URL은 어절 개념이 없으니 원래대로 */
+.mono, code, .kh-num, .tc-rank, .tc-rec, .sc-row {{
+word-break: normal !important;
+}}
 /* ================= 첫 화면 히어로 ================= */
 .hero {{ text-align:center; padding: 30px 10px 22px; }}
 .hero-h {{
@@ -1506,7 +1517,7 @@ letter-spacing: -.035em; line-height: 1.24; color: {INK}; margin: 0;
 }}
 .hero-h em {{ font-style: normal; color: {DEEP}; }}
 .hero-p {{
-margin: 14px auto 0; max-width: 46ch;
+margin: 14px auto 0; max-width: 52ch;
 font-size: clamp(.9rem, 1.9vw, 1.02rem); color: {MUTED}; line-height: 1.7;
 }}
 .hero-p b {{ color: {INK}; font-weight: 600; }}
@@ -1515,10 +1526,43 @@ font-size: clamp(.9rem, 1.9vw, 1.02rem); color: {MUTED}; line-height: 1.7;
 font-size:.82rem; color:{MUTED}; background:{SURFACE};
 border:1px solid {LINE}; border-radius:999px; padding:5px 13px;
 }}
+/* 첫 화면 상태 줄 — 숫자 자랑 대신 '살아 있다'는 신호 */
 .hero-stat {{
-margin-top:16px; text-align:center; font-size:.82rem; color:#9AA1AB;
+margin-top: 18px; display: flex; flex-wrap: wrap;
+align-items: center; justify-content: center; gap: 0 4px;
+font-size: .8rem; color: #8A929C;
 }}
-.hero-stat b {{ font-family:'IBM Plex Mono',monospace; color:{INK}; font-weight:600; }}
+.hs-part::before {{
+content: ""; display: inline-block;
+width: 3px; height: 3px; border-radius: 99px;
+background: #C6CCD3; margin: 0 9px; vertical-align: middle;
+}}
+.hs-live {{ display: inline-flex; align-items: center; gap: 6px; color: #5C6570; }}
+.hs-live i {{
+width: 6px; height: 6px; border-radius: 99px; background: {GOOD};
+box-shadow: 0 0 0 3px rgba(14,159,110,.16);
+animation: hsPulse 2.4s ease-in-out infinite;
+}}
+@keyframes hsPulse {{
+0%, 100% {{ opacity: 1; }}
+50% {{ opacity: .45; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+.hs-live i {{ animation: none; }}
+}}
+.hs-num {{
+font-family: 'IBM Plex Mono', monospace; font-weight: 600;
+color: {INK}; margin-right: 3px;
+}}
+.hs-part {{ color: #8A929C; }}
+.hs-src {{ color: #A2AAB4; }}
+@media (max-width: 700px) {{
+.hero-stat {{ font-size: .74rem; margin-top: 14px; }}
+.hs-part::before {{ margin: 0 7px; }}
+/* 좁은 화면에서는 출처를 아랫줄로 내리고, 앞의 구분점은 지운다 */
+.hs-src {{ flex-basis: 100%; text-align: center; margin-top: 4px; }}
+.hs-src::before {{ display: none; }}
+}}
 
 /* ================= 추이 그래프 ================= */
 .trend-box {{ padding: 15px 17px 13px; }}
@@ -1625,6 +1669,9 @@ font-size:.79rem; color:{MUTED}; line-height:1.6; }}
 .ws-lbl {{ font-size:.72rem; }}
 .ws-cell {{ height:10px; }}
 }}
+/* 안내문 바로 아래에 카드가 오면 답답해 보인다. 아래쪽을 조금 더 띄운다. */
+.note {{ margin-bottom: 6px; }}
+.track-card {{ margin-top: 4px; }}
 /* ---- 모바일: G처럼 촘촘하게 ---- */
 @media (max-width: 700px) {{
 .block-container {{ padding: .7rem .65rem 2rem !important; }}
@@ -2524,21 +2571,43 @@ def hero(placeholder_chips=()):
     st.markdown(
         f'<div class="hero">'
         f'<h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>'
-        f'<p class="hero-p">이미 쓰인 글까지 재서 <b>지금 이길 수 있는 키워드</b>를 찾습니다.'
-        f' 검색량 · 문서수 · 최근 발행량 · 광고 단가를 한 번에.</p>'
+        # 문장 사이에서 끊어 읽히도록 줄을 직접 나눈다.
+        # (브라우저에 맡기면 '한 / 번에.' 처럼 어정쩡하게 남는다)
+        f'<p class="hero-p">이미 쓰인 글까지 재서 '
+        f'<b>지금 이길 수 있는 키워드</b>를 찾습니다.<br>'
+        f'검색량 · 문서수 · 최근 발행량 · 광고 단가를 한 번에.</p>'
         f'</div>', unsafe_allow_html=True)
     return chips
 
 
-def hero_after(chips_html="", stat_line=""):
-    """검색창 바로 아래 — 예시 키워드와 한 줄 통계."""
+def hero_after(chips_html="", freshness="", pool_size=None):
+    """
+    검색창 바로 아래 — 예시 키워드와 상태 줄.
+
+    ⚠️ 예전에는 여기에 '지금까지 1,000개 키워드를 재뒀습니다'를 적었다.
+    그런데 숫자가 작을 때는 오히려 초라해 보인다. 자랑이 되려면 커야 하는데,
+    쌓이기 전에는 그 반대다.
+    그래서 규모는 충분히 클 때만 말하고, 평소에는
+    '살아 있는 데이터'라는 사실과 어디서 가져오는지를 보여준다.
+    """
     bits = []
     if chips_html:
         bits.append(f'<div class="hero-chips">{chips_html}</div>')
-    if stat_line:
-        bits.append(f'<div class="hero-stat">{stat_line}</div>')
-    if bits:
-        st.markdown("".join(bits), unsafe_allow_html=True)
+
+    # ⚠️ 구분점을 형제 요소로 넣으면 줄바꿈될 때 앞쪽 점이 홀로 남는다.
+    # (CSS로는 '앞 형제'를 못 고른다) 각 조각이 자기 앞의 점을 갖게 한다.
+    parts = []
+    if freshness:
+        parts.append(f'<span class="hs-live"><i></i>{_esc(freshness)} 갱신</span>')
+    # 10만 개를 넘겼을 때만 규모를 말한다 (그 아래는 자랑거리가 아니다)
+    if pool_size and pool_size >= 100_000:
+        parts.append(f'<span class="hs-part"><b class="hs-num">'
+                     f'{_compact(pool_size)}개</b> 측정 완료</span>')
+    parts.append('<span class="hs-part hs-src">'
+                 '구글 트렌드 · 네이버 검색광고 · 데이터랩</span>')
+
+    bits.append('<div class="hero-stat">' + "".join(parts) + '</div>')
+    st.markdown("".join(bits), unsafe_allow_html=True)
 
 
 def trend_chart(points, title="1년 검색 추이", change_pct=None,

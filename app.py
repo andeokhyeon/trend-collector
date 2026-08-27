@@ -690,12 +690,16 @@ with sub_research[0]:
                 _ex = [k for k in _hot['keyword'].head(4).tolist() if k]
         except Exception:
             _ex = []
-        _stat = ""
-        if not df.empty:
-            _stat = (f"지금까지 <b>{len(df):,}</b>개 키워드를 재뒀습니다"
-                     f" · 마지막 수집 <b>{_fresh or '—'}</b>")
+        # 풀 크기는 충분히 클 때만 말한다 (작으면 오히려 초라해 보인다)
+        _pool = None
+        try:
+            if cache is not None:
+                _pool = cache.pool_size()
+        except Exception:
+            _pool = None
         ui.hero_after(
-            "".join(f'<span class="hero-chip">{e}</span>' for e in _ex), _stat)
+            "".join(f'<span class="hero-chip">{e}</span>' for e in _ex),
+            freshness=_fresh, pool_size=_pool)
 
     if searched and kw_input.strip():
         st.session_state["active_kw"] = kw_input.strip()
@@ -1567,6 +1571,8 @@ with tabs[1]:
                 f"{len(ordered)}개 · 내가 쓴 것 {len(mine_list)}개를 앞에 둡니다")
             ui.note("글을 발행했다면 카드 밑 <b>변경</b>을 눌러 "
                     "<b>내가 쓴 키워드</b>로 바꿔주세요. 그때부터 순위를 추적합니다.")
+            # 안내문과 카드가 붙어 있으면 한 덩어리로 보인다. 한 칸 띄운다.
+            st.write("")
             stopped, detail_kw, flipped = ui.tracked_cards(ordered,
                                                            key_prefix="trk")
 

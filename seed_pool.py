@@ -14,7 +14,12 @@
 애초에 성립하지 않는 계산이라 '물어봤을 때만' 재는 쪽이 맞다.
 
 밤에 켜두고 자면 아침에 DB가 두꺼워져 있다.
-한도의 60%에 닿으면 스스로 멈춘다.
+
+⚠️ 두 가지 방식으로 돈다.
+  · 그냥 실행       → 한도(60%)를 다 쓰면 끝난다.
+  · forever 옵션    → 끝내지 않는다. 한도를 다 쓰면 초기화될 때까지 기다렸다가
+                     스스로 다시 시작하고, 펼칠 키워드가 떨어지면 새로 긁어온다.
+                     멈추는 건 사람이 Ctrl+C를 누르거나 창을 닫을 때뿐이다.
 """
 
 import sys
@@ -37,8 +42,81 @@ cache.attach(supabase)
 import naver_api as api
 
 
-def gather_seeds():
-    """출발점을 모은다. 이미 쌓인 것 중 아직 안 펼친 키워드를 우선."""
+def _secs_to_reset():
+    """
+    한도 카운터가 초기화되기까지 남은 초.
+
+    ⚠️ cache._today()가 UTC 날짜를 쓰므로 실제 초기화 시점은
+    UTC 자정(= 한국시간 오전 9시)이다. 한국 자정이 아니다.
+    """
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    nxt = (now + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    return max(60, int((nxt - now).total_seconds()))
+
+
+def _sleep_with_countdown(seconds, reason):
+    """
+    기다리는 동안 남은 시간을 한 줄로 계속 갱신한다.
+    가만히 멈춰 있으면 고장 난 줄 알기 때문이다. Ctrl+C로 언제든 끊을 수 있다.
+    """
+    end = time.time() + seconds
+    while True:
+        left = int(end - time.time())
+        if left <= 0:
+            break
+        h, m = divmod(left // 60, 60)
+        if h:
+            left_txt = f"{h}시간 {m}분"
+        elif m:
+            left_txt = f"{m}분"
+        else:
+            left_txt = f"{left}초"          # 1분 미만은 초로 (0분으로 안 보이게)
+        print(f"\r  {reason} · {left_txt} 뒤 재개  (Ctrl+C로 종료)      ",
+              end="", flush=True)
+        time.sleep(min(30, max(1, left)))
+    print("\r" + " " * 64 + "\r", end="")
+
+
+def _backoff(streak):
+    """
+    거절/빈 응답이 이어질수록 더 오래 쉰다.
+    5회 30초 → 10회 1분 → 20회 3분 → 그 이상 10분.
+    한도를 무시하고 돌 때, 막힌 문을 계속 두드리지 않게 하는 장치다.
+    """
+    if streak < 5:
+        wait = 1
+    elif streak < 10:
+        wait = 30
+    elif streak < 20:
+        wait = 60
+    elif streak < 40:
+        wait = 180
+    else:
+        wait = 600
+    if wait <= 2:
+        time.sleep(wait)
+        return
+    _sleep_with_countdown(wait, f"응답이 비어 있음 ({streak}회 연속)")
+
+
+def wait_until_quota(check_every=300):
+    """한도를 다 썼을 때, 다시 쓸 수 있을 때까지 기다린다."""
+    while not cache.can_seed(1):
+        _sleep_with_countdown(min(check_every, _secs_to_reset()), "한도 소진")
+        cache.usage(force=True)          # 날짜가 바뀌었는지 다시 확인
+    print("\n한도가 초기화됐습니다. 다시 시작합니다.\n")
+
+
+def gather_seeds(page=0, quiet=False):
+    """
+    출발점을 모은다. 이미 쌓인 것 중 아직 안 펼친 키워드를 우선.
+
+    ⚠️ page를 올리면 풀의 더 깊은 곳을 가져온다.
+    계속 도는 모드에서 같은 500개만 반복해 읽으면
+    전부 '이미 펼친 것'이라 할 일이 없다고 오판한다.
+    """
     seeds = []
 
     # ① 오늘의 구글 트렌드
@@ -46,9 +124,10 @@ def gather_seeds():
         import collector
         seeds += collector.fetch_google_top_30()
     except Exception as e:
-        print(f"   구글 트렌드를 못 가져왔습니다: {e}")
+        if not quiet:
+            print(f"   구글 트렌드를 못 가져왔습니다: {e}")
 
-    # ② 이미 수집된 키워드 (검색량 큰 순)
+    # ② 이미 수집된 키워드 (최근 것부터)
     try:
         res = (supabase.table("trends_master").select("keyword")
                .order("created_at", desc=True).limit(300).execute())
@@ -56,14 +135,25 @@ def gather_seeds():
     except Exception:
         pass
 
-    # ③ 풀에 있지만 아직 연관어를 펼치지 않은 것
+    # ③ 풀에 쌓여 있는 키워드 — 오래 안 건드린 것부터, 페이지를 넘겨가며
+    #
+    # ⚠️ 예전 코드는 .is_("pl_avg_depth", 0) 이었는데
+    # PostgREST에서 IS는 null/true/false에만 쓴다. 0에 쓰면 요청이 거절돼
+    # 이 줄이 조용히 아무것도 못 가져오고 있었다. (except가 삼켰다)
+    PAGE = 1000
     try:
+        lo = (page % 50) * PAGE
         res = (supabase.table("keyword_pool").select("keyword")
-               .is_("pl_avg_depth", 0)
-               .order("updated_at", desc=False).limit(500).execute())
+               .order("updated_at", desc=False)
+               .range(lo, lo + PAGE - 1).execute())
         seeds += [r["keyword"] for r in (res.data or []) if r.get("keyword")]
     except Exception:
-        pass
+        try:
+            res = (supabase.table("keyword_pool").select("keyword")
+                   .order("updated_at", desc=False).limit(PAGE).execute())
+            seeds += [r["keyword"] for r in (res.data or []) if r.get("keyword")]
+        except Exception:
+            pass
 
     # 중복 제거하면서 순서 유지
     out, seen = [], set()
@@ -75,99 +165,187 @@ def gather_seeds():
     return out
 
 
-def run(max_calls=None):
+def run(max_calls=None, forever=False, ignore_limit=False):
     start_size = cache.pool_size()
     u = cache.usage(force=True)
     budget_limit = int(cache.DAILY_LIMIT * cache.SEED_RATIO)
 
     print("=" * 58)
-    print("  씨앗 채우기 — 검색량 미리 쌓기")
+    print("  씨앗 채우기 — 검색량 미리 쌓기"
+          + ("  [멈출 때까지 계속]" if forever else ""))
     print("=" * 58)
     print(f"\n현재 풀: {start_size:,}개")
     print(f"오늘 사용: {u['calls']:,} / {cache.DAILY_LIMIT:,}회")
     print(f"이번에 쓸 수 있는 한도: {budget_limit:,}회까지 (한도의 "
           f"{cache.SEED_RATIO*100:.0f}%)")
-
-    if not cache.can_seed(1):
-        print("\n⚠️ 이미 한도에 도달했습니다. 자정 이후 다시 실행해주세요.")
-        print(f"   초기화까지 {cache.reset_time()}")
-        return
-
-    queue = deque(gather_seeds())
-    if not queue:
-        print("\n출발할 키워드를 찾지 못했습니다. 먼저 수집기를 한 번 돌려주세요.")
-        return
-
-    print(f"출발 키워드: {len(queue):,}개\n")
-    print("-" * 58)
+    if ignore_limit:
+        # ⚠️ 여기서 끄는 건 '우리가 스스로 걸어둔' 안전선이다.
+        # 네이버 쪽 진짜 한도는 그대로 있다. 넘어가면 거절(429)이 돌아오고,
+        # 그때부터는 아무것도 못 받으면서 계속 두드리게 된다.
+        # 그래서 거절이 이어지면 스스로 쉬었다 간다.
+        api.IGNORE_QUOTA = True
+        print("\n⚠️  한도 무시 모드")
+        print("   우리가 걸어둔 안전선(하루 60%)을 끕니다.")
+        print("   네이버가 실제로 거절할 때까지 계속 부릅니다.")
+        print("   거절이 이어지면 잠시 쉬었다가 다시 시도합니다.")
+        print("   ※ 대시보드 조회 몫까지 당겨쓰게 되니, 낮에는 권하지 않습니다.")
+    if forever:
+        print("\n⏻ 멈추려면 Ctrl+C 를 누르거나 이 창을 닫으세요.")
+        if not ignore_limit:
+            print("   한도를 다 쓰면 초기화될 때까지 기다렸다가 알아서 다시 시작합니다.")
 
     done, calls, added = set(), 0, 0
+    rounds = 0
+    empty_streak = 0
     t0 = time.time()
+    stop_reason = "끝"
 
-    while queue:
-        if not cache.can_seed(1):
-            print("\n한도에 도달해 여기서 멈춥니다.")
-            break
-        if max_calls and calls >= max_calls:
-            print(f"\n지정한 {max_calls}회를 다 썼습니다.")
-            break
+    try:
+        while True:
+            if not ignore_limit and not cache.can_seed(1):
+                if not forever:
+                    print("\n⚠️ 한도에 도달했습니다. 자정 이후 다시 실행해주세요.")
+                    print(f"   초기화까지 {cache.reset_time()}")
+                    stop_reason = "한도"
+                    break
+                wait_until_quota()
 
-        kw = queue.popleft()
-        if kw in done:
-            continue
-        done.add(kw)
+            # ⚠️ 이미 펼친 키워드가 수십만 개까지 늘면 메모리를 계속 먹는다.
+            # 한 바퀴 크게 돌았으면 기억을 비우고 처음부터 다시 훑는다.
+            # (풀에 이미 저장돼 있으므로 중복 호출은 캐시가 막아준다)
+            if len(done) > 300_000:
+                print("\n  훑은 키워드가 30만 개를 넘어 목록을 비우고 다시 돕니다.\n")
+                done.clear()
 
-        try:
-            data = api.get_keyword_data(kw, related_limit=20)
-        except Exception as e:
-            print(f"  {kw} 실패: {e}")
-            continue
-        calls += 1
+            queue = deque(k for k in gather_seeds(page=rounds, quiet=rounds > 0)
+                           if k not in done)
+            rounds += 1
+            if not queue:
+                if not forever:
+                    print("\n출발할 키워드를 찾지 못했습니다. "
+                          "먼저 수집기를 한 번 돌려주세요.")
+                    stop_reason = "씨앗 없음"
+                    break
+                # 풀의 다음 페이지를 곧바로 시도한다. 50페이지를 다 훑어도
+                # 새 게 없을 때만 쉰다. (수집기가 새 키워드를 넣어줄 때까지)
+                if rounds % 50 != 0:
+                    continue
+                print("\n  새로 펼칠 키워드가 없습니다. 10분 뒤 다시 찾아봅니다.")
+                _sleep_with_countdown(600, "대기 중")
+                continue
 
-        rel = data.get("related") or []
-        added += len(rel) + 1
+            print(f"\n출발 키워드: {len(queue):,}개")
+            print("-" * 58)
 
-        # 받은 연관어를 다음 출발점으로 (검색량 있는 것만)
-        for r in rel:
-            k = (r.get("keyword") or "").strip()
-            if k and k not in done and len(queue) < 20000:
-                if (r.get("monthly_pc", 0) + r.get("monthly_mobile", 0)) >= 50:
-                    queue.append(k)
+            while queue:
+                if not ignore_limit and not cache.can_seed(1):
+                    if not forever:
+                        print("\n한도에 도달해 여기서 멈춥니다.")
+                        stop_reason = "한도"
+                    break
+                if max_calls and calls >= max_calls:
+                    print(f"\n지정한 {max_calls}회를 다 썼습니다.")
+                    stop_reason = "지정 횟수"
+                    break
 
-        # 무슨 단어가 들어왔는지 보여준다.
-        # 개수만 나오면 잘 되고 있는지 감이 안 온다.
-        if rel:
-            sample = ", ".join(r["keyword"] for r in rel[:5])
-            more = f" 외 {len(rel)-5}개" if len(rel) > 5 else ""
-            print(f"  [{calls:>4}] {kw}  →  {sample}{more}")
+                kw = queue.popleft()
+                if kw in done:
+                    continue
+                done.add(kw)
 
-        if calls % 20 == 0:
-            cache.flush_calls()          # 모아둔 것을 DB에 반영
-            now = cache.usage(force=True)
-            elapsed = int(time.time() - t0)
-            print(f"       ── 호출 {calls:,} · 대기열 {len(queue):,} · "
-                  f"오늘 {now['calls']:,}/{budget_limit:,}회 · {elapsed//60}분 경과 ──")
+                try:
+                    data = api.get_keyword_data(kw, related_limit=20)
+                except Exception as e:
+                    print(f"  {kw} 실패: {e}")
+                    empty_streak += 1
+                    _backoff(empty_streak)
+                    continue
+                calls += 1
 
-        time.sleep(0.12)
+                rel = data.get("related") or []
+                added += len(rel) + 1
+
+                # ⚠️ 네이버가 거절하면 예외가 아니라 '빈 결과'로 돌아온다.
+                # 그걸 모르고 계속 부르면 아무것도 못 받으면서 호출만 쌓인다.
+                if rel:
+                    empty_streak = 0
+                else:
+                    empty_streak += 1
+                    if empty_streak >= 5:
+                        _backoff(empty_streak)
+                        if empty_streak >= 40 and not forever:
+                            print("\n빈 응답이 계속됩니다. 여기서 멈춥니다.")
+                            stop_reason = "응답 없음"
+                            break
+                        continue
+
+                # 받은 연관어를 다음 출발점으로 (검색량 있는 것만)
+                for r in rel:
+                    k = (r.get("keyword") or "").strip()
+                    if k and k not in done and len(queue) < 20000:
+                        if (r.get("monthly_pc", 0)
+                                + r.get("monthly_mobile", 0)) >= 50:
+                            queue.append(k)
+
+                # 무슨 단어가 들어왔는지 보여준다.
+                # 개수만 나오면 잘 되고 있는지 감이 안 온다.
+                if rel:
+                    sample = ", ".join(r["keyword"] for r in rel[:5])
+                    more = f" 외 {len(rel)-5}개" if len(rel) > 5 else ""
+                    print(f"  [{calls:>5}] {kw}  →  {sample}{more}")
+
+                if calls % 20 == 0:
+                    cache.flush_calls()      # 모아둔 것을 DB에 반영
+                    now = cache.usage(force=True)
+                    elapsed = int(time.time() - t0)
+                    hh, mm = divmod(elapsed // 60, 60)
+                    print(f"       ── 호출 {calls:,} · 대기열 {len(queue):,} · "
+                          f"오늘 {now['calls']:,}/{budget_limit:,}회 · "
+                          f"{hh}시간 {mm}분 경과 ──")
+
+                time.sleep(0.12)
+
+            if not forever:
+                break
+            # forever 모드에서는 대기열이 비면 씨앗을 새로 긁어 계속 돈다
+
+    except KeyboardInterrupt:
+        stop_reason = "사용자 중지"
+        print("\n\n■ 중지 요청을 받았습니다. 지금까지 쌓은 것을 저장하고 끝냅니다.")
 
     cache.flush_calls()
     end_size = cache.pool_size()
     fin = cache.usage(force=True)
+    elapsed = int(time.time() - t0)
+    hh, mm = divmod(elapsed // 60, 60)
+
     print("-" * 58)
-    print(f"\n호출 {calls:,}회 → 풀 {start_size:,} → {end_size:,}개 "
-          f"(+{end_size - start_size:,})")
+    print(f"\n[{stop_reason}]  {hh}시간 {mm}분 동안 호출 {calls:,}회")
+    print(f"풀 {start_size:,} → {end_size:,}개 (+{end_size - start_size:,})")
     if calls:
         print(f"호출 1회당 평균 {(end_size - start_size) / calls:.1f}개 확보")
     print(f"오늘 총 사용: {fin['calls']:,} / {cache.DAILY_LIMIT:,}회 ({fin['pct']}%)")
-    print(f"\n남은 조회 {fin['remaining']:,}회 · 자정에 초기화 "
-          f"({cache.reset_time()})")
+    print(f"\n남은 조회 {fin['remaining']:,}회 · 초기화까지 {cache.reset_time()}")
 
 
 if __name__ == "__main__":
-    limit = None
-    if len(sys.argv) > 1:
+    # 사용법
+    #   python seed_pool.py            한도(60%)까지만 채우고 끝
+    #   python seed_pool.py forever    멈출 때까지 계속 (Ctrl+C로 종료)
+    #   python seed_pool.py nolimit    한도 무시하고 계속 (네이버가 막을 때까지)
+    #   python seed_pool.py 500        500회만 쓰고 끝
+    limit, forever, ignore = None, False, False
+    for arg in sys.argv[1:]:
+        a = arg.strip().lower()
+        if a in ("forever", "loop", "--forever", "-f", "무한", "계속"):
+            forever = True
+            continue
+        if a in ("nolimit", "--nolimit", "무제한", "한도무시"):
+            ignore = True
+            forever = True          # 한도를 무시한다는 건 곧 계속 돌겠다는 뜻
+            continue
         try:
-            limit = int(sys.argv[1])
+            limit = int(a)
         except ValueError:
             pass
-    run(max_calls=limit)
+    run(max_calls=limit, forever=forever, ignore_limit=ignore)
