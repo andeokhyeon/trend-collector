@@ -396,8 +396,14 @@ PROVIDERS = {
 #    아래 profile_nickname은 그대로 둔다 (닉네임은 우리가 실제로 쓴다).
 #
 # ⚠️ 구글은 기본값이 맞으므로 건드리지 않는다 (None이면 Supabase 기본).
+#
+# ⚠️ 2026-08-27 확인: 아무것도 안 보내도 Supabase가 알아서
+#    account_email profile_image profile_nickname 을 붙인다.
+#    여기에 profile_nickname을 또 적으면 주소에 두 번 들어간다.
+#    (실제로 scope=... profile_nickname profile_nickname 이 나갔다)
+#    비즈앱 전환이 끝나 account_email도 켜졌으니 이제 우리가 보탤 게 없다.
 SCOPES = {
-    "kakao": "profile_nickname",
+    "kakao": None,
     "google": None,
 }
 
