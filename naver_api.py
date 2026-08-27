@@ -524,17 +524,24 @@ def get_keyword_data(keyword, related_limit=200):
                     "pl_avg_depth": row.get("pl_avg_depth", 0),
                 },
                 "related": [],
+                "error": None,
             })
 
-    empty = {"stat": {"monthly_pc": 0, "monthly_mobile": 0,
-                      "comp_level": "-", "pl_avg_depth": 0},
-             "related": [], "hints": []}
+    # ⚠️ '네이버가 거절했다'와 '정상 응답인데 연관어가 없다'는 전혀 다른 일인데
+    # 예전에는 둘 다 똑같은 빈 결과로 돌아왔다. 그래서 미리쌓기가
+    # 멀쩡히 도는 중에도 '막혔나 보다' 하고 30초씩 쉬었다.
+    # 부른 쪽이 구별할 수 있게 이유를 함께 돌려준다.
+    def _empty(reason=None):
+        return {"stat": {"monthly_pc": 0, "monthly_mobile": 0,
+                         "comp_level": "-", "pl_avg_depth": 0},
+                "related": [], "hints": [], "error": reason}
+
     if not _quota_ok():
-        return empty
+        return _empty("quota")
     path = "/keywordstool"
     hints = _build_hints(keyword)
     if not hints:
-        return _cache_put(ck, empty)
+        return _cache_put(ck, _empty())
     try:
         _count_call()
         res = requests.get(NAVER_BASE_URL + path,
@@ -542,10 +549,10 @@ def get_keyword_data(keyword, related_limit=200):
                                    "showDetail": "1"},
                            headers=get_naver_headers("GET", path), timeout=10)
         if res.status_code != 200:
-            return _cache_put(ck, empty)
+            return _cache_put(ck, _empty(f"http{res.status_code}"))
         kw_list = res.json().get("keywordList", [])
         if not kw_list:
-            return _cache_put(ck, empty)
+            return _cache_put(ck, _empty())
 
         # ⚠️ kw_list[0]이 내가 검색한 키워드라는 보장이 없다.
         # 네이버는 관련도 순으로 돌려주기 때문에 첫 항목이 전혀 다른 키워드일 수 있고,
@@ -605,9 +612,9 @@ def get_keyword_data(keyword, related_limit=200):
                    for r in rel_all])
 
         return _cache_put(ck, {"stat": stat, "related": related,
-                               "hints": hints})
-    except Exception:
-        return _cache_put(ck, empty)
+                               "hints": hints, "error": None})
+    except Exception as e:
+        return _cache_put(ck, _empty(type(e).__name__))
 
 
 def get_blog_stats(keyword, days=30, exact=True, light=False):
@@ -905,7 +912,7 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
 # 이 두 가지는 실측값이고, '승산 점수'는 그걸 조합한 추정임을 UI에 명시합니다.
 
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date as dt_date
 import re
 
 
@@ -1962,6 +1969,91 @@ def autocomplete_keywords(keyword, expand=True, limit=60):
 # 검색광고가 주는 '월간 절대 검색량'을 앵커로 삼으면 절대값 복원이 된다.
 
 DATALAB_URL = "https://openapi.naver.com/v1/datalab/search"
+
+
+def event_lift(keyword, event_date, window=20, trend=None):
+    """
+    💡 "작년 이맘때 이 키워드가 얼마나 뛰었나, 그리고 언제부터 뛰었나."
+
+    ⚠️ 왜 필요한가. 주간 캘린더는 앞으로 4주에 무슨 일이 있는지만 알려줬다.
+    그런데 블로거가 알고 싶은 건 '그 중 뭘 써야 하고, 언제 써야 하나'다.
+    작년 같은 시기의 검색 곡선이 그 답을 그대로 갖고 있다.
+
+    ⚠️ 설날·추석·부처님오신날은 음력이라 작년 날짜가 3주까지 밀린다.
+    그래서 작년 그 날 하루가 아니라 앞뒤 window일을 훑어 고점을 찾는다.
+
+    반환: {"lift": 8.4,        평소 대비 몇 배까지 뛰었나
+           "lead": 14,         고점보다 며칠 앞서 오르기 시작했나
+           "days_left": 12,    이번 이벤트까지 남은 날
+           "verdict": "now" | "soon" | "later" | "flat"}
+    실패하면 None (한도 초과·데이터 부족 등 — 화면은 그대로 돌아가야 한다).
+    """
+    if not keyword or not event_date:
+        return None
+    try:
+        ev = (event_date if isinstance(event_date, dt_date)
+              else datetime.strptime(str(event_date)[:10], "%Y-%m-%d").date())
+    except Exception:
+        return None
+
+    tr = trend if trend is not None else get_search_trend(keyword, days=365)
+    if not tr or not tr.get("points"):
+        return None
+    pts = []
+    for d, v in tr["points"]:
+        try:
+            pts.append((datetime.strptime(d[:10], "%Y-%m-%d").date(), float(v)))
+        except Exception:
+            continue
+    if len(pts) < 60:
+        return None
+
+    vals = sorted(v for _, v in pts)
+    base = vals[len(vals) // 2] or 0.0          # 중앙값 = 평소 수준
+    if base <= 0:
+        base = (sum(vals) / len(vals)) or 0.0
+    if base <= 0:
+        return None
+
+    # 작년 같은 이벤트가 있었을 만한 구간
+    anniv = ev - timedelta(days=365)
+    span = [(d, v) for d, v in pts
+            if abs((d - anniv).days) <= window]
+    if len(span) < 5:
+        return None
+
+    peak_day, peak_val = max(span, key=lambda x: x[1])
+    lift = peak_val / base
+
+    # 고점보다 며칠 앞서 오르기 시작했나 — 평소의 1.5배를 처음 넘은 날
+    lead = 0
+    thresh = base * 1.5
+    rising = [(d, v) for d, v in pts
+              if peak_day - timedelta(days=45) <= d <= peak_day]
+    for d, v in rising:
+        if v >= thresh:
+            lead = (peak_day - d).days
+            break
+
+    # ⚠️ 곡선이 가팔라서 오르막이 안 잡히면 lead가 0이 된다.
+    # 그대로 두면 "아직 여유"라고 말하다가 이벤트 일주일 전에야 알려준다.
+    # 글은 검색에 잡히는 데 시간이 걸리니, 못 잡았을 때는 최소 일주일을 준다.
+    # (반대로 45일 전부터 뜨겁다고 45일 전에 쓰라고 하는 것도 쓸모없으니 30일에서 끊는다)
+    lead = min(max(lead, 7), 30)
+
+    days_left = (ev - datetime.now(timezone.utc).date()).days
+
+    if lift < 1.6:
+        verdict = "flat"                     # 굳이 안 써도 되는 자리
+    elif days_left <= lead:
+        verdict = "now"                      # 작년이면 벌써 오르던 시점
+    elif days_left <= lead + 7:
+        verdict = "soon"                     # 이번 주 안에
+    else:
+        verdict = "later"                    # 아직 여유
+
+    return {"lift": round(lift, 1), "lead": lead,
+            "days_left": days_left, "verdict": verdict}
 
 
 def get_search_trend(keyword, days=365, time_unit="date", total_search=None):

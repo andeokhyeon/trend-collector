@@ -8,7 +8,8 @@ import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from supabase import create_client
 from email.utils import parsedate_to_datetime
-from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote
+from datetime import datetime, timedelta, timezone, date
 
 # --- 설정 ---
 # 키는 config.py 한 곳에서 읽는다. 코드에는 키를 두지 않는다.
@@ -658,54 +659,340 @@ def get_upcoming_festivals_tourapi(start_date, end_date):
     return events
 
 
+# ============================================================
+# 공공데이터 — 주간 캘린더 재료
+#
+# ⚠️ data.go.kr은 계정마다 인증키가 하나다. 이미 TourAPI를 쓰고 있으면
+#    같은 키로 아래 서비스도 쓸 수 있고, 포털에서 '활용신청'만 누르면 된다.
+#    (대부분 자동승인이라 몇 분이면 끝난다)
+#    안 눌렀거나 키가 없으면 각 함수는 조용히 빈 목록을 돌려주고,
+#    프로그램은 있는 재료만으로 계속 돈다.
+# ============================================================
+
+# 한국천문연구원 특일 정보 — 공휴일 / 24절기 / 잡절(초복·말복 등)
+# 활용신청: https://www.data.go.kr/data/15012690/openapi.do
+KASI_BASE = "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService"
+KASI_OPS = [
+    ("getRestDeInfo", "공휴일"),
+    ("get24DivisionsInfo", "절기"),
+    ("getSundryDayInfo", "절기"),      # 초복·중복·말복·한식 등
+]
+
+# 한국부동산원 청약홈 분양정보
+# 활용신청: https://www.data.go.kr/data/15098547/openapi.do
+# ⚠️ 승인 뒤 그 페이지에 적힌 '요청주소'를 그대로 여기에 붙여넣으면 된다.
+APPLYHOME_URL = ("https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1"
+                 "/getAPTLttotPblancDetail")
+
+# 전국공연행사정보표준데이터 — 선택 항목이다.
+#
+# ⚠️ 표준데이터는 주소 끝에 계정마다 다른 uddi 값이 붙어서
+#    (…/v1/uddi:3ecb3d51-…) 승인 화면을 보기 전에는 주소를 알 수 없다.
+#    여기가 비어 있어도 축제/행사는 TourAPI로 이미 들어오니
+#    캘린더는 아쉬운 대로 다 돈다. 주소를 넣으면 지자체 소규모 행사가 더해진다.
+#    활용신청: 공공데이터포털에서 '전국공연행사정보표준데이터' 검색
+PUBLIC_EVENT_URL = ""     # 예: https://api.odcloud.kr/api/15013106/v1/uddi:xxxx-xxxx
+
+# 마지막 호출이 어떻게 됐는지 — 점검 도구가 원인을 보여주려고 쓴다
+APPLYHOME_LAST = {"status": None, "body": "", "how": ""}
+PUBLIC_EVENT_LAST = {"status": None, "body": "", "how": ""}
+
+
+def _kasi_month(year, month, op, kind):
+    """특일정보 한 달치. 실패하면 빈 목록."""
+    if not TOUR_API_SERVICE_KEY:
+        return []
+    out = []
+    try:
+        res = requests.get(
+            f"{KASI_BASE}/{op}",
+            params={"serviceKey": TOUR_API_SERVICE_KEY,
+                    "solYear": year, "solMonth": f"{month:02d}",
+                    "numOfRows": 60, "_type": "json"},
+            timeout=6)
+        if res.status_code != 200:
+            return []
+        body = res.json().get("response", {}).get("body", {})
+        items = (body.get("items") or {}).get("item", [])
+        if isinstance(items, dict):
+            items = [items]
+        for it in items:
+            loc = str(it.get("locdate") or "")
+            name = (it.get("dateName") or "").strip()
+            if len(loc) == 8 and name:
+                out.append((f"{loc[:4]}-{loc[4:6]}-{loc[6:8]}", name, kind))
+    except Exception:
+        pass
+    return out
+
+
+def get_special_days_kasi(start_date, end_date):
+    """
+    💡 공휴일 + 24절기 + 잡절을 천문연구원에서 받아온다.
+
+    ⚠️ 왜 하드코딩을 두고 이걸 붙였나.
+      1) 해마다 손으로 공휴일을 적어 넣지 않아도 된다
+      2) 임시공휴일·대체공휴일이 생기면 자동으로 따라 들어온다
+      3) 초복·중복·말복(삼계탕), 동지(팥죽), 입춘 같은 자리가 새로 생긴다
+         — 매년 확실하게 검색이 뛰는데 지금 캘린더에는 없던 것들이다
+    """
+    out, seen = [], set()
+    y, m = start_date.year, start_date.month
+    for _ in range(3):                 # 4주면 길어야 석 달에 걸친다
+        for op, kind in KASI_OPS:
+            for d, name, k in _kasi_month(y, m, op, kind):
+                key = (d, name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                dt = datetime.strptime(d, "%Y-%m-%d").date()
+                if start_date <= dt <= end_date:
+                    out.append((d, name, k))
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+    return out
+
+
+def get_tax_deadlines(start_date, end_date):
+    """
+    💡 세금·신고·마감 일정.
+
+    ⚠️ 국세청은 Open API가 없다. 대신 날짜가 법으로 정해져 있어서
+       해마다 거의 안 바뀐다. 그래서 여기에 적어둔다.
+       (주말·공휴일에 걸리면 하루 이틀 밀린다 — 국세청 공고로 확인)
+
+    💰 한국 블로그에서 광고단가가 가장 높은 축인데 캘린더에 하나도 없었다.
+       '종합소득세 신고'는 5월 한 달 검색이 폭발하고, 그 글은 1년 내내 돈다.
+    """
+    # (월, 일, 이름) — 이름은 사람들이 실제로 검색하는 형태로 적는다
+    FIXED = [
+        (1, 15, "연말정산 간소화"),
+        (1, 25, "부가가치세 신고"),
+        (2, 28, "연말정산 서류제출"),
+        (3, 31, "법인세 신고"),
+        (5, 1, "종합소득세 신고"),
+        (5, 1, "근로장려금 신청"),
+        (5, 31, "종합소득세 마감"),
+        (6, 16, "자동차세 납부"),
+        (7, 16, "재산세 납부"),
+        (7, 25, "부가가치세 신고"),
+        (8, 31, "주민세 납부"),
+        (9, 16, "재산세 납부"),
+        (12, 1, "종합부동산세 납부"),
+        (12, 16, "자동차세 납부"),
+    ]
+    out = []
+    for year in {start_date.year, end_date.year}:
+        for mth, day, name in FIXED:
+            try:
+                d = date(year, mth, day)
+            except ValueError:
+                continue
+            if start_date <= d <= end_date:
+                out.append((d.strftime("%Y-%m-%d"), name, "세무/마감"))
+    return out
+
+
+def _odcloud_get(url, params=None, timeout=8):
+    """
+    odcloud(api.odcloud.kr) 계열 호출 — 청약홈·표준데이터가 여기에 산다.
+
+    ⚠️ 여기서 막히는 이유는 대개 셋 중 하나다.
+      ① data.go.kr이 인증키를 '인코딩'과 '디코딩' 두 가지로 준다.
+         인코딩 키(%2B, %3D가 섞인 것)를 그대로 params에 넣으면
+         requests가 %를 %25로 한 번 더 감싸서 다른 키가 돼버린다.
+      ② odcloud는 쿼리 대신 'Authorization: Infuser <키>' 헤더도 받는다.
+         쿼리 쪽이 막힐 때 헤더로는 되는 경우가 있다.
+      ③ 주소 자체가 다르다 (표준데이터는 끝에 uddi:… 가 붙는다)
+
+    그래서 되는 방법을 찾을 때까지 순서대로 시도하고,
+    끝내 안 되면 마지막 응답을 그대로 돌려줘서 원인을 볼 수 있게 한다.
+    반환: (json 또는 None, 상태코드, 본문 앞부분, 어떤 방법이 통했는지)
+    """
+    key = (TOUR_API_SERVICE_KEY or "").strip()
+    if not key:
+        return None, 0, "인증키 없음", ""
+    dec = unquote(key)
+    base = dict(params or {})
+
+    attempts = [
+        ("쿼리(원본 키)", {**base, "serviceKey": key}, None),
+        ("쿼리(디코딩 키)", {**base, "serviceKey": dec}, None),
+        ("헤더 Infuser(원본)", base, {"Authorization": f"Infuser {key}"}),
+        ("헤더 Infuser(디코딩)", base, {"Authorization": f"Infuser {dec}"}),
+    ]
+    last = (None, 0, "", "")
+    for how, prm, hdr in attempts:
+        try:
+            res = requests.get(url, params=prm, headers=hdr, timeout=timeout)
+        except Exception as e:
+            last = (None, 0, f"{type(e).__name__}: {e}", how)
+            continue
+        body = (res.text or "")[:180].replace("\n", " ")
+        if res.status_code == 200:
+            try:
+                return res.json(), 200, body, how
+            except Exception:
+                last = (None, 200, body, how)
+                continue
+        last = (None, res.status_code, body, how)
+        if res.status_code == 404:
+            break          # 주소가 틀린 것 — 키를 바꿔봐야 소용없다
+    return last
+
+
+def get_apply_home_schedule(start_date, end_date):
+    """
+    💡 청약 일정 (한국부동산원 청약홈).
+
+    모집공고일·청약접수일·당첨자발표일이 날짜로 나온다.
+    단지 이름은 아직 아무도 안 썼기 때문에 경쟁 문서수가 거의 0이고,
+    부동산은 광고단가가 높다. '미리 써두면 유리한' 자리의 표본이다.
+    """
+    # ⚠️ 예전에는 cond[RCRIT_PBLANC_DE::GTE] 로 서버에서 걸러 달라고 했는데,
+    # 필드 이름이 조금만 달라도 통째로 거절당한다. 넉넉히 받아서 여기서 거른다.
+    data, status, body, how = _odcloud_get(
+        APPLYHOME_URL, {"page": 1, "perPage": 1000})
+    if data is None:
+        APPLYHOME_LAST["status"] = status
+        APPLYHOME_LAST["body"] = body
+        return []
+    APPLYHOME_LAST["status"] = 200
+    APPLYHOME_LAST["how"] = how
+
+    out = []
+    for it in (data.get("data") or []):
+        name = (it.get("HOUSE_NM") or it.get("HOUSE_NM_NM") or "").strip()
+        # 접수 시작일이 있으면 그 날, 없으면 모집공고일
+        raw = (it.get("RCEPT_BGNDE") or it.get("RCRIT_PBLANC_DE") or "")
+        d = str(raw)[:10].replace(".", "-").replace("/", "-")
+        if not (name and len(d) == 10):
+            continue
+        try:
+            dt = datetime.strptime(d, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if start_date <= dt <= end_date:
+            out.append((d, f"{name} 청약", "청약"))
+    return out
+
+
+def get_public_events(start_date, end_date):
+    """
+    💡 전국공연행사정보 (지자체 표준데이터).
+
+    TourAPI 축제와 겹치는 것도 있지만, 이쪽에는 지자체가 여는
+    작은 행사까지 들어온다. 검색량은 작아도 경쟁이 거의 없어서
+    지역 블로그에는 오히려 이쪽이 낫다.
+    """
+    if not PUBLIC_EVENT_URL:
+        PUBLIC_EVENT_LAST["status"] = "미입력"
+        return []
+    data, status, body, how = _odcloud_get(
+        PUBLIC_EVENT_URL, {"page": 1, "perPage": 1000})
+    if data is None:
+        PUBLIC_EVENT_LAST["status"] = status
+        PUBLIC_EVENT_LAST["body"] = body
+        return []
+    PUBLIC_EVENT_LAST["status"] = 200
+    PUBLIC_EVENT_LAST["how"] = how
+
+    out = []
+    if True:
+        for it in (data.get("data") or []):
+            name = (it.get("공연행사명") or it.get("행사명") or "").strip()
+            d = str(it.get("공연행사시작일자") or it.get("행사시작일자") or "")[:10]
+            if not (name and len(d) == 10):
+                continue
+            try:
+                dt = datetime.strptime(d, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if start_date <= dt <= end_date:
+                out.append((d, name, "공연/행사"))
+    return out
+
+
 def fetch_weekly_event_keywords():
     """
-    💡 주별 추천키워드.
+    💡 주별 추천키워드 — 앞으로 4주 안에 무슨 일이 있는지.
 
-    "이번 주부터 4주 뒤까지 어떤 날짜에 무슨 일이 있는지"를 미리 모아서 키워드로
-    던져준다. 공휴일(즉시 사용 가능)과 축제/행사(TourAPI, 키 발급 시 자동 포함)를
-    합친다. 법령 시행일 정보도 같은 방식으로 확장 가능(법제처 Open API).
+    재료 다섯 가지를 합친다.
+      ① 공휴일·24절기·잡절   천문연구원 (키 없으면 적어둔 공휴일로 물러남)
+      ② 세금·신고 마감        적어둔 일정 (API 없음, 광고단가 최상위)
+      ③ 축제/행사            TourAPI
+      ④ 청약 일정            청약홈
+      ⑤ 지자체 공연/행사      전국공연행사 표준데이터
+
+    ⚠️ 어느 하나가 막혀도 나머지로 계속 돈다. 캘린더가 통째로 비지 않게.
     """
     today = datetime.now(timezone.utc).date()
     four_weeks_later = today + timedelta(days=28)
 
-    results = []
+    picked = []          # (날짜문자열, 이름, 종류)
 
-    # 1) 공휴일 (즉시 가능)
-    for date_str, name in get_2026_holidays():
-        event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        if today <= event_date <= four_weeks_later:
-            results.append({
-                "keyword": name,
-                "source": "weekly_event",
-                "monthly_pc": 0,
-                "monthly_mobile": 0,
-                "comp_level": "공휴일",
-                "event_date": date_str
-            })
+    # ① 공휴일 + 절기
+    special = get_special_days_kasi(today, four_weeks_later)
+    if special:
+        picked += special
+    else:
+        # 천문연구원 키가 아직 승인 전 — 적어둔 공휴일로 버틴다
+        for date_str, name in get_2026_holidays():
+            d = datetime.strptime(date_str, "%Y-%m-%d").date()
+            if today <= d <= four_weeks_later:
+                picked.append((date_str, name, "공휴일"))
 
-    # 2) 축제/행사 (TourAPI 키 있을 때만 자동 포함)
-    festivals = get_upcoming_festivals_tourapi(
-        today.strftime("%Y%m%d"), four_weeks_later.strftime("%Y%m%d")
-    )
-    for date_str, title in festivals:
-        formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}" if date_str and len(date_str) == 8 else None
+    # ② 세금·신고 마감
+    picked += get_tax_deadlines(today, four_weeks_later)
+
+    # ③ 축제/행사 (TourAPI)
+    for date_str, title in get_upcoming_festivals_tourapi(
+            today.strftime("%Y%m%d"), four_weeks_later.strftime("%Y%m%d")):
+        if date_str and len(date_str) == 8:
+            picked.append((f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}",
+                           title, "축제/행사"))
+
+    # ④ 청약 일정
+    picked += get_apply_home_schedule(today, four_weeks_later)
+
+    # ⑤ 지자체 공연/행사
+    picked += get_public_events(today, four_weeks_later)
+
+    # 같은 날 같은 이름이 두 곳에서 들어오는 일이 있다 (축제 ↔ 공연행사)
+    results, seen = [], set()
+    for date_str, name, kind in picked:
+        name = (name or "").strip()
+        key = (date_str, name.replace(" ", ""))
+        if not name or key in seen:
+            continue
+        seen.add(key)
         results.append({
-            "keyword": title,
+            "keyword": name,
             "source": "weekly_event",
             "monthly_pc": 0,
             "monthly_mobile": 0,
-            "comp_level": "축제/행사",
-            "event_date": formatted_date
+            "comp_level": kind,
+            "event_date": date_str,
         })
 
-    # 3) TODO: 법령 시행일 (법제처 Open API, open.law.go.kr, 무료 OC 발급 필요)
+    results.sort(key=lambda r: r["event_date"])
 
     # 검색량 조회.
     # ⚠️ 공공데이터의 행사명은 공식 명칭이라 길고 장식이 많다.
     #    '국토정중앙 청춘양구 배꼽축제'를 그대로 조회하면 0이 나온다.
     #    사람들이 실제로 치는 형태('배꼽축제', '양구 배꼽축제')로 줄여서 찾는다.
+    # ⚠️ 재료가 다섯 가지로 늘면서 이벤트가 수십 개가 된다.
+    #    전부 검색량을 물어보면 그만큼 한도를 쓰는데,
+    #    청약 단지명·지자체 행사명은 어차피 0이 나온다(아무도 그 이름으로 안 친다).
+    #    캘린더가 판단에 쓰는 값은 '작년 급등폭'(데이터랩)이지 이 검색량이 아니다.
+    #    그래서 값이 나올 만한 것만, 그것도 40개까지만 물어본다.
+    SKIP_VOL = {"청약", "공연/행사"}
+    asked = 0
     for r in results:
+        if r["comp_level"] in SKIP_VOL or asked >= 40:
+            continue
+        asked += 1
         try:
             vol, used = get_event_volume(r["keyword"])
         except Exception:
@@ -716,6 +1003,12 @@ def fetch_weekly_event_keywords():
         if used != r["keyword"]:
             r["search_form"] = used     # 실제로 검색된 형태
         time.sleep(0.12)
+
+    kinds = {}
+    for r in results:
+        kinds[r["comp_level"]] = kinds.get(r["comp_level"], 0) + 1
+    if kinds:
+        print("   " + " · ".join(f"{k} {v}개" for k, v in kinds.items()))
 
     return results
 
@@ -754,7 +1047,7 @@ COLLECT = {
     # 대시보드에 살아 있는 탭만 수집한다.
     "google_trend":  True,   # 구글 트렌드      · 약 20회
     "golden_time":   True,   # 골든타임         · 약 60회
-    "weekly_event":  True,   # 주간 캘린더      · 약 20회
+    "weekly_event":  True,   # 주간 캘린더      · 약 40회 (공공데이터 5종)
     "news":          True,   # 네이버 뉴스      · 약 0회 (크롤링, API 안 씀)
     "tracking":      True,   # 추적기 기록      · 고유 키워드 수 × 2회
 

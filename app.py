@@ -15,7 +15,7 @@ try:
     calc_opportunity, calc_search_change, expected_visits, ad_density_pct,
     get_search_trend, seasonality_note, get_min_bids, calc_gold_score,
     estimate_monthly_income, weak_spots,
-    calc_since_registered, get_blog_doc_count,
+    calc_since_registered, get_blog_doc_count, event_lift,
     )
 except ImportError as _e:
     import streamlit as _st
@@ -520,6 +520,15 @@ def keyword_min_bid(keyword):
     """이 키워드 광고 최소 입찰가(원). 못 가져오면 None."""
     try:
         return (get_min_bids([keyword]) or {}).get(keyword.strip())
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def event_lift_cached(keyword, event_date):
+    """작년 같은 시기에 얼마나 뛰었는지. 데이터랩 하루 1,000회라 6시간 캐시."""
+    try:
+        return event_lift(keyword, event_date)
     except Exception:
         return None
 
@@ -2002,6 +2011,48 @@ else:
             labels = {0: "이번 주", 1: "다음 주", 2: "2주 후", 3: "3주 후"}
             wd = ['월', '화', '수', '목', '금', '토', '일']
 
+            # 💡 캘린더의 진짜 질문은 '무슨 일이 있나'가 아니라
+            # '이 중 뭘, 언제 써야 하나'다. 작년 같은 시기의 검색 곡선이
+            # 그 답을 갖고 있다. 데이터랩은 띄어쓴 행사명도 받아서,
+            # 검색광고로는 0만 나오던 이름들도 여기서는 값이 붙는다.
+            #
+            # ⚠️ 청약 단지는 작년에 없던 이름이라 물어볼 것이 없다. 건너뛴다.
+            # ⚠️ 데이터랩은 하루 1,000회라 한 번에 40개까지만 재고 6시간 캐시한다.
+            _lift_rows = [
+                (str(r.keyword), r.d.strftime("%Y-%m-%d"))
+                for r in weekly.itertuples()
+                if str(getattr(r, 'comp_level', '')) != '청약'
+            ][:40]
+            _lifts = {}
+            if _lift_rows:
+                with ThreadPoolExecutor(max_workers=8) as _lp:
+                    _futs = {_lp.submit(event_lift_cached, k, d): k
+                             for k, d in _lift_rows}
+                    for _f in _futs:
+                        try:
+                            _lifts[_futs[_f]] = _f.result()
+                        except Exception:
+                            pass
+
+            # ⚠️ 'D-15'와 '이번 주'를 나란히 두면 서로 어긋나 보인다.
+            # 판정은 '언제 쓰라'는 말이고 D는 '이벤트까지 남은 날'이라
+            # 둘이 다른 것을 가리킨다. 판정 쪽 말을 기간이 아닌 급함으로 적는다.
+            _VERDICT = {"now": "🔴 지금", "soon": "🟡 곧",
+                        "later": "🟢 여유", "flat": "⚪ 안 급함"}
+
+            def _lift_cols(name, kind):
+                """(작년, 언제 쓸까) 두 칸."""
+                if kind == '청약':
+                    return "신규", "🟢 여유"
+                v = _lifts.get(str(name))
+                if not v:
+                    return "—", "—"
+                txt = f"{v['lift']:g}배"
+                mark = _VERDICT.get(v["verdict"], "—")
+                if v["verdict"] != "flat":
+                    mark += f" · D-{max(v['days_left'], 0)}"
+                return txt, mark
+
             for off in sorted(weekly['wk'].unique()):
                 off = int(off)
                 if off < 0:
@@ -2017,10 +2068,22 @@ else:
                 ev = ev.sort_values('d')
                 # ⚠️ 행사 이름은 띄어쓰기가 섞여 있어 네이버 검색량 조회가
                 # 잘 안 붙는다. 0으로 비어 보이느니 아예 감춘다.
-                out = ev[['d', '요일', 'keyword', 'comp_level']].copy()
-                out.columns = ['날짜', '요일', '이벤트', '종류']
+                # ⚠️ 첫 열은 모바일에서 붙박이가 된다. 날짜보다 이벤트 이름이
+                # 붙어 있어야 옆으로 밀 때 '무엇의 판정인지'를 잃지 않는다.
+                # 판정('언제 쓸까')을 이름 바로 옆에 둬서 한눈에 읽히게 한다.
+                _pair = [_lift_cols(n, k)
+                         for n, k in zip(ev['keyword'], ev['comp_level'])]
+                out = pd.DataFrame({
+                    '이벤트': list(ev['keyword']),
+                    '언제 쓸까': [b for _, b in _pair],
+                    '작년': [a for a, _ in _pair],
+                    '날짜': [d.strftime('%m/%d') for d in ev['d']],
+                    '요일': list(ev['요일']),
+                    '종류': list(ev['comp_level']),
+                })
                 out.index = range(1, len(out) + 1)
-                show_table(out)
+                show_table(out, center_cols=('언제 쓸까', '작년',
+                                             '날짜', '요일', '종류'))
                 st.write("")
 
         st.divider()

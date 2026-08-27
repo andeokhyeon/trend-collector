@@ -79,11 +79,14 @@ def _sleep_with_countdown(seconds, reason):
     print("\r" + " " * 64 + "\r", end="")
 
 
-def _backoff(streak):
+def _backoff(streak, reason=""):
     """
-    거절/빈 응답이 이어질수록 더 오래 쉰다.
+    네이버가 연달아 거절할 때만 쉰다. 이어질수록 더 오래.
     5회 30초 → 10회 1분 → 20회 3분 → 그 이상 10분.
-    한도를 무시하고 돌 때, 막힌 문을 계속 두드리지 않게 하는 장치다.
+    막힌 문을 계속 두드리지 않게 하는 장치다.
+
+    ⚠️ '연관어가 없는 키워드'는 여기로 오지 않는다. 그건 거절이 아니라
+    그냥 흔한 일이라, 예전에는 그것 때문에 멀쩡히 돌다가 멈춰 섰다.
     """
     if streak < 5:
         wait = 1
@@ -98,7 +101,9 @@ def _backoff(streak):
     if wait <= 2:
         time.sleep(wait)
         return
-    _sleep_with_countdown(wait, f"응답이 비어 있음 ({streak}회 연속)")
+    why = {"quota": "한도", "http429": "너무 자주 불렀음",
+           "http403": "권한 거절", "http401": "인증 오류"}.get(reason, reason or "거절")
+    _sleep_with_countdown(wait, f"네이버가 거절함 · {why} ({streak}회 연속)")
 
 
 def wait_until_quota(check_every=300):
@@ -107,6 +112,31 @@ def wait_until_quota(check_every=300):
         _sleep_with_countdown(min(check_every, _secs_to_reset()), "한도 소진")
         cache.usage(force=True)          # 날짜가 바뀌었는지 다시 확인
     print("\n한도가 초기화됐습니다. 다시 시작합니다.\n")
+
+
+# 키워드도구에 넣어봐야 소용없는 것들.
+#
+# ⚠️ 출발 키워드는 trends_master에서도 가져오는데, 거기에는
+# 네이버 뉴스 제목이 통째로 들어 있다.
+# ("식당 만취난동 끝에 자기들끼리 '피 터지게' 치고받은 가족" 같은 것)
+# 이런 문장을 키워드도구에 보내면 항상 빈 결과가 돌아오고,
+# 그게 쌓이면 프로그램이 '네이버가 막았나 보다' 하고 30초씩 쉰다.
+# 그래서 보내기 전에 걸러낸다. 호출 한 번도 낭비하지 않는다.
+_BAD_CHARS = set("\"'\u2018\u2019\u201c\u201d[]()<>{}!?,.\u00b7\u2026~|/\\+*=&%#@;:\u3008\u3009\u300c\u300d\u300e\u300f")
+
+
+def usable_seed(kw):
+    """키워드도구가 알아들을 만한 낱말인지."""
+    k = (kw or "").strip()
+    if not k:
+        return False
+    if len(k.replace(" ", "")) > 20:     # 문장은 못 알아듣는다
+        return False
+    if len(k.split()) > 3:               # 낱말 서넛까지가 한계
+        return False
+    if any(c in _BAD_CHARS for c in k):
+        return False
+    return True
 
 
 def gather_seeds(page=0, quiet=False):
@@ -155,13 +185,19 @@ def gather_seeds(page=0, quiet=False):
         except Exception:
             pass
 
-    # 중복 제거하면서 순서 유지
-    out, seen = [], set()
+    # 중복 제거하면서 순서 유지. 문장·특수문자는 여기서 버린다.
+    out, seen, dropped = [], set(), 0
     for s in seeds:
         s = (s or "").strip()
-        if s and s not in seen:
-            seen.add(s)
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        if usable_seed(s):
             out.append(s)
+        else:
+            dropped += 1
+    if dropped and not quiet:
+        print(f"   뉴스 제목처럼 낱말이 아닌 것 {dropped:,}개는 건너뜁니다.")
     return out
 
 
@@ -196,7 +232,8 @@ def run(max_calls=None, forever=False, ignore_limit=False):
 
     done, calls, added = set(), 0, 0
     rounds = 0
-    empty_streak = 0
+    refused = 0          # 네이버가 연달아 거절한 횟수
+    barren = 0           # 연관어가 없던 키워드 수 (정상)
     t0 = time.time()
     stop_reason = "끝"
 
@@ -257,34 +294,39 @@ def run(max_calls=None, forever=False, ignore_limit=False):
                     data = api.get_keyword_data(kw, related_limit=20)
                 except Exception as e:
                     print(f"  {kw} 실패: {e}")
-                    empty_streak += 1
-                    _backoff(empty_streak)
+                    refused += 1
+                    _backoff(refused, type(e).__name__)
                     continue
                 calls += 1
 
                 rel = data.get("related") or []
                 added += len(rel) + 1
 
-                # ⚠️ 네이버가 거절하면 예외가 아니라 '빈 결과'로 돌아온다.
-                # 그걸 모르고 계속 부르면 아무것도 못 받으면서 호출만 쌓인다.
-                if rel:
-                    empty_streak = 0
-                else:
-                    empty_streak += 1
-                    if empty_streak >= 5:
-                        _backoff(empty_streak)
-                        if empty_streak >= 40 and not forever:
-                            print("\n빈 응답이 계속됩니다. 여기서 멈춥니다.")
-                            stop_reason = "응답 없음"
-                            break
-                        continue
+                # ⚠️ 예전에는 '연관어가 없다'와 '네이버가 거절했다'를
+                # 똑같이 취급해서, 멀쩡히 도는 중에도 30초씩 멈춰 섰다.
+                # 연관어가 없는 키워드는 그냥 흔한 일이다 — 다음으로 넘어간다.
+                # 진짜로 쉬어야 할 때는 네이버가 거절했을 때뿐이다.
+                err = data.get("error")
+                if err:
+                    refused += 1
+                    _backoff(refused, err)
+                    if refused >= 40 and not forever:
+                        print("\n네이버가 계속 거절합니다. 여기서 멈춥니다.")
+                        stop_reason = "거절"
+                        break
+                    continue
+                refused = 0
+                if not rel:
+                    barren += 1
+                    continue
 
                 # 받은 연관어를 다음 출발점으로 (검색량 있는 것만)
                 for r in rel:
                     k = (r.get("keyword") or "").strip()
                     if k and k not in done and len(queue) < 20000:
                         if (r.get("monthly_pc", 0)
-                                + r.get("monthly_mobile", 0)) >= 50:
+                                + r.get("monthly_mobile", 0)) >= 50 \
+                                and usable_seed(k):
                             queue.append(k)
 
                 # 무슨 단어가 들어왔는지 보여준다.
@@ -299,8 +341,9 @@ def run(max_calls=None, forever=False, ignore_limit=False):
                     now = cache.usage(force=True)
                     elapsed = int(time.time() - t0)
                     hh, mm = divmod(elapsed // 60, 60)
+                    barren_txt = f" · 연관어 없던 것 {barren:,}" if barren else ""
                     print(f"       ── 호출 {calls:,} · 대기열 {len(queue):,} · "
-                          f"오늘 {now['calls']:,}/{budget_limit:,}회 · "
+                          f"오늘 {now['calls']:,}/{budget_limit:,}회{barren_txt} · "
                           f"{hh}시간 {mm}분 경과 ──")
 
                 time.sleep(0.12)
