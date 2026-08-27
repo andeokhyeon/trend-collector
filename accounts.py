@@ -313,6 +313,20 @@ PROVIDERS = {
     "google": ("구글",   "#FFFFFF", "#3C4043"),
 }
 
+# 무엇을 달라고 할지.
+#
+# ⚠️ 카카오에 이메일(account_email)을 달라고 하면 KOE205로 거절당한다.
+#    그 동의항목은 '비즈앱'으로 등록한 계정만 켤 수 있는데,
+#    Supabase는 기본으로 그것까지 요구한다. 그래서 우리가 직접 정해준다.
+#    닉네임만 받으면 로그인은 충분히 된다 (이메일이 없어도 돌아가게 해뒀다).
+#    나중에 비즈앱으로 바꾸면 여기에 account_email을 더하면 된다.
+#
+# ⚠️ 구글은 기본값이 맞으므로 건드리지 않는다 (None이면 Supabase 기본).
+SCOPES = {
+    "kakao": "profile_nickname",
+    "google": None,
+}
+
 _VERIFIER_KEY = "supabase.auth.token-code-verifier"
 
 
@@ -329,8 +343,12 @@ def oauth_url(provider, redirect_to):
     if provider not in PROVIDERS:
         return None, None, "지원하지 않는 로그인입니다."
     try:
+        opts = {"redirect_to": redirect_to}
+        sc = SCOPES.get(provider)
+        if sc:
+            opts["scopes"] = sc
         res = _sb.auth.sign_in_with_oauth(
-            {"provider": provider, "options": {"redirect_to": redirect_to}})
+            {"provider": provider, "options": opts})
         url = getattr(res, "url", None)
         if not url:
             return None, None, "로그인 주소를 만들지 못했습니다."
@@ -342,6 +360,10 @@ def oauth_url(provider, redirect_to):
         return url, verifier, ""
     except Exception as e:
         t = str(e).lower()
+        if "koe205" in t:
+            return None, None, ("카카오가 동의항목 설정을 문제 삼았습니다(KOE205). "
+                                "카카오 개발자 → 카카오 로그인 → 동의항목에서 "
+                                "'닉네임'을 켜주세요.")
         if "provider is not enabled" in t or "unsupported" in t:
             return None, None, (f"{PROVIDERS[provider][0]} 로그인이 아직 꺼져 있습니다. "
                                 "Supabase → Authentication → Providers 에서 켜주세요.")
