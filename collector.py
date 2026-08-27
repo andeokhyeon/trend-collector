@@ -994,14 +994,19 @@ def fetch_weekly_event_keywords():
             continue
         asked += 1
         try:
-            vol, used = get_event_volume(r["keyword"])
+            vol, _ = get_event_volume(r["keyword"])
         except Exception:
-            vol, used = 0, r["keyword"]
+            vol = 0
         # 모바일 비중이 큰 편이라 7:3으로 나눠 담는다 (표시용)
         r["monthly_mobile"] = int(vol * 0.7)
         r["monthly_pc"] = vol - int(vol * 0.7)
-        if used != r["keyword"]:
-            r["search_form"] = used     # 실제로 검색된 형태
+        # ⚠️ 예전에는 여기서 r["search_form"] = used 로 '실제로 검색된 형태'를
+        # 덧붙였다. 그런데 이름을 줄여 검색한 행에만 그 열이 생기는 바람에
+        # 한 묶음 안에 열 구성이 두 가지가 됐다.
+        # PostgREST(Supabase)는 한 번에 넣는 행들의 키가 전부 같아야 하고
+        # 다르면 '한 건도' 안 넣는다. 그래서 주간 캘린더 저장이 통째로
+        # 거절당했고, 화면에는 예전 축제 목록만 남아 있었다.
+        # 어디서도 읽지 않는 값이라 아예 없앤다.
         time.sleep(0.12)
 
     kinds = {}
@@ -1149,14 +1154,50 @@ def main():
     # 소스별로 "수집 → 즉시 저장"을 하나씩 처리한다.
     # 한 곳이 스키마 오류로 실패해도 나머지는 안전하게 저장된다.
     def save(label, rows):
+        """
+        모아서 한 번에 넣고, 거절당하면 한 건씩 다시 넣어본다.
+
+        ⚠️ 한 묶음 통째로 거절당하면 '수집은 됐는데 화면엔 안 나오는' 상태가 된다.
+        원인이 행 하나에 있어도 전부가 날아가므로, 실패하면 한 건씩 넣어
+        멀쩡한 것은 살리고 무엇이 걸렸는지 이름까지 보여준다.
+        """
         if not rows:
             print(f"⚠️ {label}: 수집된 데이터가 없어 저장을 건너뜁니다.")
             return
         try:
             supabase.table("trends_master").insert(rows).execute()
             print(f"✅ {label} 완료 및 저장 ({len(rows)}건)")
+            return
         except Exception as e:
-            print(f"❌ {label} 저장 실패: {e}")
+            print(f"⚠️ {label}: 묶음 저장이 거절됐습니다 — {e}")
+
+        # 열 구성이 서로 다르면 PostgREST가 묶음을 통째로 막는다.
+        # 빠진 열을 None으로 채워 모양을 맞춘 뒤 한 번 더 시도한다.
+        cols = set()
+        for r in rows:
+            cols |= set(r)
+        evened = [{c: r.get(c) for c in cols} for r in rows]
+        try:
+            supabase.table("trends_master").insert(evened).execute()
+            print(f"✅ {label} 완료 및 저장 ({len(rows)}건, 열을 맞춰 재시도)")
+            return
+        except Exception as e:
+            print(f"⚠️ {label}: 열을 맞춰도 안 됩니다 — {e}")
+
+        ok, bad = 0, []
+        for r in rows:
+            try:
+                supabase.table("trends_master").insert(r).execute()
+                ok += 1
+            except Exception as e:
+                if len(bad) < 3:
+                    bad.append(f"{r.get('keyword', '?')} ({e})")
+        if ok:
+            print(f"✅ {label} 한 건씩 저장 ({ok}/{len(rows)}건)")
+        else:
+            print(f"❌ {label} 저장 실패 — 한 건도 못 넣었습니다")
+        for b in bad:
+            print(f"     걸린 것: {b}")
 
     def maybe_enrich(rows, label):
         return enrich_with_competition(rows, label) if ENRICH_COMPETITION else rows
