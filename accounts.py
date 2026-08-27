@@ -19,6 +19,7 @@ import hashlib
 import hmac
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -27,6 +28,7 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 _sb = None
+_URL = ""
 
 # 플랜 — 지금은 코드에 적어둔다. 결제가 붙으면 표만 바꾸면 된다.
 PLANS = {
@@ -38,9 +40,11 @@ PLANS = {
 ANALYZE_COST = 1          # 키워드 하나 분석 = 1 크레딧
 
 
-def attach(client, secret=""):
-    global _sb, _SECRET
+def attach(client, secret="", url=""):
+    global _sb, _SECRET, _URL
     _sb = client
+    if url:
+        _URL = str(url).rstrip("/")
     if secret:
         # ⚠️ 열쇠 그 자체를 쓰지 않고 한 번 뭉개서 쓴다.
         #    혹시 이 값이 새더라도 원래 열쇠를 되돌릴 수 없게.
@@ -400,45 +404,65 @@ SCOPES = {
 _VERIFIER_KEY = "supabase.auth.token-code-verifier"
 
 
-def oauth_url(provider, redirect_to):
+def _auth_base():
+    """Supabase 인증 주소. attach에서 못 받았으면 라이브러리에서 꺼낸다."""
+    if _URL:
+        return _URL + "/auth/v1"
+    try:
+        return str(_sb.auth._url).rstrip("/")
+    except Exception:
+        return ""
+
+
+def new_verifier():
+    """
+    PKCE '확인코드'를 우리가 직접 만든다.
+
+    ⚠️ 왜 직접 만드나. 라이브러리에 맡기면 부를 때마다 새로 만들어
+    라이브러리 안쪽에 덮어써 버린다. 버튼을 카카오·구글 두 개 그리면
+    나중에 만든 구글 것만 남아서, 카카오로 눌러도 구글 확인코드를 대게 된다
+    — 실제로 카카오만 로그인이 안 되는 사고가 났다.
+    우리가 하나 만들어 두 버튼에 똑같이 쓰면 돌아왔을 때 헷갈릴 일이 없다.
+    """
+    try:
+        from supabase_auth.helpers import (generate_pkce_verifier,
+                                           generate_pkce_challenge)
+        v = generate_pkce_verifier()
+        return v, generate_pkce_challenge(v)
+    except Exception:
+        import secrets
+        v = secrets.token_urlsafe(64)[:96]
+        c = base64.urlsafe_b64encode(
+            hashlib.sha256(v.encode()).digest()).decode().rstrip("=")
+        return v, c
+
+
+def oauth_url(provider, redirect_to, verifier_pair=None):
     """
     소셜 로그인 주소를 만든다. 반환 (주소|None, 확인코드|None, 메시지)
 
-    ⚠️ '확인코드'(code_verifier)를 함께 돌려주는 이유:
-    이 값은 라이브러리가 메모리에 넣어두는데, 여러 사람이 동시에 로그인하면
-    서로 덮어쓴다. 화면 쪽에서 각자 들고 있다가 돌아올 때 내밀게 한다.
+    ⚠️ 라이브러리의 sign_in_with_oauth를 쓰지 않고 주소를 직접 조립한다.
+    이유는 new_verifier() 설명 참고. 주소 모양은 Supabase 문서 그대로다.
     """
     if not ready():
         return None, None, "서버에 연결되지 않았습니다."
     if provider not in PROVIDERS:
         return None, None, "지원하지 않는 로그인입니다."
+    base = _auth_base()
+    if not base:
+        return None, None, "인증 주소를 찾지 못했습니다."
     try:
-        opts = {"redirect_to": redirect_to}
+        verifier, challenge = verifier_pair or new_verifier()
+        q = [("provider", provider),
+             ("code_challenge", challenge),
+             ("code_challenge_method", "s256")]
+        if redirect_to:
+            q.append(("redirect_to", redirect_to))
         sc = SCOPES.get(provider)
         if sc:
-            opts["scopes"] = sc
-        res = _sb.auth.sign_in_with_oauth(
-            {"provider": provider, "options": opts})
-        url = getattr(res, "url", None)
-        if not url:
-            return None, None, "로그인 주소를 만들지 못했습니다."
-        verifier = None
-        try:
-            verifier = _sb.auth._storage.get_item(_VERIFIER_KEY)
-        except Exception:
-            pass
-        return url, verifier, ""
+            q.append(("scopes", sc))
+        return base + "/authorize?" + urlencode(q), verifier, ""
     except Exception as e:
-        t = str(e).lower()
-        if "koe205" in t:
-            return None, None, ("카카오가 '이메일(account_email)' 동의항목을 거절했습니다(KOE205). "
-                                "이 항목은 Supabase가 기본으로 요구하는 것이라 앱에서 뺄 수 없습니다. "
-                                "카카오 개발자 → 앱 → 일반 → 비즈니스 정보 → "
-                                "'개인 개발자 비즈 앱 전환'을 신청한 뒤, "
-                                "동의항목에서 '카카오계정(이메일)'을 켜주세요.")
-        if "provider is not enabled" in t or "unsupported" in t:
-            return None, None, (f"{PROVIDERS[provider][0]} 로그인이 아직 꺼져 있습니다. "
-                                "Supabase → Authentication → Providers 에서 켜주세요.")
         return None, None, _msg(e)
 
 
@@ -447,12 +471,14 @@ def exchange(code, verifier=None):
     if not ready() or not code:
         return False, "로그인 정보를 받지 못했습니다.", None
     try:
+        # ⚠️ 확인코드는 인자로 그대로 넘긴다.
+        #    예전에는 라이브러리 안쪽 저장소에 몰래 넣어뒀는데,
+        #    그 저장소는 접속하는 사람 모두가 함께 쓰는 자리라
+        #    두 사람이 동시에 로그인하면 서로 덮어쓴다.
+        args = {"auth_code": code}
         if verifier:
-            try:
-                _sb.auth._storage.set_item(_VERIFIER_KEY, verifier)
-            except Exception:
-                pass
-        res = _sb.auth.exchange_code_for_session({"auth_code": code})
+            args["code_verifier"] = verifier
+        res = _sb.auth.exchange_code_for_session(args)
         user = getattr(res, "user", None)
         if user is None:
             return False, "로그인하지 못했습니다.", None
@@ -460,9 +486,11 @@ def exchange(code, verifier=None):
         return True, "", _pack(user)
     except Exception as e:
         t = str(e).lower()
-        if "code verifier" in t or "invalid request" in t:
-            return False, ("로그인 확인에 실패했습니다. "
-                           "다시 한 번 눌러주세요."), None
+        if "code verifier" in t or "invalid request" in t or "challenge" in t:
+            # ⚠️ 원문을 뒤에 붙여둔다. 이게 없어서 지난번에 원인을 못 찾고
+            #    며칠을 헤맸다. 짧게라도 남겨야 화면만 보고 짚을 수 있다.
+            return False, ("로그인 확인에 실패했습니다. 다시 한 번 눌러주세요.\n\n"
+                           "(사유: %s)" % str(e)[:200]), None
         return False, _msg(e), None
 
 

@@ -1547,6 +1547,13 @@ font-size: 1.16em; letter-spacing: -.02em;
 .st-key-serp_sort [role="radiogroup"] {{ gap: 2px !important; }}
 .st-key-serp_sort label {{ font-size: .84rem !important; }}
 .st-key-serp_sort label p {{ font-size: .84rem !important; }}
+/* 쿠키(로그인 유지)를 심으려고 띄우는 1픽셀짜리 틀 —
+   높이가 0이 안 돼서 1픽셀로 두는데, 그 1픽셀이 회색 줄로 보인다.
+   화면에서 완전히 지운다. 안에 있는 스크립트는 그대로 돌아간다. */
+iframe[data-testid="stIFrame"] {{ display: none !important; }}
+[data-testid="stElementContainer"]:has(> iframe[data-testid="stIFrame"]) {{
+display: none !important;
+}}
 /* 소셜 로그인 —
    ⚠️ 스트림릿 버튼이 아니라 '진짜 링크'다.
    버튼으로 하면 눌렀을 때 서버를 한 번 갔다 와야 해서

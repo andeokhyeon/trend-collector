@@ -78,7 +78,7 @@ supabase = init_connection()
 if accounts is not None:
     # ⚠️ 두 번째 값은 '로그인 유지' 쿠키에 도장을 찍을 열쇠다.
     #    서버 안에서만 쓰이고 브라우저로 나가지 않는다.
-    accounts.attach(supabase, SUPABASE_KEY)
+    accounts.attach(supabase, SUPABASE_KEY, SUPABASE_URL)
 if cache is not None:
     cache.attach(supabase)
 else:
@@ -701,9 +701,9 @@ def _write_cookie(name, value, max_age):
         pass
 
 
-def _vcookie(pid):
-    """제공자별 '확인코드'를 담아둘 쿠키 이름."""
-    return "kh_v_" + pid
+def _vcookie(_pid=None):
+    """로그인 '확인코드'를 담아둘 쿠키 이름 (제공자 공통 하나)."""
+    return "kh_v"
 
 
 def _sync_cookie():
@@ -762,12 +762,16 @@ def _consume_oauth_code():
     #    (라이브러리 안쪽에 남아 있는 값에 기대는 것도 안 된다.
     #     버튼을 둘 그리면 나중에 만든 쪽 것으로 덮여서,
     #     카카오로 눌러도 구글 것을 대게 된다 — 실제로 그렇게 터졌다.)
+    # ⚠️ 확인코드(code_verifier)는 카카오·구글이 똑같은 것을 쓴다.
+    #    (accounts.new_verifier 설명 참고 — 제공자마다 다르게 만들면
+    #     나중에 만든 쪽이 앞의 것을 덮어써서 카카오만 안 되는 사고가 난다)
+    #
+    # ⚠️ 반드시 '쿠키'에서도 찾아야 한다. 로그인하러 나갔다 오면
+    #    페이지가 새로 열리고, 스트림릿은 그때 session_state를 통째로 버린다.
     _vs = []
-    for _p in accounts.PROVIDERS:
-        for _v in (st.session_state.get(f"oauth_verifier_{_p}"),
-                   _cookie(_vcookie(_p))):
-            if _v and _v not in _vs:
-                _vs.append(_v)
+    for _v in (st.session_state.get("oauth_verifier"), _cookie(_vcookie())):
+        if _v and _v not in _vs:
+            _vs.append(_v)
     _vs.append(None)
     ok = False
     msg, user = "로그인하지 못했습니다.", None
@@ -783,11 +787,9 @@ def _consume_oauth_code():
     if ok:
         st.session_state["user"] = user
         _remember(user)
-        for _p in accounts.PROVIDERS:      # 다 쓴 확인코드는 지운다
-            if _cookie(_vcookie(_p)):
-                _write_cookie(_vcookie(_p), "", 0)
-        for _k in ("oauth_url_kakao", "oauth_url_google",
-                   "oauth_verifier_kakao", "oauth_verifier_google"):
+        if _cookie(_vcookie()):            # 다 쓴 확인코드는 지운다
+            _write_cookie(_vcookie(), "", 0)
+        for _k in ("oauth_url_kakao", "oauth_url_google", "oauth_verifier"):
             st.session_state.pop(_k, None)
         st.rerun()
     else:
@@ -905,18 +907,23 @@ def _social_box():
     if accounts is None:
         return
     _site = getattr(config, "SITE_URL", "") or ""
+    # ⚠️ 확인코드는 접속당 하나만 만들어 두 버튼이 함께 쓴다.
+    #    그래야 돌아왔을 때 '카카오였나 구글이었나'를 따질 필요가 없다.
+    if "oauth_verifier" not in st.session_state:
+        _v, _c = accounts.new_verifier()
+        st.session_state["oauth_verifier"] = _v
+        st.session_state["oauth_challenge"] = _c
+        # 로그인하러 나갔다 오면 이 화면의 기억은 사라지고 쿠키만 남는다.
+        _write_cookie(_vcookie(), _v, 900)
+    _pair = (st.session_state["oauth_verifier"],
+             st.session_state["oauth_challenge"])
+
     items, errs = [], []
     for pid, (label, _bg, _fg) in accounts.PROVIDERS.items():
         key = f"oauth_url_{pid}"
         if key not in st.session_state:
-            url, verifier, msg = accounts.oauth_url(pid, _site)
+            url, _vr, msg = accounts.oauth_url(pid, _site, _pair)
             st.session_state[key] = url or ""
-            if verifier:
-                st.session_state[f"oauth_verifier_{pid}"] = verifier
-                # ⚠️ 여기서 쿠키에 넣어둬야 한다. 로그인하러 나갔다 오면
-                #    이 화면의 기억은 사라지고 쿠키만 남는다.
-                #    15분이면 충분하고, 로그인에 성공하면 바로 지운다.
-                _write_cookie(_vcookie(pid), verifier, 900)
             if not url and msg:
                 st.session_state[f"oauth_err_{pid}"] = msg
         u = st.session_state.get(key)
@@ -992,7 +999,12 @@ with sub_research[0]:
     # 아직 아무것도 안 친 상태에서만 문장 하나 + 큰 검색창으로 화면을 비운다.
     # ⚠️ '비었는가'는 검색창을 읽어봐야 알 수 있는데, 히어로는 검색창 위에
     # 그려져야 한다. 자리를 먼저 잡아두고 나중에 채운다.
-    _hero_slot = st.container()
+    # ⚠️ container가 아니라 empty를 쓴다.
+    #    container면 검색을 시작해도 옛 히어로가 화면에 흐릿하게 남아 있다가
+    #    스크립트가 다 끝나야 사라진다 — 로그인 화면 위로 큰 글씨가
+    #    어른거려서 '뭐가 잘못됐나' 싶게 보인다.
+    #    empty는 그 자리에서 바로 지울 수 있다.
+    _hero_slot = st.empty()
 
     with st.container(border=True):
         kc1, kc2 = st.columns([5, 1])
@@ -1011,8 +1023,12 @@ with sub_research[0]:
     # 검색창 옆에서 자리만 차지한다. 위쪽 '내 블로그' 탭에서 받는다.
 
     _empty = not (kw_input or "").strip() and not st.session_state.get("active_kw")
+    # ⚠️ 검색창 아래 '예시 키워드 + 갱신 시각'도 같은 이유로 자리를 잡아둔다.
+    #    (container로 두면 검색을 시작해도 흐릿하게 남아 어른거린다)
+    _after_slot = st.empty()
+
     if _empty:
-        with _hero_slot:
+        with _hero_slot.container():
             ui.hero()
         # 오늘 수집된 것 중 뜨는 키워드를 예시로 보여준다 (누르는 게 아니라 참고용)
         _ex = []
@@ -1029,9 +1045,14 @@ with sub_research[0]:
                 _pool = cache.pool_size()
         except Exception:
             _pool = None
-        ui.hero_after(
-            "".join(f'<span class="hero-chip">{e}</span>' for e in _ex),
-            freshness=_fresh, pool_size=_pool)
+        with _after_slot.container():
+            ui.hero_after(
+                "".join(f'<span class="hero-chip">{e}</span>' for e in _ex),
+                freshness=_fresh, pool_size=_pool)
+    else:
+        # 조사를 시작했으면 첫 화면용 장식은 그 자리에서 바로 지운다.
+        _hero_slot.empty()
+        _after_slot.empty()
 
     if searched and kw_input.strip():
         st.session_state["active_kw"] = kw_input.strip()
@@ -1068,6 +1089,17 @@ with sub_research[0]:
             else:
                 _paid.add(_k)
                 my_profile.clear()
+
+    # ⚠️ 여기까지 살아남은 키워드만 '조사해도 되는' 키워드다.
+    #    (로그인했고, 크레딧도 냈다)
+    #
+    # ⚠️ 이게 왜 중요한가. Streamlit은 지금 보고 있는 탭이 무엇이든
+    #    모든 탭의 코드를 매번 처음부터 끝까지 실행한다.
+    #    그래서 아래 '상위노출 해부'와 '글감 만들기'가 research_kw
+    #    (=입력칸에 적힌 글자)를 그대로 쓰면, 로그인 화면이 떠 있는 동안에도
+    #    네이버를 불러버린다 — 로그인도 안 한 사람 때문에 우리 한도가 닳는다.
+    #    그래서 아래 두 탭은 반드시 이 allowed_kw를 봐야 한다.
+    allowed_kw = kw
 
     # ⚠️ Streamlit은 어떤 탭을 보고 있든 스크립트 전체를 다시 실행한다.
     # 그래서 아래 '경쟁 분석'·'글감 만들기' 탭도 매번 같은 키워드의
@@ -1551,9 +1583,11 @@ with sub_research[1]:
              "지금 밀어낼 수 있습니다",
              "경쟁률 숫자만으로는 안 보이는 것입니다.")
 
-    serp_kw = research_kw
+    serp_kw = allowed_kw          # ⚠️ research_kw가 아니다 (위 주석 참고)
     if not serp_kw:
-        ui.note("위쪽 입력칸에 키워드를 넣어주세요.", gold=True)
+        ui.note("위쪽 '키워드 분석'에서 로그인하고 키워드를 넣어주세요."
+                if research_kw else "위쪽 입력칸에 키워드를 넣어주세요.",
+                gold=True)
 
     if serp_kw:
         # ⚠️ 정렬 칸은 화면 맨 위에 혼자 떠 있었다. 그런데 이 선택이 바꾸는 건
@@ -1682,9 +1716,11 @@ with sub_research[2]:
             "이걸 재료로 직접 쓰시는 게 훨씬 낫습니다.")
     st.write("")
 
-    idea_kw = research_kw
+    idea_kw = allowed_kw          # ⚠️ research_kw가 아니다 (위 주석 참고)
     if not idea_kw:
-        ui.note("위쪽 입력칸에 키워드를 넣어주세요.", gold=True)
+        ui.note("위쪽 '키워드 분석'에서 로그인하고 키워드를 넣어주세요."
+                if research_kw else "위쪽 입력칸에 키워드를 넣어주세요.",
+                gold=True)
 
     if idea_kw:
         @st.cache_data(ttl=1800, show_spinner=False)
