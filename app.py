@@ -76,7 +76,9 @@ if _missing:
 supabase = init_connection()
 # 사용자끼리 조회 결과를 나눠 쓰도록 공용 캐시에 연결한다.
 if accounts is not None:
-    accounts.attach(supabase)
+    # ⚠️ 두 번째 값은 '로그인 유지' 쿠키에 도장을 찍을 열쇠다.
+    #    서버 안에서만 쓰이고 브라우저로 나가지 않는다.
+    accounts.attach(supabase, SUPABASE_KEY)
 if cache is not None:
     cache.attach(supabase)
 else:
@@ -653,6 +655,132 @@ def my_name(u):
             or "회원")
 
 
+# ------------------------------------------------------------
+# 로그인 유지
+#
+# ⚠️ 스트림릿은 페이지를 새로 열면(F5, 로고 클릭, 주소 이동)
+#    기억을 전부 잃는다. 그래서 로그인 표를 브라우저 쿠키에 맡겨둔다.
+#    쿠키에는 회원번호와 기한뿐이고, 서버 열쇠로 찍은 도장이 붙어 있어
+#    남이 고쳐 쓸 수 없다 (accounts.make_token 참고).
+# ------------------------------------------------------------
+def _cookie(name):
+    try:
+        return (dict(getattr(st.context, "cookies", None) or {})).get(name)
+    except Exception:
+        return None
+
+
+def _write_cookie(token):
+    """
+    쿠키를 심거나(토큰) 지운다(빈 값).
+
+    ⚠️ 파이썬 쪽에서는 쿠키를 못 쓴다. 브라우저에서 한 줄 돌려야 한다.
+    st.markdown 안의 <script>는 스트림릿이 걸러내므로 작은 틀(iframe)에 담아
+    돌린다. 높이 0이라 화면에는 안 보인다.
+
+    ⚠️ st.iframe이 새 이름이고, components.v1.html은 없어질 예정이다.
+    둘 다 받아두어야 스트림릿이 올라가도 로그인 유지가 안 깨진다.
+    """
+    if token:
+        body = ("'%s=' + %r + '; path=/; max-age=%d; SameSite=Lax'"
+                % (accounts.COOKIE, token, accounts.TOKEN_DAYS * 86400))
+    else:
+        body = "'%s=; path=/; max-age=0; SameSite=Lax'" % accounts.COOKIE
+    html = ("<script>try{document.cookie=" + body +
+            " + (location.protocol==='https:'?'; Secure':'');}catch(e){}</script>")
+    # ⚠️ st.iframe은 높이 0을 안 받는다(1이 최소). 1픽셀은 눈에 안 보인다.
+    try:
+        st.iframe(html, height=1)
+        return
+    except Exception:
+        pass
+    try:
+        import streamlit.components.v1 as _c
+        _c.html(html, height=0)
+    except Exception:
+        pass
+
+
+def _sync_cookie():
+    """이번 화면에서 심거나 지울 쿠키가 있으면 처리한다."""
+    if accounts is None:
+        return
+    if "cookie_set" in st.session_state:
+        _write_cookie(st.session_state.pop("cookie_set"))
+
+
+def _restore_login():
+    """쿠키가 있으면 로그인 상태를 되살린다. 접속당 한 번만 시도."""
+    if accounts is None or st.session_state.get("user"):
+        return
+    if st.session_state.get("cookie_tried"):
+        return
+    st.session_state["cookie_tried"] = True
+    tok = _cookie(accounts.COOKIE)
+    if not tok:
+        return
+    u = accounts.user_from_token(tok)
+    if u:
+        st.session_state["user"] = u
+
+
+def _remember(user):
+    """로그인 직후 — 다음 화면에서 쿠키를 심도록 표시해둔다."""
+    if accounts is None or not user:
+        return
+    tok = accounts.make_token(user.get("id"))
+    if tok:
+        st.session_state["cookie_set"] = tok
+
+
+def _consume_oauth_code():
+    if accounts is None or st.session_state.get("user"):
+        return
+    try:
+        qp = dict(st.query_params)
+    except Exception:
+        qp = {}
+    code = qp.get("code")
+    if isinstance(code, list):
+        code = code[0] if code else None
+    if not code:
+        return
+    # ⚠️ 확인코드(code_verifier)는 제공자마다 다르게 만들어진다.
+    #    돌아온 주소만 봐서는 카카오인지 구글인지 알 수 없으므로
+    #    가지고 있는 것들을 차례로 대본다 (많아야 두 번).
+    _vs = [st.session_state.get(f"oauth_verifier_{p}")
+           for p in ("kakao", "google")]
+    _vs = [v for v in _vs if v] + [None]
+    ok = False
+    msg, user = "로그인하지 못했습니다.", None
+    for _v in _vs:
+        ok, msg, user = accounts.exchange(code, _v)
+        if ok:
+            break
+    # 코드는 한 번만 쓸 수 있다. 성공했든 아니든 주소에서 지운다.
+    try:
+        st.query_params.pop("code", None)
+    except Exception:
+        pass
+    if ok:
+        st.session_state["user"] = user
+        _remember(user)
+        for _k in ("oauth_url_kakao", "oauth_url_google",
+                   "oauth_verifier_kakao", "oauth_verifier_google"):
+            st.session_state.pop(_k, None)
+        st.rerun()
+    else:
+        st.session_state["oauth_error"] = msg
+
+
+_restore_login()
+_consume_oauth_code()
+_sync_cookie()
+
+
+# ⚠️ 로그인 복원은 반드시 이 위에서 끝나야 한다.
+# 상단 막대(_meta)를 이 아래에서 그리기 때문에, 복원이 늦으면
+# 로그인은 됐는데 이름·크레딧이 안 보이는 일이 생긴다.
 _meta = []
 _u = st.session_state.get("user")
 if _u:
@@ -724,35 +852,6 @@ if "debug" in _get_query_params():
 # ⚠️ 소셜 로그인은 '갔다가 ?code=… 를 달고 돌아온다'. 그 코드를 세션으로
 # 바꾸는 일을 화면 그리기 전에 먼저 해치운다. 안 그러면 로그인 상자가
 # 한 번 깜빡였다가 사라진다.
-def _consume_oauth_code():
-    if accounts is None or st.session_state.get("user"):
-        return
-    try:
-        qp = dict(st.query_params)
-    except Exception:
-        qp = {}
-    code = qp.get("code")
-    if isinstance(code, list):
-        code = code[0] if code else None
-    if not code:
-        return
-    ok, msg, user = accounts.exchange(
-        code, st.session_state.pop("oauth_verifier", None))
-    # 코드는 한 번만 쓸 수 있다. 성공했든 아니든 주소에서 지운다.
-    try:
-        st.query_params.pop("code", None)
-    except Exception:
-        pass
-    if ok:
-        st.session_state["user"] = user
-        for _k in ("oauth_url_kakao", "oauth_url_google", "oauth_verifier"):
-            st.session_state.pop(_k, None)
-        st.rerun()
-    else:
-        st.session_state["oauth_error"] = msg
-
-
-_consume_oauth_code()
 
 
 def _me():
@@ -772,48 +871,43 @@ def _eun(word):
 
 def _social_box():
     """
-    카카오·구글 버튼.
+    카카오·구글 '시작하기' 줄. 누르면 바로 그쪽 로그인 화면으로 간다.
 
-    ⚠️ 예전에는 버튼을 누르면 <meta refresh>로 튕겨 보냈다. 그런데 스트림릿이
-    그 태그를 걸러낼 수 있어서 안 움직이거나 엉뚱하게 도는 일이 생긴다.
-    누르면 주소를 만들어 '진짜 링크 버튼'을 띄우고, 이동은 그 링크가 한다.
-    한 단계 더 누르게 되지만 어디로 가는지 눈에 보여서 오히려 안전하다.
+    ⚠️ 예전에는 스트림릿 버튼이었다. 그러면 눌렀을 때 서버를 한 번 갔다 와서
+    주소를 만들고, 그제서야 '창 열기' 링크가 뜬다 — 두 번 눌러야 했다.
+    지금은 화면을 그릴 때 미리 주소를 만들어 링크에 박아둔다. 한 번이면 된다.
+
+    ⚠️ 주소는 세션에 한 번만 만들어 재사용한다. 다시 만들 때마다
+    확인코드(code_verifier)가 바뀌는데, 화면에 걸린 링크는 옛날 것이라
+    돌아왔을 때 짝이 안 맞는 일이 생긴다.
     """
     if accounts is None:
         return
     _site = getattr(config, "SITE_URL", "") or ""
-    cols = st.columns(len(accounts.PROVIDERS))
-    for col, (pid, (label, bg, fg)) in zip(cols, accounts.PROVIDERS.items()):
-        with col:
-            _ready = st.session_state.get(f"oauth_url_{pid}")
-            if _ready:
-                st.link_button(f"{label} 로그인 창 열기", _ready,
-                               use_container_width=True, type="primary")
-            elif st.button(f"{label}로 시작하기", key=f"oauth_{pid}",
-                           use_container_width=True):
-                url, verifier, msg = accounts.oauth_url(pid, _site)
-                if url:
-                    if verifier:
-                        st.session_state["oauth_verifier"] = verifier
-                    st.session_state[f"oauth_url_{pid}"] = url
-                    st.rerun()
-                else:
-                    st.error(msg)
-    # 주소를 만들었는데 안 열린다면, 눈으로 확인할 수 있게 그대로 보여준다.
-    _made = [v for k, v in st.session_state.items()
-             if k.startswith("oauth_url_")]
-    if _made:
-        with st.expander("안 열리나요? 이동할 주소 확인"):
-            for u in _made:
-                st.code(u, language=None)
-            st.caption("이 주소를 새 탭에 붙여넣어도 됩니다. "
-                       "'연결을 거부했습니다'가 뜨면 주소 문제가 아니라 "
-                       "그 사이트에 접속 자체가 막힌 것입니다 "
-                       "(회사망·백신·VPN·DNS를 확인해보세요).")
+    items, errs = [], []
+    for pid, (label, _bg, _fg) in accounts.PROVIDERS.items():
+        key = f"oauth_url_{pid}"
+        if key not in st.session_state:
+            url, verifier, msg = accounts.oauth_url(pid, _site)
+            st.session_state[key] = url or ""
+            if verifier:
+                st.session_state[f"oauth_verifier_{pid}"] = verifier
+            if not url and msg:
+                st.session_state[f"oauth_err_{pid}"] = msg
+        u = st.session_state.get(key)
+        if u:
+            items.append((pid, f"{label}로 시작하기", u))
+        else:
+            e = st.session_state.get(f"oauth_err_{pid}")
+            if e:
+                errs.append(e)
+    ui.social_links(items)
+    for e in errs:
+        st.warning(e)
 
 
 def login_gate(what="이 기능"):
-    """로그인했으면 True. 아니면 가입/로그인 상자를 그리고 False."""
+    """로그인했으면 True. 아니면 가입 상자를 그리고 False."""
     if _me():
         return True
     if accounts is None or not accounts.table_ready():
@@ -821,44 +915,16 @@ def login_gate(what="이 기능"):
 
     ui.pitch("먼저 로그인해주세요",
              f"{what}{_eun(what)} 회원만 쓸 수 있습니다",
-             "가입은 이메일 하나면 됩니다. 무료로 30번 조사할 수 있습니다.")
+             "카카오·구글 계정으로 3초면 됩니다. "
+             "가입하면 무료로 30번 조사할 수 있습니다.")
     if st.session_state.get("oauth_error"):
         st.error(st.session_state.pop("oauth_error"))
 
+    # ⚠️ 이메일·비밀번호 가입은 없앴다.
+    #    비밀번호를 새로 만들게 하면 거기서 절반이 나간다.
+    #    (기존에 이메일로 가입한 계정은 그대로 살아 있고,
+    #     accounts.sign_in/sign_up 함수도 남겨뒀다 — 화면만 뺐다.)
     _social_box()
-    st.markdown('<div class="or-line"><span>또는 이메일로</span></div>',
-                unsafe_allow_html=True)
-
-    tab_in, tab_up = st.tabs(["로그인", "회원가입"])
-    with tab_in:
-        with st.container(border=True):
-            e = st.text_input("이메일", key="li_email",
-                              placeholder="you@example.com")
-            pw = st.text_input("비밀번호", type="password", key="li_pw")
-            if st.button("로그인", type="primary", key="li_go",
-                         use_container_width=True):
-                ok, msg, user = accounts.sign_in(e, pw)
-                if ok:
-                    st.session_state["user"] = user
-                    st.rerun()
-                else:
-                    st.error(msg)
-    with tab_up:
-        with st.container(border=True):
-            e2 = st.text_input("이메일", key="su_email",
-                               placeholder="you@example.com")
-            n2 = st.text_input("닉네임 (선택)", key="su_nick")
-            p2 = st.text_input("비밀번호 (6자 이상)", type="password", key="su_pw")
-            if st.button("가입하기", type="primary", key="su_go",
-                         use_container_width=True):
-                ok, msg, user = accounts.sign_up(e2, p2, n2)
-                if ok and user:
-                    st.session_state["user"] = user
-                    st.rerun()
-                elif ok:
-                    st.success(msg)
-                else:
-                    st.error(msg)
     return False
 
 
@@ -2046,9 +2112,15 @@ with tabs[2]:
             if st.button("로그아웃", use_container_width=True, key="logout"):
                 if accounts is not None:
                     accounts.sign_out()
+                # ⚠️ 쿠키도 지운다. 그리고 cookie_tried 는 일부러 남긴다 —
+                #    지우면 바로 다음 화면에서 쿠키를 다시 읽어 도로 로그인된다
+                #    (st.context.cookies 는 접속할 때 찍힌 사진이라
+                #     방금 지운 게 아직 반영되지 않는다).
+                st.session_state["cookie_set"] = ""
                 for _k in ("user", "charged_kw", "admin_ok",
-                           "oauth_verifier", "oauth_url_kakao",
-                           "oauth_url_google"):
+                           "oauth_url_kakao", "oauth_url_google",
+                           "oauth_verifier_kakao", "oauth_verifier_google",
+                           "oauth_err_kakao", "oauth_err_google"):
                     st.session_state.pop(_k, None)
                 my_profile.clear()
                 st.rerun()

@@ -1547,22 +1547,26 @@ font-size: 1.16em; letter-spacing: -.02em;
 .st-key-serp_sort [role="radiogroup"] {{ gap: 2px !important; }}
 .st-key-serp_sort label {{ font-size: .84rem !important; }}
 .st-key-serp_sort label p {{ font-size: .84rem !important; }}
-/* 소셜 로그인 버튼 — 카카오는 제 색이라야 한눈에 알아본다 */
-.st-key-oauth_kakao .stButton button {{
-background: #FEE500 !important; border-color: #F2DA00 !important;
-color: #191600 !important; font-weight: 700 !important;
+/* 소셜 로그인 —
+   ⚠️ 스트림릿 버튼이 아니라 '진짜 링크'다.
+   버튼으로 하면 눌렀을 때 서버를 한 번 갔다 와야 해서
+   '누르기 → 기다리기 → 또 누르기'가 된다. 링크면 한 번에 간다.
+   카카오는 제 색(노랑), 구글은 흰 바탕에 제 로고라야 한눈에 알아본다. */
+.social-row {{
+display: flex; gap: 10px; margin: 4px 0 2px; flex-wrap: wrap;
 }}
-.st-key-oauth_google .stButton button {{
-background: #FFFFFF !important; color: #3C4043 !important;
-font-weight: 700 !important;
+.social-btn {{
+flex: 1 1 200px; display: flex; align-items: center; justify-content: center;
+gap: 8px; height: 48px; border-radius: 10px; text-decoration: none !important;
+font-family: 'Gothic A1','Pretendard',sans-serif;
+font-weight: 800; font-size: .98rem; letter-spacing: -.02em;
+border: 1px solid transparent; transition: filter .12s, box-shadow .12s;
 }}
-/* '또는 이메일로' — 상자가 아니라 가로줄 가운데 얹힌 글씨로 */
-.or-line {{
-display: flex; align-items: center; gap: 12px;
-margin: 18px 0 6px; color: {MUTED}; font-size: .84rem;
-}}
-.or-line::before, .or-line::after {{
-content: ""; flex: 1; height: 1px; background: {LINE};
+.social-btn img {{ width: 19px; height: 19px; display: block; }}
+.social-btn:hover {{ filter: brightness(.97); box-shadow: 0 2px 8px rgba(17,24,39,.10); }}
+.social-btn.kakao {{ background: #FEE500; color: #191600 !important; }}
+.social-btn.google {{
+background: #FFFFFF; color: #3C4043 !important; border-color: #DADCE0;
 }}
 /* 탭 첫머리 한 방 문구 — 히어로와 같은 어법, 크기만 한 단계 아래 */
 .pitch {{ margin: 2px 0 16px; }}
@@ -1986,6 +1990,33 @@ def pitch(line1, line2, sub=""):
         f'<div class="pitch"><div class="pitch-h">{line1}<br>'
         f'<em>{line2}</em></div>{sub_html}</div>',
         unsafe_allow_html=True)
+
+
+ICON_KAKAO = ("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzE5MTYwMCIgZD0iTTEyIDMuMkM2Ljk0IDMuMiAyLjg0IDYuNDQgMi44NCAxMC40M2MwIDIuNTUgMS42OCA0Ljc5IDQuMjEgNi4wNmwtLjg3IDMuMmMtLjA4LjI5LjI0LjUyLjQ5LjM2bDMuODMtMi41M2MuNDkuMDYgMSAuMDkgMS41LjA5IDUuMDYgMCA5LjE2LTMuMjQgOS4xNi03LjIzUzE3LjA2IDMuMiAxMiAzLjJ6Ii8+PC9zdmc+")
+ICON_GOOGLE = ("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHBhdGggZmlsbD0iI0VBNDMzNSIgZD0iTTI0IDkuNWMzLjU0IDAgNi43MSAxLjIyIDkuMjEgMy42bDYuODUtNi44NUMzNS45IDIuMzggMzAuNDcgMCAyNCAwIDE0LjYyIDAgNi41MSA1LjM4IDIuNTYgMTMuMjJsNy45OCA2LjE5QzEyLjQzIDEzLjcyIDE3Ljc0IDkuNSAyNCA5LjV6Ii8+PHBhdGggZmlsbD0iIzQyODVGNCIgZD0iTTQ2Ljk4IDI0LjU1YzAtMS41Ny0uMTUtMy4wOS0uMzgtNC41NUgyNHY5LjAyaDEyLjk0Yy0uNTggMi45Ni0yLjI2IDUuNDgtNC43OCA3LjE4bDcuNzMgNmM0LjUxLTQuMTggNy4wOS0xMC4zNiA3LjA5LTE3LjY1eiIvPjxwYXRoIGZpbGw9IiNGQkJDMDUiIGQ9Ik0xMC41MyAyOC41OWMtLjQ4LTEuNDUtLjc2LTIuOTktLjc2LTQuNTlzLjI3LTMuMTQuNzYtNC41OWwtNy45OC02LjE5Qy45MiAxNi40NiAwIDIwLjEyIDAgMjRjMCAzLjg4LjkyIDcuNTQgMi41NiAxMC43OGw3Ljk3LTYuMTl6Ii8+PHBhdGggZmlsbD0iIzM0QTg1MyIgZD0iTTI0IDQ4YzYuNDggMCAxMS45My0yLjEzIDE1Ljg5LTUuODFsLTcuNzMtNmMtMi4xNSAxLjQ1LTQuOTIgMi4zLTguMTYgMi4zLTYuMjYgMC0xMS41Ny00LjIyLTEzLjQ3LTkuOTFsLTcuOTggNi4xOUM2LjUxIDQyLjYyIDE0LjYyIDQ4IDI0IDQ4eiIvPjwvc3ZnPg==")
+_SOCIAL_ICON = {"kakao": ICON_KAKAO, "google": ICON_GOOGLE}
+
+
+def social_links(items):
+    """
+    소셜 로그인 줄. items = [(제공자id, 보일글자, 이동주소), ...]
+
+    ⚠️ 로고는 파일이 아니라 주소 안에 그림을 통째로 넣었다(data URI).
+    이미지 파일을 따로 두면 배포할 때 빠뜨리기 쉽고, 한 번 빠지면
+    로그인 버튼이 깨진 채로 손님을 맞게 된다.
+    ⚠️ target="_self" 인 이유: 새 탭으로 열면 로그인하고 돌아왔을 때
+    원래 탭은 로그아웃 상태 그대로라 '왜 안 되지'가 된다.
+    """
+    if not items:
+        return
+    out = ['<div class="social-row">']
+    for pid, label, url in items:
+        icon = _SOCIAL_ICON.get(pid, "")
+        img = f'<img src="{icon}" alt="">' if icon else ""
+        out.append(f'<a class="social-btn {pid}" href="{url}" '
+                   f'target="_self" rel="noopener">{img}<span>{label}</span></a>')
+    out.append("</div>")
+    st.markdown("".join(out), unsafe_allow_html=True)
 
 
 def note(text, gold=False):

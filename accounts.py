@@ -14,6 +14,10 @@
      '떨어졌을 때 무엇을 보여줄지'만 그 자리에서 바꾸면 된다.
 """
 import sys
+import base64
+import hashlib
+import hmac
+import time
 from datetime import datetime, timezone
 
 for _s in (sys.stdout, sys.stderr):
@@ -34,9 +38,71 @@ PLANS = {
 ANALYZE_COST = 1          # 키워드 하나 분석 = 1 크레딧
 
 
-def attach(client):
-    global _sb
+def attach(client, secret=""):
+    global _sb, _SECRET
     _sb = client
+    if secret:
+        # ⚠️ 열쇠 그 자체를 쓰지 않고 한 번 뭉개서 쓴다.
+        #    혹시 이 값이 새더라도 원래 열쇠를 되돌릴 수 없게.
+        _SECRET = hashlib.sha256(("kh-session|" + str(secret)).encode()).digest()
+
+
+# ------------------------------------------------------------
+# 로그인 유지 (브라우저 쿠키에 넣을 표)
+#
+# ⚠️ 왜 필요한가. 스트림릿은 페이지를 새로 열면 기억을 전부 잃는다.
+#    F5 한 번, 로고 한 번에 로그아웃되면 아무도 안 쓴다.
+#
+# ⚠️ 쿠키에 '나는 u123이다'라고만 적으면 누구나 고쳐 쓸 수 있다.
+#    그래서 서버만 아는 열쇠로 도장(HMAC)을 찍는다.
+#    도장이 안 맞거나 기한이 지나면 없는 것으로 친다.
+#    쿠키에는 회원번호와 기한뿐, 이름·메일 같은 건 담지 않는다.
+# ------------------------------------------------------------
+_SECRET = None
+TOKEN_DAYS = 14
+COOKIE = "kh_s"
+
+
+def _sign(body):
+    return hmac.new(_SECRET, body.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def make_token(uid, days=TOKEN_DAYS):
+    """회원번호를 도장 찍은 짧은 글자로. 열쇠가 없으면 빈 글자."""
+    if not _SECRET or not uid:
+        return ""
+    body = "%s|%d" % (uid, int(time.time()) + days * 86400)
+    raw = ("%s|%s" % (body, _sign(body))).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def read_token(tok):
+    """도장과 기한을 확인하고 회원번호를 돌려준다. 아니면 None."""
+    if not _SECRET or not tok:
+        return None
+    try:
+        pad = "=" * (-len(tok) % 4)
+        raw = base64.urlsafe_b64decode(tok + pad).decode()
+        uid, exp, sig = raw.rsplit("|", 2)
+        if not hmac.compare_digest(sig, _sign("%s|%s" % (uid, exp))):
+            return None
+        if int(exp) < time.time():
+            return None
+        return uid
+    except Exception:
+        return None
+
+
+def user_from_token(tok):
+    """쿠키 한 장으로 로그인 상태를 되살린다. 안 되면 None."""
+    uid = read_token(tok)
+    if not uid or not ready():
+        return None
+    p = profile(uid)
+    if not p:
+        return None
+    _touch(uid)
+    return {"id": uid, "email": p.get("email") or ""}
 
 
 def ready():
@@ -315,11 +381,15 @@ PROVIDERS = {
 
 # 무엇을 달라고 할지.
 #
-# ⚠️ 카카오에 이메일(account_email)을 달라고 하면 KOE205로 거절당한다.
-#    그 동의항목은 '비즈앱'으로 등록한 계정만 켤 수 있는데,
-#    Supabase는 기본으로 그것까지 요구한다. 그래서 우리가 직접 정해준다.
-#    닉네임만 받으면 로그인은 충분히 된다 (이메일이 없어도 돌아가게 해뒀다).
-#    나중에 비즈앱으로 바꾸면 여기에 account_email을 더하면 된다.
+# ⚠️ 확인된 사실 (2026-08, supabase/supabase#36878):
+#    Supabase 서버가 카카오에 account_email(이메일)을 '기본으로' 요구한다.
+#    여기서 scopes를 적어줘도 그 기본값을 '대체'하지 않고 '더하기'만 하므로,
+#    account_email은 우리 코드로는 뺄 수 없다.  ← 클라이언트 수정으로 못 고침
+#    account_email은 비즈앱만 켤 수 있어서, 개인 개발자 앱이면 KOE205가 난다.
+#    해결: 카카오 개발자 → 앱 → 일반 → 비즈니스 정보 →
+#          '개인 개발자 비즈 앱 전환' (사업자등록번호 없이도 신청 가능).
+#          전환 후 동의항목에서 '카카오계정(이메일)'을 켜면 끝난다.
+#    아래 profile_nickname은 그대로 둔다 (닉네임은 우리가 실제로 쓴다).
 #
 # ⚠️ 구글은 기본값이 맞으므로 건드리지 않는다 (None이면 Supabase 기본).
 SCOPES = {
@@ -361,9 +431,11 @@ def oauth_url(provider, redirect_to):
     except Exception as e:
         t = str(e).lower()
         if "koe205" in t:
-            return None, None, ("카카오가 동의항목 설정을 문제 삼았습니다(KOE205). "
-                                "카카오 개발자 → 카카오 로그인 → 동의항목에서 "
-                                "'닉네임'을 켜주세요.")
+            return None, None, ("카카오가 '이메일(account_email)' 동의항목을 거절했습니다(KOE205). "
+                                "이 항목은 Supabase가 기본으로 요구하는 것이라 앱에서 뺄 수 없습니다. "
+                                "카카오 개발자 → 앱 → 일반 → 비즈니스 정보 → "
+                                "'개인 개발자 비즈 앱 전환'을 신청한 뒤, "
+                                "동의항목에서 '카카오계정(이메일)'을 켜주세요.")
         if "provider is not enabled" in t or "unsupported" in t:
             return None, None, (f"{PROVIDERS[provider][0]} 로그인이 아직 꺼져 있습니다. "
                                 "Supabase → Authentication → Providers 에서 켜주세요.")
