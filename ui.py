@@ -1516,9 +1516,8 @@ font-size: clamp(1.9rem, 5.4vw, 3.2rem); font-weight: 900;
 letter-spacing: -.035em; line-height: 1.22; color: {INK}; margin: 0;
 }}
 .hero-h em {{ font-style: normal; color: {DEEP}; }}
-/* 제목과 아래 두 줄 사이는 넉넉히 띄우고, 두 줄끼리는 바싹 붙인다.
-   그래야 '제목 / 설명 한 덩어리'로 읽힌다. */
-.hero-lead {{ margin-top: 30px; }}
+/* 제목과 이 한 줄 사이를 넉넉히 띄운다. */
+.hero-lead {{ margin-top: 28px; }}
 .hero-p {{
 margin: 7px auto 0; max-width: 70ch;
 font-size: clamp(.92rem, 1.95vw, 1.05rem); color: {MUTED}; line-height: 1.7;
@@ -1526,12 +1525,52 @@ font-size: clamp(.92rem, 1.95vw, 1.05rem); color: {MUTED}; line-height: 1.7;
 /* 좁은 화면에서 접힐 때 강조 문구가 '지금 / 이길 키워드'로 갈라지지 않게 */
 .hero-p b {{ color: {INK}; font-weight: 600; white-space: nowrap; }}
 .hero-cap {{
-margin: 0; font-size: clamp(1rem, 2.3vw, 1.22rem); color: {INK};
-font-weight: 700; letter-spacing: -.012em; line-height: 1.55;
+margin: 0; font-size: clamp(.98rem, 2.15vw, 1.3rem); color: {INK};
+font-weight: 700; letter-spacing: -.014em; line-height: 1.5;
 }}
 .hero-cap b {{ font-weight: 700; }}
-.hero-cap i {{ font-style: normal; color: #9CB0D4; margin: 0 7px; }}
-.hero-cap em {{ font-style: normal; color: {DEEP}; font-weight: 800; }}
+/* 사이 점은 눈에 걸리지 않게 옅게 — 항목이 여섯이라 점까지 진하면 어지럽다 */
+.hero-cap i {{ font-style: normal; color: #A9BBDA; margin: 0 6px;
+font-weight: 500; }}
+/* AI가 이 줄의 주인공이다. 색·굵기·크기 셋 다 올린다. */
+.hero-cap em.ai {{
+font-style: normal; color: {DEEP}; font-weight: 900;
+font-size: 1.16em; letter-spacing: -.02em;
+}}
+/* ⚠️ 좁은 화면에서는 항목이 여섯이라 한 줄에 다 못 들어간다.
+   그때 아무 데서나 접히면 'AI 진단까지 / 한 번에, 올인원'처럼 갈라진다.
+   마무리 구절을 한 덩어리로 묶어, 접히더라도
+   '항목들 / AI 진단까지 한 번에, 올인원'으로 떨어지게 한다. */
+/* 상위노출 해부의 정렬 — 제목 줄 오른쪽에 얌전히 붙는다.
+   자기가 주인공이 아니라 아래 목록을 바꾸는 손잡이라서 작게 둔다. */
+.st-key-serp_sort {{ display: flex; justify-content: flex-end; }}
+.st-key-serp_sort [role="radiogroup"] {{ gap: 2px !important; }}
+.st-key-serp_sort label {{ font-size: .84rem !important; }}
+.st-key-serp_sort label p {{ font-size: .84rem !important; }}
+/* 탭 첫머리 한 방 문구 — 히어로와 같은 어법, 크기만 한 단계 아래 */
+.pitch {{ margin: 2px 0 16px; }}
+.pitch-h {{
+font-family:'Gothic A1','Pretendard',sans-serif;
+font-size: clamp(1.22rem, 2.9vw, 1.72rem); font-weight: 900;
+letter-spacing: -.03em; line-height: 1.34; color: {INK};
+}}
+.pitch-h em {{ font-style: normal; color: {DEEP}; }}
+.pitch-sub {{
+margin-top: 8px; font-size: clamp(.86rem, 1.8vw, .95rem);
+color: {MUTED}; line-height: 1.65;
+}}
+.hero-cap .tail {{ white-space: nowrap; }}
+/* ⚠️ 마무리 구절 앞에는 점을 찍지 않는다. 좁은 화면에서 줄이 넘어가면
+   둘째 줄이 '· AI 진단…'처럼 점으로 시작해 어색하다.
+   대신 자리만 벌려, 넓은 화면에서는 AI가 한 박자 도드라진다. */
+.hero-cap i.gap {{ display: inline-block; width: 13px; margin: 0; }}
+/* 올인원은 마무리 한 방 — 파랑과 겹치지 않게 브랜드 금색으로.
+   ⚠️ 로고에 쓰는 {GOLD}는 흰 바탕에서 대비가 2.5라 글자로 쓰면 흐리다.
+   글자용으로 한 단계 진하게 내린 금색을 쓴다 (대비 5.0). */
+.hero-cap em.aio {{
+font-style: normal; color: #8A6420; font-weight: 900;
+font-size: 1.08em;
+}}
 /* 제목 옆에 뜨는 스트림릿 앵커(고리 모양)를 감춘다 — 문구가 지저분해 보인다 */
 .hero h1 a, .hero-h a, .hero [data-testid="stHeaderActionElements"] {{
 display: none !important;
@@ -1736,8 +1775,8 @@ min-width: calc(50% - .5rem) !important; flex: 1 1 calc(50% - .5rem) !important;
 min-width: 100% !important; flex: 1 1 100% !important;
 }}
 .hero-lead {{ margin-top: 20px; }}
-.hero-cap {{ line-height: 1.6; }}
-.hero-cap i {{ margin: 0 4px; }}
+.hero-cap {{ line-height: 1.7; font-size: .93rem; }}
+.hero-cap i {{ margin: 0 3px; }}
 }}
 /* 키워드 발굴 위쪽 '새로고침' — 있는지 없는지 모를 만큼 작게, 그리고
    아래 탭 사이에 빈 공간이 크게 뜨지 않게 당겨 붙인다. */
@@ -1914,6 +1953,22 @@ def gauge(title, score, scale_labels=("0", "50", "100"), color=None):
 def section(eyebrow, title):
     st.markdown(f"""<div class="eyebrow">{eyebrow}</div>
 <div class="section-title">{title}</div>""", unsafe_allow_html=True)
+
+
+def pitch(line1, line2, sub=""):
+    """
+    탭 첫머리에 두 줄로 못 박는 문구.
+
+    ⚠️ 왜 만들었나. 설명을 세 줄짜리 회색 상자로 깔아두면 아무도 안 읽는다.
+    첫 화면의 '검색량만 보면 / 경쟁을 알 수 없습니다'가 통한 이유는
+    두 줄이고, 둘째 줄이 색으로 튀고, 읽는 데 1초가 걸리기 때문이다.
+    같은 방식을 각 탭 첫머리에도 쓴다. 부연은 아래 한 줄로 작게.
+    """
+    sub_html = f'<div class="pitch-sub">{sub}</div>' if sub else ""
+    st.markdown(
+        f'<div class="pitch"><div class="pitch-h">{line1}<br>'
+        f'<em>{line2}</em></div>{sub_html}</div>',
+        unsafe_allow_html=True)
 
 
 def note(text, gold=False):
@@ -2628,10 +2683,11 @@ def hero(placeholder_chips=()):
         # 두 줄이 남남처럼 보이고 좁은 화면에서는 풍선처럼 부푼다.
         f'<div class="hero-lead">'
         f'<p class="hero-cap">'
-        f'<b>키워드 검색</b><i>·</i><b>추적</b><i>·</i><b>비교</b><i>·</i>'
-        f'<b>발굴</b><i>·</i><b>AI 진단</b>까지 <em>한 번에</em></p>'
-        f'<p class="hero-p">검색량 · 문서수 · 발행량 · 단가까지 재서 '
-        f'<b>지금 이길 키워드</b>를 찾습니다.</p>'
+        f'<b>키워드 검색</b><i>·</i><b>추적</b><i>·</i><b>발굴</b><i>·</i>'
+        f'<b>단가</b><i>·</i><b>발행량</b><i class="gap"></i>'
+        f'<span class="tail"><em class="ai">AI 진단</em>까지 한 번에, '
+        f'<em class="aio">올인원</em></span>'
+        f'</p>'
         f'</div>'
         f'</div>', unsafe_allow_html=True)
     return chips

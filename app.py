@@ -51,7 +51,7 @@ st.set_page_config(page_title="키워드 헌터", page_icon="🎯",
 ui.inject_css()
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -79,7 +79,10 @@ else:
 # 수집은 몇 시간에 한 번 돌아간다. 60초마다 DB를 다시 읽을 이유가 없다.
 # 키워드 추가·중단 같은 변경 지점은 모두 st.cache_data.clear()를 부르므로
 # 수명을 늘려도 화면이 낡아 보이지 않는다. (새로고침 때마다 왕복 한 번씩 줄어든다)
-@st.cache_data(ttl=900)
+# ⚠️ show_spinner=False가 없으면 스트림릿이 'Running load_data().'를
+# 화면에 띄운다. 영어에 함수 이름까지 나와서 처음 온 사람은 오류로 읽는다.
+# 기다리는 티는 각 화면의 우리말 안내로 충분하다.
+@st.cache_data(ttl=900, show_spinner=False)
 def load_data():
     """
     최근 30일치 원본 데이터를 그대로 반환한다.
@@ -1237,19 +1240,21 @@ with sub_research[0]:
 # ------------------------------------------------------------
 with sub_research[1]:
     ui.section("상위노출 해부", "이 키워드로 1등 한 글들은 어떻게 생겼나")
-    ui.note("경쟁률 숫자만으로는 안 보이는 것이 있습니다. "
-            "상위권이 전부 몇 년 전 글이라면 낡은 정보만 남았다는 뜻이고, "
-            "새로 제대로 쓴 글로 밀어낼 여지가 큽니다.")
-    st.write("")
+    ui.pitch("상위권이 전부 옛날 글이면",
+             "지금 밀어낼 수 있습니다",
+             "경쟁률 숫자만으로는 안 보이는 것입니다.")
 
     serp_kw = research_kw
     if not serp_kw:
         ui.note("위쪽 입력칸에 키워드를 넣어주세요.", gold=True)
 
     if serp_kw:
-        serp_sort = st.radio("정렬", ["노출 순위순", "최신 발행순"],
-                             horizontal=True, key="serp_sort")
-        sort_key = "date" if serp_sort == "최신 발행순" else "sim"
+        # ⚠️ 정렬 칸은 화면 맨 위에 혼자 떠 있었다. 그런데 이 선택이 바꾸는 건
+        # 아래 '제목과 발행 시점' 목록 하나뿐이다. 바꾸는 대상 옆에 붙여야
+        # 무엇이 달라지는지 바로 보인다. 아래 제목 줄에서 함께 그린다.
+        sort_key = ("date"
+                    if st.session_state.get("serp_sort") == "최신 발행순"
+                    else "sim")
 
         # ⚠️ 예전에는 '최신순'을 볼 때 순위순 목록을 한 번 더 불러왔고,
         # 아래에서 또 한 번 불러서 같은 응답을 세 번 받아왔다.
@@ -1284,7 +1289,13 @@ with sub_research[1]:
             st.write("")
 
             head = "최신 발행순 10개" if sort_key == "date" else "노출 순위 상위 10개"
-            ui.section(head, "제목과 발행 시점")
+            _sc1, _sc2 = st.columns([3, 2])
+            with _sc1:
+                ui.section(head, "제목과 발행 시점")
+            with _sc2:
+                st.radio("정렬", ["노출 순위순", "최신 발행순"],
+                         horizontal=True, key="serp_sort",
+                         label_visibility="collapsed")
             if my_blog_id:
                 ui.note(f"내 블로그(<code>{my_blog_id}</code>)의 글이 있으면 금색으로 표시됩니다. "
                         "다른 사람의 블로그 이름은 표시하지 않습니다.")
@@ -1509,7 +1520,7 @@ with tabs[1]:
 
     st.divider()
 
-    @st.cache_data(ttl=600)
+    @st.cache_data(ttl=600, show_spinner=False)
     def load_tracking():
         try:
             tk = supabase.table("tracked_keywords").select("*") \
@@ -1931,25 +1942,20 @@ else:
 
     with sub_discover[1]:
         ui.section("골든타임", "뜨고 있는데 아직 안 붐비는 선점 구간")
-        ui.note("찾는 사람은 있는데 <b>최근에 쓰인 글이 적은</b> 키워드입니다. "
-                "먼저 쓰면 선점 효과를 기대할 수 있습니다.<br>"
-                "<small>검색량이 오르는 중이면 위로 올라옵니다. 다만 네이버 검색량은 "
-                "월 단위 집계라 며칠로는 잘 안 변합니다.</small>", gold=True)
-        st.write("")
-        gc1, gc2 = st.columns([1, 1])
-        with gc1:
-            _, h = period_picker("gt_period", kind="slow", default="일별")
-        with gc2:
-            money_first = st.checkbox(
-                "💰 돈 되는 순서로 보기", value=False, key="gt_money",
-                help="광고 최소 입찰가를 함께 조회해 '찾는 사람 × 안 붐빔 × 단가'로 다시 줄 세웁니다. "
-                     "네이버 호출을 한 번 더 씁니다.")
+        ui.pitch("찾는 사람은 있는데",
+                 "아직 아무도 안 썼습니다",
+                 "먼저 쓰면 선점 효과를 기대할 수 있습니다. "
+                 "검색량이 오르는 중이면 위로 올라옵니다.")
+        _, h = period_picker("gt_period", kind="slow", default="일별")
         golden = latest_snapshot(df[df['source'] == 'golden_time'], hours=h)
 
-        # 💰 광고 단가를 붙여 '황금 점수'로 다시 정렬한다.
-        # ⚠️ 국내 어떤 도구도 최소노출입찰가를 키워드 발굴에 쓰지 않는다.
-        # 100개까지 한 번의 호출로 끝나므로 비용이 거의 들지 않는다.
-        if money_first and not golden.empty:
+        # 💰 광고 단가를 붙여 '황금 점수'로 줄을 세운다.
+        # ⚠️ 예전에는 '돈 되는 순서로 보기' 체크박스로 켜게 해뒀다.
+        # 그런데 이건 이 화면의 본론이지 선택지가 아니다. 끄고 볼 이유가 없는데
+        # 체크칸만 자리를 차지했다. 늘 켜둔다.
+        # (100개까지 한 번의 호출로 끝나고 6시간 캐시라 비용도 거의 없다)
+        money_first = True
+        if not golden.empty:
             _kws = golden['keyword'].head(100).tolist()
             with st.spinner("광고 단가를 조회하는 중"):
                 _bids = cached_min_bids(tuple(_kws))
