@@ -15,7 +15,7 @@ try:
     calc_opportunity, calc_search_change, expected_visits, ad_density_pct,
     get_search_trend, seasonality_note, get_min_bids, calc_gold_score,
     estimate_monthly_income, weak_spots,
-    calc_since_registered, get_blog_doc_count, event_lift,
+    calc_since_registered, get_blog_doc_count,
     )
 except ImportError as _e:
     import streamlit as _st
@@ -90,9 +90,22 @@ def load_data():
         # 수집이 매일 쌓이면 30일치가 3천 건을 훌쩍 넘는다.
         # 상한이 낮으면 오래된 기록이 잘려 '월별' 조회가 반쪽이 된다.
         wide_start = datetime.now(timezone.utc) - timedelta(days=30)
-        res = (supabase.table("trends_master").select("*")
-               .gte("created_at", wide_start.isoformat())
-               .order("created_at", desc=True).limit(20000).execute())
+        # ⚠️ select("*")로 30일치를 통째로 받으면 수만 건이 통신을 타고 넘어온다.
+        # 캐시가 만료될 때마다 그 대기가 화면 앞에 붙는다.
+        # 화면이 실제로 쓰는 열만 받는다. (없는 열은 아래 defaults가 채운다)
+        _COLS = ("keyword,source,monthly_pc,monthly_mobile,comp_level,"
+                 "comp_grade,comp_ratio,rise_score,pl_avg_depth,"
+                 "blog_total_docs,blog_competition,opportunity,"
+                 "keyword_category,event_date,created_at")
+        try:
+            res = (supabase.table("trends_master").select(_COLS)
+                   .gte("created_at", wide_start.isoformat())
+                   .order("created_at", desc=True).limit(20000).execute())
+        except Exception:
+            # 열 이름이 하나라도 다르면 통째로 거절당한다. 그때는 예전처럼 전부 받는다.
+            res = (supabase.table("trends_master").select("*")
+                   .gte("created_at", wide_start.isoformat())
+                   .order("created_at", desc=True).limit(20000).execute())
 
         df = pd.DataFrame(res.data)
         if df.empty:
@@ -520,15 +533,6 @@ def keyword_min_bid(keyword):
     """이 키워드 광고 최소 입찰가(원). 못 가져오면 None."""
     try:
         return (get_min_bids([keyword]) or {}).get(keyword.strip())
-    except Exception:
-        return None
-
-
-@st.cache_data(ttl=6 * 3600, show_spinner=False)
-def event_lift_cached(keyword, event_date):
-    """작년 같은 시기에 얼마나 뛰었는지. 데이터랩 하루 1,000회라 6시간 캐시."""
-    try:
-        return event_lift(keyword, event_date)
     except Exception:
         return None
 
@@ -2022,26 +2026,23 @@ else:
 
             # 💡 캘린더의 진짜 질문은 '무슨 일이 있나'가 아니라
             # '이 중 뭘, 언제 써야 하나'다. 작년 같은 시기의 검색 곡선이
-            # 그 답을 갖고 있다. 데이터랩은 띄어쓴 행사명도 받아서,
-            # 검색광고로는 0만 나오던 이름들도 여기서는 값이 붙는다.
+            # 그 답을 갖고 있다.
             #
-            # ⚠️ 청약 단지는 작년에 없던 이름이라 물어볼 것이 없다. 건너뛴다.
-            # ⚠️ 데이터랩은 하루 1,000회라 한 번에 40개까지만 재고 6시간 캐시한다.
-            _lift_rows = [
-                (str(r.keyword), r.d.strftime("%Y-%m-%d"))
-                for r in weekly.itertuples()
-                if str(getattr(r, 'comp_level', '')) != '청약'
-            ][:40]
+            # ⚠️ 그 값은 수집기가 하루 한 번 미리 재서 넣어둔다. 여기서는 읽기만 한다.
+            # 예전에는 화면을 그릴 때마다 데이터랩을 최대 40번 불렀는데,
+            # 스트림릿은 어느 탭을 보고 있든 스크립트 전체를 다시 실행하므로
+            # 키워드 조사 탭에서 글자 하나 칠 때마다 그 40번이 따라붙었다.
+            #   rise_score = 급등 배수 × 10 · comp_ratio = 며칠 앞서 시작했나
             _lifts = {}
-            if _lift_rows:
-                with ThreadPoolExecutor(max_workers=8) as _lp:
-                    _futs = {_lp.submit(event_lift_cached, k, d): k
-                             for k, d in _lift_rows}
-                    for _f in _futs:
-                        try:
-                            _lifts[_futs[_f]] = _f.result()
-                        except Exception:
-                            pass
+            for _r in weekly.itertuples():
+                _sc = int(getattr(_r, 'rise_score', 0) or 0)
+                if _sc <= 0:
+                    continue
+                _lifts[str(_r.keyword)] = {
+                    "lift": _sc / 10.0,
+                    "lead": int(float(getattr(_r, 'comp_ratio', 0) or 7)),
+                    "days_left": (_r.d - today).days,
+                }
 
             # ⚠️ 'D-15'와 '이번 주'를 나란히 두면 서로 어긋나 보인다.
             # 판정은 '언제 쓰라'는 말이고 D는 '이벤트까지 남은 날'이라
@@ -2056,11 +2057,21 @@ else:
                 v = _lifts.get(str(name))
                 if not v:
                     return "—", "—"
-                txt = f"{v['lift']:g}배"
-                mark = _VERDICT.get(v["verdict"], "—")
-                if v["verdict"] != "flat":
-                    mark += f" · D-{max(v['days_left'], 0)}"
-                return txt, mark
+                # 배수와 오르막은 수집기가 잰 값을 쓰고, 판정만 여기서 낸다.
+                # (이벤트까지 남은 날은 매일 줄어드니 그때그때 계산해야 맞다)
+                lift, lead, left = v["lift"], v["lead"], v["days_left"]
+                if lift < 1.6:
+                    verdict = "flat"
+                elif left <= lead:
+                    verdict = "now"
+                elif left <= lead + 7:
+                    verdict = "soon"
+                else:
+                    verdict = "later"
+                mark = _VERDICT.get(verdict, "—")
+                if verdict != "flat":
+                    mark += f" · D-{max(left, 0)}"
+                return f"{lift:g}배", mark
 
             for off in sorted(weekly['wk'].unique()):
                 off = int(off)

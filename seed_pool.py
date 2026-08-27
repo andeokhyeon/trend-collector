@@ -22,6 +22,19 @@
                      멈추는 건 사람이 Ctrl+C를 누르거나 창을 닫을 때뿐이다.
 """
 
+# ⚠️ 윈도우 작업 스케줄러가 이 파일을 돌릴 때, 출력이 파일로 넘어가면
+# 파이썬이 콘솔 코드페이지(cp949)로 글자를 쓴다. 그러면 첫 줄의 이모지에서
+# UnicodeEncodeError가 나고 수집이 통째로 죽는다.
+# (실제로 자동수집이 며칠간 이 한 줄에서 매번 죽고 있었다)
+# 어디서 어떻게 실행되든 상관없게 출력 인코딩을 UTF-8로 고정한다.
+import sys as _sys
+for _s in (_sys.stdout, _sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
 import sys
 import time
 from collections import deque

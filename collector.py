@@ -1,3 +1,15 @@
+# ⚠️ 윈도우 작업 스케줄러가 이 파일을 돌릴 때, 출력이 파일로 넘어가면
+# 파이썬이 콘솔 코드페이지(cp949)로 글자를 쓴다. 그러면 첫 줄의 이모지에서
+# UnicodeEncodeError가 나고 수집이 통째로 죽는다.
+# (실제로 자동수집이 며칠간 이 한 줄에서 매번 죽고 있었다)
+# 어디서 어떻게 실행되든 상관없게 출력 인코딩을 UTF-8로 고정한다.
+import sys as _sys
+for _s in (_sys.stdout, _sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import time
 import base64
 import hmac
@@ -1008,6 +1020,42 @@ def fetch_weekly_event_keywords():
         # 거절당했고, 화면에는 예전 축제 목록만 남아 있었다.
         # 어디서도 읽지 않는 값이라 아예 없앤다.
         time.sleep(0.12)
+
+    # 💡 '작년 이맘때 얼마나 뛰었나'를 여기서 미리 재둔다.
+    #
+    # ⚠️ 예전에는 대시보드가 화면을 그릴 때마다 데이터랩을 최대 40번 불렀다.
+    # 스트림릿은 어느 탭을 보고 있든 스크립트 전체를 다시 실행하므로,
+    # 키워드 조사 탭에서 글자 하나 칠 때마다 그 40번이 따라붙어
+    # 화면이 눈에 띄게 굼떴다. 하루 한 번 도는 여기서 재는 게 맞다.
+    #
+    # ⚠️ 저장할 자리. 주간 캘린더 행에서는 아래 두 열이 안 쓰이므로 빌려 쓴다.
+    #    (열을 새로 만들면 사용자가 SQL을 돌려야 해서 그 편이 낫다)
+    #      rise_score  = 작년 급등 배수 × 10   (8.2배 → 82)
+    #      comp_ratio  = 급등이 며칠 앞서 시작했나
+    LIFT_SKIP = {"청약"}          # 작년에 없던 이름이라 물어볼 것이 없다
+    targets = [r for r in results if r["comp_level"] not in LIFT_SKIP][:40]
+    for r in results:
+        r.setdefault("rise_score", 0)
+        r.setdefault("comp_ratio", 0)
+    if targets:
+        try:
+            from naver_api import event_lift
+            from concurrent.futures import ThreadPoolExecutor
+            def _one(r):
+                try:
+                    return r, event_lift(r["keyword"], r["event_date"])
+                except Exception:
+                    return r, None
+            done = 0
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                for r, v in pool.map(_one, targets):
+                    if v:
+                        r["rise_score"] = int(round(v["lift"] * 10))
+                        r["comp_ratio"] = float(v["lead"])
+                        done += 1
+            print(f"   작년 급등폭 {done}/{len(targets)}건 측정")
+        except Exception as e:
+            print(f"   작년 급등폭 측정 건너뜀: {e}")
 
     kinds = {}
     for r in results:

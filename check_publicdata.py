@@ -11,6 +11,14 @@
 import sys
 from datetime import datetime, timezone, timedelta
 
+# ⚠️ 출력이 파일로 넘어가면 파이썬이 콘솔 코드페이지(cp949)로 글자를 쓴다.
+# 그러면 한글·기호에서 UnicodeEncodeError가 나며 통째로 죽는다.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 sys.path.insert(0, ".")
 
 OK, NO, WARN = "[ 됨 ]", "[안됨]", "[주의]"
