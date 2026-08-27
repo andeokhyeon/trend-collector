@@ -1517,10 +1517,11 @@ letter-spacing: -.035em; line-height: 1.24; color: {INK}; margin: 0;
 }}
 .hero-h em {{ font-style: normal; color: {DEEP}; }}
 .hero-p {{
-margin: 14px auto 0; max-width: 52ch;
+margin: 14px auto 0; max-width: 70ch;
 font-size: clamp(.9rem, 1.9vw, 1.02rem); color: {MUTED}; line-height: 1.7;
 }}
-.hero-p b {{ color: {INK}; font-weight: 600; }}
+/* 좁은 화면에서 접힐 때 강조 문구가 '지금 / 이길 키워드'로 갈라지지 않게 */
+.hero-p b {{ color: {INK}; font-weight: 600; white-space: nowrap; }}
 .hero-chips {{ display:flex; flex-wrap:wrap; gap:7px; justify-content:center; margin-top:12px; }}
 .hero-chip {{
 font-size:.82rem; color:{MUTED}; background:{SURFACE};
@@ -2589,11 +2590,11 @@ def hero(placeholder_chips=()):
     st.markdown(
         f'<div class="hero">'
         f'<h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>'
-        # 문장 사이에서 끊어 읽히도록 줄을 직접 나눈다.
-        # (브라우저에 맡기면 '한 / 번에.' 처럼 어정쩡하게 남는다)
-        f'<p class="hero-p">이미 쓰인 글까지 재서 '
-        f'<b>지금 이길 수 있는 키워드</b>를 찾습니다.<br>'
-        f'검색량 · 문서수 · 최근 발행량 · 광고 단가를 한 번에.</p>'
+        # ⚠️ 예전에는 두 문장을 <br>로 나눠 두 줄로 뒀는데,
+        # 첫 화면 문구가 두 줄이면 눈이 한 번 더 머문다.
+        # 두 문장의 뜻을 한 문장으로 줄여 한 줄에 담는다.
+        f'<p class="hero-p">검색량 · 문서수 · 발행량 · 단가를 한 번에 재서 '
+        f'<b>지금 이길 키워드</b>를 찾습니다.</p>'
         f'</div>', unsafe_allow_html=True)
     return chips
 
