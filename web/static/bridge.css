@@ -1,0 +1,140 @@
+/* ============================================================
+   다리 CSS — 스트림릿이 만들어주던 뼈대만 우리가 대신 놓는다.
+   ⚠️ 색·글씨·모서리 같은 '모양'은 여기서 정하지 않는다.
+      그건 전부 app.css(= ui.py에서 그대로 뽑아낸 것)가 갖고 있다.
+      여기에는 스트림릿이 자동으로 만들어주던 여백·정렬만 적는다.
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.stApp {
+  min-height: 100vh;
+  font-family: 'Gothic A1','Pretendard','Noto Sans KR',
+               -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #111827;
+  -webkit-font-smoothing: antialiased;
+}
+.block-container {
+  margin: 0 auto;
+  padding-left: 1rem; padding-right: 1rem; padding-bottom: 4rem;
+}
+/* 탭 막대 — 스트림릿은 flex 컨테이너였다 */
+[role="tablist"] { display: flex; align-items: center; }
+[role="tab"] {
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none; cursor: pointer; font-family: inherit;
+}
+/* 검색창 한 줄 — 스트림릿의 st.container(border=True) + columns([5,1]) */
+.search-box {
+  display: flex; gap: 12px; align-items: stretch;
+  background: #FFFFFF; border: 1px solid #E8EAED;
+  border-radius: 12px; padding: 14px 16px; margin: 4px 0 2px;
+}
+.search-box .stTextInput { flex: 5; display: flex; }
+.search-box .stButton { flex: 1; display: flex; min-width: 120px; }
+.stTextInput input {
+  width: 100%; padding: 11px 14px; font-size: 1rem;
+  font-family: inherit; color: #111827; background: #fff;
+  outline: none;
+}
+.stButton button {
+  width: 100%; padding: 11px 16px; font-size: .96rem;
+  font-family: inherit; cursor: pointer;
+}
+/* '분석하기'처럼 강조하는 버튼 — 스트림릿에서는 .st-key-research_go 였다 */
+.kh-primary button {
+  background: #1A56DB !important; border-color: #1A56DB !important;
+  color: #fff !important;
+}
+.kh-primary button:hover {
+  background: #1447B5 !important; border-color: #1447B5 !important;
+}
+@media (max-width: 640px) {
+  .search-box { flex-direction: column; }
+  .search-box .stButton { min-width: 0; }
+}
+
+/* 결과 화면 배치 — 스트림릿의 st.columns 대신 쓰는 격자 */
+.kh-result { margin-top: 18px; }
+.kh-result .row { display: grid; gap: 14px; margin: 12px 0; }
+.kh-result .cell { min-width: 0; }
+.kh-result .box {
+  background: #FFFFFF; border: 1px solid #E8EAED;
+  border-radius: 12px; padding: 16px 18px; margin-top: 18px;
+}
+.kh-cap { font-size: .82rem; color: #6B7280; margin-top: 8px; }
+@media (max-width: 900px) {
+  .kh-result .row { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 560px) {
+  .kh-result .row { grid-template-columns: 1fr !important; }
+}
+
+/* 링크로 만든 버튼 — 스트림릿 st.button 모양을 따른다 */
+.kh-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 10px 18px; border-radius: 10px; border: 1px solid #D9DDE3;
+  background: #fff; color: #374151 !important; font-weight: 600;
+  font-size: .93rem; text-decoration: none !important; cursor: pointer;
+  margin-top: 10px;
+}
+.kh-btn:hover { border-color: #1A56DB; color: #1A56DB !important; }
+.kh-btn-primary {
+  background: #1A56DB; border-color: #1A56DB; color: #fff !important;
+  width: 100%; }
+.kh-btn-primary:hover { background: #1447B5; color: #fff !important; }
+/* 필터 알약 — 스트림릿 체크박스·슬라이더 대신 */
+.kh-filter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 10px 0; }
+.kh-filter-label { font-size: .84rem; color: #6B7280; margin-left: 10px; }
+.kh-pill {
+  padding: 5px 12px; border-radius: 999px; background: #F1F3F6;
+  color: #55606D !important; font-size: .85rem; font-weight: 600;
+  text-decoration: none !important; }
+.kh-pill:hover { background: #E6EAEF; color: #111827 !important; }
+.kh-pill.on { background: #EAF1FD; color: #1A56DB !important; }
+/* 접이식 (11~30위) — 스트림릿 expander 대신 */
+.kh-fold { margin: 10px 0; border: 1px solid #E8EAED; border-radius: 10px;
+  background: #fff; }
+.kh-fold summary { padding: 11px 16px; cursor: pointer; font-size: .92rem;
+  font-weight: 600; color: #374151; list-style: none; }
+.kh-fold summary::before { content: "▸ "; color: #6B7280; }
+.kh-fold[open] summary::before { content: "▾ "; }
+.kh-fold > *:not(summary) { padding: 0 16px 14px; }
+.kh-row-split { display: flex; align-items: center; gap: 12px;
+  justify-content: space-between; flex-wrap: wrap; }
+
+.kh-weekhead { margin: 16px 0 8px; font-size: .95rem; color: #111827; }
+
+/* 추적 카드 그리드 + 버튼 줄 */
+.tc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  margin: 14px 0; }
+.tc-cell { min-width: 0; display: flex; flex-direction: column; }
+.tc-btns { display: flex; gap: 6px; margin-top: 8px; }
+.tc-btns form { flex: 1; display: flex; margin: 0; }
+.tc-btn { flex: 1; margin-top: 0; padding: 7px 4px; font-size: .84rem; }
+@media (max-width: 1000px) { .tc-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .tc-grid { grid-template-columns: 1fr; } }
+/* 추가 폼의 체크박스 */
+.kh-track-add { flex-wrap: wrap; }
+.kh-check { display: flex; align-items: center; gap: 7px; width: 100%;
+  font-size: .89rem; color: #4B5563; cursor: pointer; }
+.kh-check input { width: 16px; height: 16px; accent-color: #1A56DB; }
+.kh-flash { background: #EAF7F0; border: 1px solid #BFE5D2; color: #14532D;
+  border-radius: 10px; padding: 11px 15px; margin: 10px 0; font-size: .92rem; }
+
+/* 관리 콘솔 폼 줄 */
+.kh-adm-row { display: flex; gap: 10px; align-items: stretch; margin: 8px 0; }
+/* ⚠️ 이름 주의: kh-num은 표의 숫자 칸이 이미 쓰는 클래스다.
+   여기서 같은 이름을 쓰면 모든 표의 숫자 칸에 입력칸 테두리가 씌워진다
+   — 실제로 그렇게 사고가 났다. 입력칸은 kh-amt로 따로 간다. */
+.kh-sel, .kh-amt {
+  flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid #D9DDE3;
+  border-radius: 10px; font-family: inherit; font-size: .92rem;
+  color: #111827; background: #fff;
+}
+.kh-amt { flex: 0 0 110px; }
+.kh-adm-btn { flex: 0 0 110px; margin-top: 0; }
+@media (max-width: 640px) {
+  .kh-adm-row { flex-wrap: wrap; }
+  .kh-adm-btn { flex: 1; }
+}

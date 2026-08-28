@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}키워드 헌터{% endblock %}</title>
+<meta name="description" content="{% block desc %}검색량만 보면 경쟁을 알 수 없습니다. 키워드 검색·추적·발굴·단가·발행량·AI 진단까지 한 번에.{% endblock %}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/bridge.css">
+<link rel="stylesheet" href="/static/parity.css">
+</head>
+<!-- ⚠️ 클래스 이름(stApp, block-container …)을 스트림릿 것 그대로 쓴다.
+     ui.py에서 뽑아낸 CSS를 한 줄도 고치지 않고 쓰기 위해서다.
+     눈으로 베껴 옮기면 반드시 어딘가 달라진다. 이름은 나중에 한 번에 바꾼다. -->
+<body class="stApp">
+<div class="block-container">
+
+  <div class="masthead">
+    <a class="mast-brand" href="/">
+      {% if logo %}<img class="mast-logo" src="{{ logo }}" alt="">{% endif %}
+      <span class="mast-name">키워드<b>헌터</b></span>
+    </a>
+    <div class="mast-meta">{{ meta }}</div>
+  </div>
+
+  <nav role="tablist">
+    {% for name, href in tabs %}
+    <a role="tab" href="{{ href }}"
+       aria-selected="{{ 'true' if href == active_tab else 'false' }}">{{ name }}</a>
+    {% endfor %}
+  </nav>
+
+  <div role="tabpanel">
+    {% block body %}{% endblock %}
+  </div>
+
+</div>
+</body>
+</html>

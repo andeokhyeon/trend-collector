@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{% if q %}{{ q }} — 키워드 분석 · 키워드 헌터{% else %}키워드 헌터 — 검색량만 보면 경쟁을 알 수 없습니다{% endif %}{% endblock %}
+{% block body %}
+
+<nav role="tablist">
+  {% for name, href in subs %}
+  <a role="tab" href="{{ href }}{% if q %}?q={{ q | urlencode }}{% endif %}"
+     aria-selected="{{ 'true' if href == active_sub else 'false' }}">{{ name }}</a>
+  {% endfor %}
+</nav>
+
+{% if not q %}
+<div class="hero">
+  <h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>
+  <div class="hero-lead">
+    <p class="hero-cap">
+      <b>키워드 검색</b><i>·</i><b>추적</b><i>·</i><b>발굴</b><i>·</i><b>단가</b><i>·</i><b>발행량</b><i class="gap"></i><span class="tail"><em class="ai">AI 진단</em>까지 한 번에, <em class="aio">올인원</em></span>
+    </p>
+  </div>
+</div>
+{% endif %}
+
+<form class="search-box" method="get" action="/">
+  <div class="stTextInput">
+    <input name="q" value="{{ q }}" autocomplete="off"
+           placeholder="분석할 키워드를 입력하세요  ·  예) 캠핑의자, 제주도맛집">
+  </div>
+  <div class="stButton kh-primary">
+    <button type="submit">분석하기</button>
+  </div>
+</form>
+
+{% if q %}
+<div class="kh-result">{{ result | safe }}</div>
+{% endif %}
+
+{% if not q %}
+<div class="hero-chips">
+  {% for c in chips %}<span class="hero-chip">{{ c }}</span>{% endfor %}
+</div>
+<div class="hero-stat">
+  <span class="hs-live"><i></i>{{ freshness }} 갱신</span>
+  <span class="hs-part hs-src">구글 트렌드 · 네이버 검색광고 · 데이터랩</span>
+</div>
+{% endif %}
+
+{% endblock %}

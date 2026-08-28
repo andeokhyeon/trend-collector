@@ -1,0 +1,29 @@
+name: deploy-web
+
+# 깃허브에 올리면(main) 가비아 서버가 자동으로 받아 재시작한다.
+# 필요한 Secrets (저장소 Settings→Secrets→Actions):
+#   GABIA_HOST : 서버 공인 IP
+#   GABIA_USER : 접속 계정 (보통 root 또는 ubuntu)
+#   GABIA_KEY  : SSH 개인키 내용 전체
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "naver_api.py", "accounts.py", "ui.py", "cache.py",
+            "config.py", "ai_brief.py", "claude_usage.py"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GABIA_HOST }}
+          username: ${{ secrets.GABIA_USER }}
+          key: ${{ secrets.GABIA_KEY }}
+          script: |
+            cd /srv/kh/app
+            git pull
+            /srv/kh/venv/bin/pip install -q -r web/requirements.txt
+            systemctl restart kh-web
+            echo "deployed $(date)"

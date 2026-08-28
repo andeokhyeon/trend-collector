@@ -1,0 +1,44 @@
+/* ============================================================
+   대조 보정 CSS — parity.py 가 측정한 차이를 메운다.
+   ⚠️ 여기 값은 눈대중이 아니라 '옛 화면에서 브라우저가 계산한 값'이다.
+      스트림릿이 자기 기본 스타일로 우리 규칙을 덮어쓴 자리가 있어서,
+      지금 눈에 보이는 모습 = 우리 CSS + 스트림릿 기본값 이었다.
+      새 화면에는 스트림릿이 없으니 그 몫을 여기서 채운다.
+   ============================================================ */
+body.stApp { line-height: 1.6; }
+
+/* 본문 폭 — 스트림릿 block-container 의 좌우 여백은 5rem 이었다 */
+.block-container { padding-left: 5rem; padding-right: 5rem; }
+@media (max-width: 700px) {
+  .block-container { padding-left: 1rem; padding-right: 1rem; }
+}
+
+/* 히어로 큰 글씨 — 스트림릿 h1 기본값(2.75rem)이 이기고 있었다 */
+.hero-h {
+  font-size: 2.75rem;
+  padding-top: 20px; padding-bottom: 16px;
+  line-height: 1.22;
+}
+/* 히어로 한 줄 문구 — 스트림릿 p 기본값이 이기고 있었다 */
+.hero-cap { font-size: .96rem; line-height: 1.6; }
+
+/* 검색창 — 스트림릿 입력칸의 실제 계산값.
+   ⚠️ app.css 쪽이 !important 로 박아둬서 여기도 같이 붙여야 이긴다. */
+.stTextInput input {
+  font-size: 1.12rem !important; font-weight: 600 !important;
+  padding: 15px 18px !important; height: 57px;
+  line-height: 1.4;
+}
+/* 분석하기 버튼 */
+.search-box .stButton { flex: none; width: 157px; }
+.search-box .stButton button {
+  height: 52px; font-size: 1.02rem; padding: 0 8px;
+}
+
+body.stApp { text-align: left; }
+
+/* 잔가지 — 측정으로 잡은 미세 차이 */
+.hero-h { line-height: 1.2; }
+.hero-h em { font-weight: 700; }      /* 스트림릿 h1 안의 em은 700이었다 */
+.hero-cap { line-height: 1.5; }
+.search-box { padding: 14px 14px; }   /* 입력칸 폭을 4px 맞춘다 */

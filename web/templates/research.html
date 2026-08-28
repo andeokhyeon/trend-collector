@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title or "키워드 헌터" }} · 키워드 헌터{% endblock %}
+{% block body %}
+
+<nav role="tablist">
+  {% for name, href in subs %}
+  <a role="tab" href="{{ href }}{% if q %}?q={{ q | urlencode }}{% endif %}"
+     aria-selected="{{ 'true' if href == active_sub else 'false' }}">{{ name }}</a>
+  {% endfor %}
+</nav>
+
+<form class="search-box" method="get" action="{{ active_sub }}">
+  <div class="stTextInput">
+    <input name="q" value="{{ q }}" autocomplete="off"
+           placeholder="분석할 키워드를 입력하세요  ·  예) 캠핑의자, 제주도맛집">
+  </div>
+  <div class="stButton kh-primary">
+    <button type="submit">분석하기</button>
+  </div>
+</form>
+
+<div class="kh-result">{{ result | safe }}</div>
+
+{% endblock %}

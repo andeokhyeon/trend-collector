@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · 키워드 헌터{% endblock %}
+{% block body %}
+
+<nav role="tablist">
+  {% for name, href in subs %}
+  <a role="tab" href="{{ href }}"
+     aria-selected="{{ 'true' if href == active_sub else 'false' }}">{{ name }}</a>
+  {% endfor %}
+</nav>
+
+<div class="kh-result">{{ result | safe }}</div>
+
+{% endblock %}
