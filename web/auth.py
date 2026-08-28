@@ -13,14 +13,22 @@ import time
 
 import accounts
 import db
+import store
 from config import SUPABASE_URL, SUPABASE_KEY, SITE_URL
 
 COOKIE = accounts.COOKIE          # "kh_s"
-_verifiers = {}                   # vid -> (verifier, 시각)
 
 
 def init():
     accounts.attach(db.client(), SUPABASE_KEY, SUPABASE_URL)
+    # ⚠️ 공용 캐시(Supabase api_cache)를 웹에도 물려준다.
+    #    이걸 빼먹으면 네이버 결과를 사용자끼리 못 나눠 쓰고
+    #    일일 호출량 집계도 안 된다 (스트림릿 app.py는 하고 있었다).
+    try:
+        import cache
+        cache.attach(db.client())
+    except Exception:
+        pass
 
 
 def current_user(request):
@@ -35,10 +43,9 @@ def start_oauth(provider, next_path="/"):
     """소셜 로그인 시작 — 이동할 주소를 돌려준다."""
     verifier, challenge = accounts.new_verifier()
     vid = secrets.token_urlsafe(9)
-    now = time.time()
-    for k in [k for k, (_, t) in _verifiers.items() if now - t > 1200]:
-        _verifiers.pop(k, None)
-    _verifiers[vid] = (verifier, now)
+    # ⚠️ dict가 아니라 디스크(store)에 둔다.
+    #    워커가 2개면 dict는 절반 확률로 남의 집이다 — 실측 3/6 실패.
+    store.put("verifier", vid, verifier, ttl=1200)
     site = (os.environ.get("KH_SITE") or SITE_URL or "").rstrip("/")
     back = f"{site}/auth/cb?vid={vid}&next={next_path}"
     url, _v, msg = accounts.oauth_url(provider, back, (verifier, challenge))
@@ -47,8 +54,7 @@ def start_oauth(provider, next_path="/"):
 
 def finish_oauth(code, vid):
     """돌아온 code를 세션으로. 반환 (토큰|None, 오류문구)."""
-    got = _verifiers.pop(vid, None)
-    verifier = got[0] if got else None
+    verifier = store.take("verifier", vid)
     ok, msg, user = accounts.exchange(code, verifier,
                                       note="표=%s" % ("있음" if verifier else "없음"))
     if not ok:

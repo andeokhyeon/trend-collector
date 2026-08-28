@@ -153,8 +153,11 @@ def table_html(frame, height=None, center_cols=()):
         for i, c in enumerate(cols):
             txt = escape(_cell_text(row[c]))
             if i == 0:
+                # ⚠️ 이름을 span으로 감싼다 — 모바일에서 2줄 넘으면 …으로
+                #    자르기 위한 손잡이. title로 전체 이름은 남겨둔다.
                 cells.append(f'<td class="kh-key">'
-                             f'<span class="kh-rk">{rank}</span>{txt}</td>')
+                             f'<span class="kh-rk">{rank}</span>'
+                             f'<span class="kh-kw" title="{txt}">{txt}</span></td>')
                 continue
             # 등급/진단 계열은 의미별 색 칩으로
             tint = GRADE_TINT.get(str(row[c])) if c in TINT_COLS else None

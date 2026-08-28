@@ -136,6 +136,13 @@ def _login_box(next_path):
     return "".join(out)
 
 
+def _no_credit_box():
+    from uihtml import ui, render
+    return render(ui.pitch, "크레딧을 다 쓰셨습니다",
+                  "충전하면 이어서 볼 수 있습니다",
+                  "관리자에게 문의하시거나 잠시 후 다시 시도해주세요.")
+
+
 def _safe(build, *a, **k):
     """화면 하나가 죽어도 페이지는 산다."""
     try:
@@ -158,10 +165,7 @@ def home(request: Request, q: str = "", rank: int = 0,
         else:
             ok, left, why = _spend(user, q)
             if not ok:
-                from uihtml import ui, render
-                result_html = render(ui.pitch, "크레딧을 다 쓰셨습니다",
-                                     "충전하면 이어서 볼 수 있습니다",
-                                     "관리자에게 문의하시거나 잠시 후 다시 시도해주세요.")
+                result_html = _no_credit_box()
             else:
                 import analyze
                 result_html = _safe(analyze.build, q, rank=bool(rank),
@@ -173,29 +177,37 @@ def home(request: Request, q: str = "", rank: int = 0,
 
 # 크레딧 — '같은 키워드 재조회는 무과금' 규칙을 서버에서 지킨다.
 # (uid, keyword) 짝을 하루 동안 기억해 두 번 깎지 않는다.
-_charged = {}
+#
+# ⚠️ 기록은 파이썬 dict이 아니라 store(SQLite)에 둔다.
+#    워커 2개일 때 dict은 절반 확률로 남의 워커 기억이라
+#    새로고침마다 또 깎였다. claim()은 INSERT라 동시에 둘이 와도
+#    한쪽만 성공한다 — 더블클릭·중복탭에도 한 번만 깎인다.
+def _charged_key(user, kw):
+    return "%s|%s" % (user["id"], kw)
 
 
 def _spend(user, kw):
-    import time as _t
     import accounts
-    key = (user["id"], kw)
-    now = _t.time()
-    for k in [k for k, t in _charged.items() if now - t > 86400]:
-        _charged.pop(k, None)
-    if key in _charged:
-        return True, None, ""
+    import store
+    key = _charged_key(user, kw)
+    if not store.claim("charged", key, ttl=86400):
+        return True, None, ""         # 오늘 이미 낸 키워드 — 무과금
     ok, left, why = accounts.spend(user["id"], reason="analyze", keyword=kw)
-    if ok:
-        _charged[key] = now
+    if not ok:
+        store.drop("charged", key)    # 못 깎았으면 자리도 되돌린다
     return ok, left, why
 
 
 @app.get("/serp", response_class=HTMLResponse)
 def serp_page(request: Request, q: str = "", sort: str = "sim"):
     import serp
-    if q.strip() and not auth.current_user(request):
+    user = auth.current_user(request) if q.strip() else None
+    if q.strip() and not user:
         result_html = _login_box(f"/serp?q={q.strip()}")
+    elif q.strip() and not _spend(user, q.strip())[0]:
+        # ⚠️ 스트림릿 때 규칙 그대로: 조회한(과금된) 키워드만 본다.
+        #    같은 날 분석에서 이미 낸 키워드면 여기선 안 깎인다.
+        result_html = _no_credit_box()
     else:
         result_html = _safe(serp.build, q, sort=sort,
                             my_blog_id=_blog_of(request))
@@ -206,8 +218,11 @@ def serp_page(request: Request, q: str = "", sort: str = "sim"):
 @app.get("/ideas", response_class=HTMLResponse)
 def ideas_page(request: Request, q: str = ""):
     import ideas
-    if q.strip() and not auth.current_user(request):
+    user = auth.current_user(request) if q.strip() else None
+    if q.strip() and not user:
         result_html = _login_box(f"/ideas?q={q.strip()}")
+    elif q.strip() and not _spend(user, q.strip())[0]:
+        result_html = _no_credit_box()
     else:
         result_html = _safe(ideas.build, q)
     return _page(request, "research.html", "/", "/ideas", q.strip(), result_html,
@@ -219,6 +234,10 @@ def ideas_page(request: Request, q: str = ""):
 # ------------------------------------------------------------
 @app.get("/login/{provider}")
 def login_start(provider: str, next: str = "/"):
+    import accounts
+    # ⚠️ /login/naver 같은 없는 provider가 500으로 터졌었다 (전수 테스트에서 발견)
+    if provider not in accounts.PROVIDERS:
+        return RedirectResponse("/", status_code=302)
     url, msg = auth.start_oauth(provider, next)
     if not url:
         return HTMLResponse(f"<p>{msg}</p>", status_code=500)
@@ -492,9 +511,28 @@ def _csv(frame, name):
                  f"attachment; filename*=UTF-8''{_q(name)}.csv"})
 
 
+def _csv_gate(request, q):
+    """CSV는 '오늘 그 키워드를 조회한 회원'에게만 준다.
+    ⚠️ 이 문이 없으면 로그인 없이 주소만 쳐도 네이버 호출이 나간다
+       (스트림릿 때 '보고 있지 않은 탭' 사건과 같은 부류의 구멍)."""
+    import store
+    user = auth.current_user(request)
+    if not user:
+        return RedirectResponse(f"/?q={q}", status_code=303)
+    if not store.has("charged", _charged_key(user, q)):
+        return RedirectResponse(f"/?q={q}", status_code=303)
+    return None
+
+
 @app.get("/csv/rel")
-def csv_rel(q: str, contains: int = 1, min: int = 0):
+def csv_rel(request: Request, q: str = "", contains: int = 1, min: int = 0):
     import pandas as pd
+    q = q.strip()
+    if not q:
+        return RedirectResponse("/", status_code=303)
+    blocked = _csv_gate(request, q)
+    if blocked:
+        return blocked
     from naver_api import analyze_keyword
     r = analyze_keyword(q.strip())
     rows = [{"키워드": i["keyword"],
@@ -512,9 +550,15 @@ def csv_rel(q: str, contains: int = 1, min: int = 0):
 
 
 @app.get("/csv/rank")
-def csv_rank(q: str):
+def csv_rank(request: Request, q: str = ""):
     import pandas as pd
     import analyze as _an
+    q = q.strip()
+    if not q:
+        return RedirectResponse("/", status_code=303)
+    blocked = _csv_gate(request, q)
+    if blocked:
+        return blocked
     from naver_api import analyze_keyword
     r = analyze_keyword(q.strip())
     rel = r.get("related") or []

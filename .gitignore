@@ -11,3 +11,7 @@ collector_log.txt
 
 # Local key files
 key_template.txt
+
+# 웹 서버가 만드는 임시 저장소(로그인 확인코드·과금 기록) — 서버마다 따로 생긴다
+web/data/
+web/uv.log

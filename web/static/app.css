@@ -1193,7 +1193,30 @@ text-align: right; margin: 6px 2px 14px;
 .kh-t { font-size: .84rem; }
 .kh-t td { padding: 10px 11px; }
 .kh-t th { padding: 9px 11px; }
-.kh-t .kh-key { padding-right: 14px; }
+/* ⚠️ 청약처럼 긴 이름이 붙박이 첫 열을 화면 폭만큼 키워
+   옆 칸이 하나도 안 보이던 문제 (2026-08-28, 주간 캘린더).
+   좁은 화면에서만 첫 열을 화면의 45%까지로 묶고,
+   넘치면 단어 단위(keep-all)로 접어 두 줄로 보여준다.
+   행 높이가 조금 어긋나는 것보다 표가 안 보이는 게 훨씬 나쁘다. */
+.kh-t .kh-key {
+  padding-right: 14px;
+  width: 45vw; min-width: 45vw; max-width: 45vw;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;   /* 띄어쓰기 없는 긴 한 단어면 글자에서라도 끊는다 */
+  line-height: 1.35;
+}
+/* 그래도 넘치면 2줄에서 …으로 자른다 (전체 이름은 title로 남아 있다) */
+.kh-t .kh-key .kh-kw {
+  display: -webkit-inline-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* 순번 숫자 옆에 나란히 앉게 폭을 그만큼 비워둔다
+     (100%로 하면 상자가 순번 아랫줄로 떨어진다) */
+  max-width: calc(100% - 24px);
+  vertical-align: top;
+}
 }
 /* ============================================================
    A 톤 — 흰 배경 / 옅은 회색 선 / 파란 포인트

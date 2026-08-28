@@ -42,7 +42,21 @@ def _kwtool(**kw):
                             for i in range(30)]}
 
 
+def _tally(kind, url):
+    """개발용 호출 장부 — KH_CALLLOG가 켜져 있으면 한 줄씩 적는다.
+    (워커가 몇 개든 append라 한 파일에 모인다)"""
+    import os
+    p = os.environ.get("KH_CALLLOG")
+    if p:
+        try:
+            with open(p, "a") as f:
+                f.write("%s %s\n" % (kind, url.split("?")[0][:120]))
+        except Exception:
+            pass
+
+
 def fget(url, **kw):
+    _tally("GET", url)
     # 실제 config는 API HUB 주소(apigw.ntruss.com)를 쓴다 — 그것도 받아준다
     if ("search/blog" in url or "openapi.naver.com/v1/search" in url
             or "apigw.ntruss.com" in url or "/blog" in url):
@@ -67,6 +81,7 @@ def fget(url, **kw):
 
 
 def fpost(url, **kw):
+    _tally("POST", url)
     if "datalab" in url:
         end = datetime.now(timezone.utc) + timedelta(hours=9)
         k = ((kw.get("json") or {}).get("keywordGroups") or [{}])[0].get(
