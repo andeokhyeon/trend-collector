@@ -98,15 +98,27 @@ def read_token(tok):
 
 
 def user_from_token(tok):
-    """쿠키 한 장으로 로그인 상태를 되살린다. 안 되면 None."""
+    """쿠키 한 장으로 로그인 상태를 되살린다. 안 되면 None.
+
+    ⚠️ 도장(HMAC)이 맞으면 로그인으로 인정한다 (2026-08-28).
+    예전엔 여기서 profile()까지 성공해야 로그인으로 쳤는데,
+    그 말은 곧 'Supabase가 잠깐 버벅이면 회원이 로그아웃된다'였다.
+    실제로 블로그 주소 저장처럼 요청이 연달아 나가는 순간
+    로그인창이 다시 뜨는 걸로 나타났다.
+    이름·크레딧은 어차피 화면 그릴 때 따로 읽는다 —
+    거기가 실패하면 표시만 비고, 로그인은 유지된다."""
     uid = read_token(tok)
     if not uid or not ready():
         return None
-    p = profile(uid)
-    if not p:
-        return None
-    _touch(uid)
-    return {"id": uid, "email": p.get("email") or ""}
+    email = ""
+    try:
+        p = profile(uid)
+        if p:
+            email = p.get("email") or ""
+            _touch(uid)
+    except Exception:
+        pass
+    return {"id": uid, "email": email}
 
 
 def ready():
