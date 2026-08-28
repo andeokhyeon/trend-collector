@@ -204,3 +204,33 @@ body.stApp {
   animation: kh-spin .8s linear infinite;
 }
 @keyframes kh-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   추적기 상세 팝업 (2026-08-28)
+   ============================================================ */
+.kh-modal-back {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(17,24,39,.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.kh-modal {
+  position: relative; width: min(760px, 100%);
+  max-height: 86vh; overflow-y: auto;
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.22);
+  padding: 6px 4px;
+}
+.kh-modal .box { border: 0; margin-top: 0; }
+.kh-modal-x {
+  position: absolute; top: 10px; right: 12px; z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: #F1F3F6; color: #374151 !important;
+  text-decoration: none !important; font-size: 1rem; font-weight: 700;
+}
+.kh-modal-x:hover { background: #E3E8EF; }
+@media (max-width: 640px) {
+  .kh-modal-back { padding: 10px; align-items: flex-end; }
+  .kh-modal { max-height: 92vh; border-radius: 16px 16px 8px 8px; }
+}

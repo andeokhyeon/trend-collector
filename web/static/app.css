@@ -1080,6 +1080,12 @@ border-bottom: 1px solid #F2F2ED;
 .title-grid { grid-template-columns: 1fr !important; }
 /* 상위노출 목록 */
 .serp-row { gap: 8px; padding: 9px 5px; font-size: .86rem; }
+/* 제목이 길면 …로 자르는 대신 손가락으로 밀어서 끝까지 본다 (2026-08-28) */
+.serp-title {
+overflow-x: auto; text-overflow: clip;
+-webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.serp-title::-webkit-scrollbar { display: none; }
 .serp-rank { flex: 0 0 24px; font-size: .88rem; }
 .serp-age { flex: 0 0 58px; font-size: .74rem; }
 /* 점수 구성 */

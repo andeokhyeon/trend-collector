@@ -150,8 +150,13 @@ def _login_box(next_path):
     return "".join(out)
 
 
-def _no_credit_box():
+def _no_credit_box(why=""):
     from uihtml import ui, render
+    if "로그인" in (why or ""):
+        # 프로필을 확인 못 한 토큰 — 크레딧 문구를 보여주면 헷갈린다
+        return (render(ui.pitch, "회원 정보를 확인하지 못했습니다",
+                       "다시 로그인해주세요", "")
+                + _login_box("/"))
     return render(ui.pitch, "크레딧을 다 쓰셨습니다",
                   "충전하면 이어서 볼 수 있습니다",
                   "관리자에게 문의하시거나 잠시 후 다시 시도해주세요.")
@@ -179,7 +184,7 @@ def home(request: Request, q: str = "", rank: int = 0,
         else:
             ok, left, why = _spend(user, q)
             if not ok:
-                result_html = _no_credit_box()
+                result_html = _no_credit_box(why)
             else:
                 import analyze
                 result_html = _safe(analyze.build, q, rank=bool(rank),
@@ -218,10 +223,10 @@ def serp_page(request: Request, q: str = "", sort: str = "sim"):
     user = auth.current_user(request) if q.strip() else None
     if q.strip() and not user:
         result_html = _login_box(f"/serp?q={q.strip()}")
-    elif q.strip() and not _spend(user, q.strip())[0]:
+    elif q.strip() and not (_sp := _spend(user, q.strip()))[0]:
         # ⚠️ 스트림릿 때 규칙 그대로: 조회한(과금된) 키워드만 본다.
         #    같은 날 분석에서 이미 낸 키워드면 여기선 안 깎인다.
-        result_html = _no_credit_box()
+        result_html = _no_credit_box(_sp[2])
     else:
         result_html = _safe(serp.build, q, sort=sort,
                             my_blog_id=_blog_of(request))
@@ -235,8 +240,8 @@ def ideas_page(request: Request, q: str = ""):
     user = auth.current_user(request) if q.strip() else None
     if q.strip() and not user:
         result_html = _login_box(f"/ideas?q={q.strip()}")
-    elif q.strip() and not _spend(user, q.strip())[0]:
-        result_html = _no_credit_box()
+    elif q.strip() and not (_sp := _spend(user, q.strip()))[0]:
+        result_html = _no_credit_box(_sp[2])
     else:
         result_html = _safe(ideas.build, q)
     return _page(request, "research.html", "/", "/ideas", q.strip(), result_html,

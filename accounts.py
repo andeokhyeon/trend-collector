@@ -243,7 +243,10 @@ def spend(uid, n=ANALYZE_COST, reason="analyze", keyword=""):
         return True, 0, ""            # 회원 기능이 꺼져 있으면 막지 않는다
     p = profile(uid)
     if p is None:
-        return True, 0, ""
+        # ⚠️ 2026-08-28 이전엔 여기도 통과였다 — 프로필이 지워졌거나
+        #    못 읽은 토큰이 '회원'이라는 이름으로 무한 무료 조회가 됐다.
+        #    확인이 안 되면 조회도 안 된다.
+        return False, 0, "회원 정보를 확인하지 못했습니다. 다시 로그인해주세요."
     left = int(p.get("credits") or 0)
     if left < n:
         return False, left, "크레딧이 모두 떨어졌습니다."

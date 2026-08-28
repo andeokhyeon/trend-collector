@@ -210,7 +210,17 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
     # --- 적중률 (제품의 해자 — app.py 그대로) ---
     judged = [x for x in summary
               if x.get("has_post") and x.get("opportunity") is not None]
-    if len(judged) >= 3:
+    ranked_any = any(x.get("rank") is not None for x in judged)
+    if len(judged) >= 3 and not ranked_any:
+        # ⚠️ 순위가 한 번도 안 재졌는데 0%로 보여주면 '우리 점수가 다 틀렸다'로
+        #    읽힌다 (2026-08-28 피드백). 왜 비었는지를 말해준다.
+        why = ("블로그를 등록하면" if not my_blog_id
+               else "다음 수집부터")
+        out.append(render(ui.note,
+                          "발행한 글의 <b>실제 순위가 아직 기록되지 않았습니다</b>. "
+                          f"{why} 내 글의 순위를 재서 점수 적중률을 보여드립니다. "
+                          "(기록은 수집기가 돌 때마다 쌓입니다)", True))
+    elif len(judged) >= 3:
         def _hit(x):
             return x.get("rank") is not None and x["rank"] <= 30
         buckets = [("70점 이상", 70, 101), ("40~69점", 40, 70), ("40점 미만", 0, 40)]
@@ -285,5 +295,10 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
                           True))
 
     if detail_kw and any(x["keyword"] == detail_kw for x in summary):
-        out.append(_detail(summary, hdf, detail_kw))
+        # 상세는 팝업(모달)로 띄운다 (2026-08-28 요청) — 닫으면 /tracker로
+        out.append('<div class="kh-modal-back" id="detail">'
+                   '<div class="kh-modal">'
+                   '<a class="kh-modal-x" href="/tracker" title="닫기">✕</a>'
+                   + _detail(summary, hdf, detail_kw)
+                   + '</div></div>')
     return "".join(out)

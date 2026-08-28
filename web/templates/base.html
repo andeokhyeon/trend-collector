@@ -62,12 +62,18 @@
     var f = e.target;
     if (f.classList && f.classList.contains("search-box")) arm("조회 중입니다…");
   });
-  // 소셜 로그인 버튼
+  // 오래 걸릴 수 있는 링크들
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a");
     if (!a) return;
-    if (a.classList.contains("social-btn") || (a.getAttribute("href") || "").indexOf("/login/") === 0)
+    var href = a.getAttribute("href") || "";
+    if (a.classList.contains("social-btn") || href.indexOf("/login/") === 0) {
       arm("로그인 중입니다…");
+    } else if (href.indexOf("rank=1") !== -1) {
+      arm("연관 키워드의 문서수를 재는 중입니다…");   // 기회 있는 키워드 보기
+    } else if (a.classList.contains("tc-btn")) {
+      arm("기록을 불러오는 중입니다…");               // 추적기 자세히
+    }
   });
   // 뒤로가기로 돌아왔을 때 남아있지 않게
   window.addEventListener("pageshow", function () {
