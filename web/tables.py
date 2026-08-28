@@ -59,6 +59,9 @@ GRADE_TINT = {
     '매우한산': ('#E8F4F0', '#1F6354'), '한산': ('#E8F4F0', '#1F6354'),
     '비어 있는 자리': ('#DCEFE9', '#175247'), '오래된 글만 많음': ('#E8F4F0', '#1F6354'),
     '해볼 만함': ('#E8F4F0', '#1F6354'), '오래된 글이 1등': ('#DCEFE9', '#175247'),
+    # 골든타임 '판단' 열 — 칩이 없어서 혼자 맨글자로 떠 있었다 (2026-08-28)
+    '충분히 노려볼 만함': ('#DCEFE9', '#175247'),
+    '쉽지 않음': ('#FAEAE5', '#9E3E28'),
     '보통': ('#FBF2E1', '#8A6420'),
     '지금 몰리는 중': ('#FBF2E1', '#8A6420'), '누적만 반영': ('#FBF2E1', '#8A6420'),
     '새 글 옛 글 섞임': ('#FBF2E1', '#8A6420'),
@@ -140,6 +143,10 @@ def table_html(frame, height=None, center_cols=()):
             return "kh-key"
         if name in center_cols:
             return "kh-num kh-center"
+        if name in TINT_COLS:
+            # 칩(색 라벨) 열은 머리글·값을 가운데로 — 숫자 열 사이에서
+            # 왼쪽에 붙어 있으면 열이 어긋나 보인다 (2026-08-28 정렬 피드백)
+            return "kh-center"
         return "kh-num" if name in NUM_COLS else ""
 
     head = "".join(
@@ -163,7 +170,7 @@ def table_html(frame, height=None, center_cols=()):
             tint = GRADE_TINT.get(str(row[c])) if c in TINT_COLS else None
             if tint:
                 bg, fg = tint
-                cells.append(f'<td><span class="kh-chip" '
+                cells.append(f'<td class="{cls(i, c)}"><span class="kh-chip" '
                              f'style="background:{bg};color:{fg}">{txt}</span></td>')
             else:
                 cells.append(f'<td class="{cls(i, c)}">{txt}</td>')

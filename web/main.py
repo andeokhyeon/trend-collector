@@ -133,6 +133,27 @@ def _blog_of(request, prof=None):
     return request.cookies.get("kh_blog", "")
 
 
+def _adopt_blog(user, prof, request):
+    """쿠키 시절(계정 저장 이전)에 등록한 블로그를 계정으로 승격한다.
+
+    ⚠️ 2026-08-28: 같은 계정인데 PC엔 블로그가 있고 폰엔 없다는 제보.
+    예전엔 쿠키에만 저장했기 때문 — 브라우저마다 따로 논다.
+    로그인한 회원의 계정에 블로그가 비어 있는데 쿠키에 있으면
+    그 값을 계정에 올려준다. 이후 어느 기기서든 같이 보인다."""
+    ck = request.cookies.get("kh_blog", "")
+    if not (user and ck) or prof is None or prof.get("blog_id"):
+        return prof
+    try:
+        import db as _db
+        _db.client().table("profiles").update(
+            {"blog_id": ck}).eq("id", user["id"]).execute()
+        prof = dict(prof)
+        prof["blog_id"] = ck
+    except Exception:
+        pass
+    return prof
+
+
 def _login_box(next_path):
     """로그인 상자 — 문구는 스트림릿 login_gate 그대로."""
     from uihtml import ui, render
@@ -288,7 +309,7 @@ def me_page(request: Request):
         html = _login_box("/me")
     else:
         import me
-        prof = _profile(user["id"])
+        prof = _adopt_blog(user, _profile(user["id"]), request)
         html = _safe(me.build, user, prof, _blog_of(request, prof))
     return _page(request, "discover.html", "", "", "", html,
                  title="마이페이지", subs=[])
@@ -395,7 +416,7 @@ def blog_page(request: Request):
         html = _login_box("/blog")
     else:
         import blog
-        prof = _profile(user["id"])
+        prof = _adopt_blog(user, _profile(user["id"]), request)
         html = _safe(blog.build, user, _blog_of(request, prof), prof)
     return _page(request, "discover.html", "/blog", "", "", html,
                  title="내 블로그 진단", subs=[])
