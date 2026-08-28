@@ -13,7 +13,7 @@ create table if not exists profiles (
   nickname     text,
   blog_id      text,                              -- 등록한 블로그
   plan         text    not null default 'free',   -- free / basic / pro
-  credits      integer not null default 30,       -- 남은 크레딧
+  credits      integer not null default 3,        -- 남은 크레딧 (가입 시 무료 3회)
   is_admin     boolean not null default false,
   -- 결제를 붙일 때 쓸 자리. 지금은 비어 있어도 된다.
   billing_id   text,        -- 결제사(토스·아임포트 등)의 고객 번호

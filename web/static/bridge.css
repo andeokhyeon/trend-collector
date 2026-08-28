@@ -172,17 +172,35 @@ body.stApp {
     padding: 46px 0 12px !important; height: auto !important;
     flex-wrap: nowrap !important; overflow-x: auto;
     -webkit-overflow-scrolling: touch; scrollbar-width: none;
-    gap: 6px !important;
+    gap: 2px !important;
   }
   [role="tablist"]::-webkit-scrollbar { display: none; }
   /* 서브 탭 — 여백만 보통으로 */
   [role="tabpanel"] [role="tablist"] { padding: 4px 0 12px !important; }
   [role="tab"] {
-    min-height: 36px !important; padding: 7px 13px !important;
-    font-size: .86rem !important; flex: none !important;
-    box-shadow: none !important;
+    min-height: 34px !important; padding: 6px 7px !important;
+    font-size: .82rem !important; flex: none !important;
+    box-shadow: none !important; letter-spacing: -.02em !important;
   }
   [role="tab"] *, [role="tab"] p, [role="tab"] div, [role="tab"] span {
-    font-size: .86rem !important;
+    font-size: .82rem !important;
   }
 }
+
+/* ============================================================
+   로딩 도넛 (2026-08-28) — 2초 넘는 조회·로그인에만 뜬다
+   ============================================================ */
+#kh-busy {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(255,255,255,.75); backdrop-filter: blur(2px);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px;
+}
+#kh-busy[hidden] { display: none; }
+#kh-busy p { margin: 0; font-size: .95rem; font-weight: 700; color: #374151; }
+.kh-donut {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 5px solid #E3E8EF; border-top-color: #1A56DB;
+  animation: kh-spin .8s linear infinite;
+}
+@keyframes kh-spin { to { transform: rotate(360deg); } }

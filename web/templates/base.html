@@ -7,7 +7,11 @@
 <meta name="description" content="{% block desc %}검색량만 보면 경쟁을 알 수 없습니다. 키워드 검색·추적·발굴·단가·발행량·AI 진단까지 한 번에.{% endblock %}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- ⚠️ 800·900 굵기를 일부러 뺐다 (2026-08-28).
+     한글 폰트는 굵기 하나가 수백 조각이라 6종이면 모바일이 무겁고,
+     화면도 너무 두꺼워 가독성이 떨어진다는 피드백.
+     빠진 굵기는 브라우저가 700으로 대신 그린다. -->
+<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css">
 <link rel="stylesheet" href="/static/bridge.css">
 <link rel="stylesheet" href="/static/parity.css">
@@ -40,5 +44,37 @@
   </div>
 
 </div>
+
+<!-- 로딩 표시 — 조회·로그인이 2초 넘게 걸리면 도넛을 띄운다 -->
+<div id="kh-busy" hidden><div class="kh-donut"></div><p id="kh-busy-msg">잠시만요…</p></div>
+<script>
+(function () {
+  var t = null;
+  function arm(msg) {
+    if (t) return;
+    t = setTimeout(function () {
+      document.getElementById("kh-busy-msg").textContent = msg;
+      document.getElementById("kh-busy").hidden = false;
+    }, 2000);
+  }
+  // 검색(조회) 폼 제출
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (f.classList && f.classList.contains("search-box")) arm("조회 중입니다…");
+  });
+  // 소셜 로그인 버튼
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a");
+    if (!a) return;
+    if (a.classList.contains("social-btn") || (a.getAttribute("href") || "").indexOf("/login/") === 0)
+      arm("로그인 중입니다…");
+  });
+  // 뒤로가기로 돌아왔을 때 남아있지 않게
+  window.addEventListener("pageshow", function () {
+    if (t) { clearTimeout(t); t = null; }
+    document.getElementById("kh-busy").hidden = true;
+  });
+})();
+</script>
 </body>
 </html>

@@ -32,7 +32,7 @@ _URL = ""
 
 # 플랜 — 지금은 코드에 적어둔다. 결제가 붙으면 표만 바꾸면 된다.
 PLANS = {
-    "free":  {"name": "무료",   "credits": 30,   "price": 0},
+    "free":  {"name": "무료",   "credits": 3,    "price": 0},
     "basic": {"name": "베이직", "credits": 500,  "price": 9900},
     "pro":   {"name": "프로",   "credits": 3000, "price": 19900},
 }

@@ -2,14 +2,8 @@
 """마이페이지 — 내 계정·크레딧·사용 내역. (2026-08-28 신설)"""
 from datetime import datetime, timedelta, timezone
 
-import pandas as pd
-
 from uihtml import ui, render
-from tables import table_html
 
-# credit_log의 reason을 사람 말로
-_REASON = {"analyze": "키워드 조회", "admin": "관리자 충전",
-           "signup": "가입 보너스", "purchase": "충전", "refund": "환불"}
 _PLAN = {"free": "무료", "basic": "베이직", "pro": "프로"}
 
 
@@ -21,17 +15,6 @@ def _kst(iso):
         return d.strftime("%m/%d %H:%M")
     except Exception:
         return "—"
-
-
-def _my_log(uid, limit=20):
-    import db
-    try:
-        r = (db.client().table("credit_log").select("*")
-             .eq("user_id", uid).order("created_at", desc=True)
-             .limit(limit).execute())
-        return r.data or []
-    except Exception:
-        return []
 
 
 def build(user, prof, blog_id=""):
@@ -58,29 +41,24 @@ def build(user, prof, blog_id=""):
     out.append('<div class="box">')
     out.append(render(ui.section, "계정", ""))
     rows = [("닉네임", name), ("이메일", email),
-            ("내 블로그", blog_id or "미설정 — 내 블로그 탭에서 등록")]
+            ("내 블로그", blog_id or "미설정 — 아래에서 등록해주세요")]
     out.append('<div class="me-rows">' + "".join(
         f'<div class="me-row"><span class="me-k">{k}</span>'
         f'<span class="me-v">{v}</span></div>' for k, v in rows) + '</div>')
     out.append('</div>')
 
-    # 크레딧 사용 내역
-    log = _my_log(user["id"])
+    # 블로그 주소 — 여기서 한 번 등록하면 계정에 저장된다 (2026-08-28)
     out.append('<div class="box">')
-    out.append(render(ui.section, "크레딧 내역", "최근 20건"))
-    if not log:
-        out.append(render(ui.note, "아직 사용 내역이 없습니다."))
-    else:
-        df = pd.DataFrame([{
-            "일시": _kst(r.get("created_at")),
-            "내용": (_REASON.get(str(r.get("reason")), str(r.get("reason") or "—"))
-                    + (f" · {r['keyword']}" if r.get("keyword") else "")),
-            "변동": ("+" if int(r.get("delta") or 0) > 0 else "")
-                   + f"{int(r.get('delta') or 0):,}",
-            "잔액": int(r.get("balance") or 0),
-        } for r in log])
-        df.index = range(1, len(df) + 1)
-        out.append(table_html(df, center_cols=("일시",)))
+    out.append(render(ui.section, "내 블로그 주소",
+                      "한 번 등록하면 모든 화면에서 내 글을 금색으로 표시합니다"))
+    out.append(f"""
+<form class="search-box" method="post" action="/me/blog">
+  <div class="stTextInput">
+    <input name="blog" value="{blog_id}"
+           placeholder="blog.naver.com/myid  또는  myid" autocomplete="off">
+  </div>
+  <div class="stButton kh-primary"><button type="submit">저장</button></div>
+</form>""")
     out.append('</div>')
 
     # 로그아웃 — POST 폼 (링크로 하면 미리보기 봇이 눌러버린다)

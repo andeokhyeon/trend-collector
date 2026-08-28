@@ -60,6 +60,7 @@ TABS = [
     ("추적기", "/tracker"),
     ("내 블로그", "/blog"),
     ("키워드 발굴", "/discover"),
+    ("마이페이지", "/me"),
 ]
 SUB_RESEARCH = [
     ("키워드 분석", "/"),
@@ -112,11 +113,23 @@ def _page(request, template, active_tab, active_sub, q, result,
         "meta": meta,
         "q": q, "result": result, "page_title": title,
         "chips": ["삼성전자", "주말날씨", "에어프라이어", "점심메뉴추천"],
-        "freshness": "6분 전",
+        # ⚠️ 한때 "6분 전"으로 박혀 있었다 — 실제 수집 시각을 쓴다
+        "freshness": (_fresh_short() or "수집 대기"),
     })
 
 
-def _blog_of(request):
+def _fresh_short():
+    try:
+        import db
+        return db.freshness()
+    except Exception:
+        return ""
+
+
+def _blog_of(request, prof=None):
+    """내 블로그 아이디 — 계정(profiles.blog_id)이 먼저, 쿠키는 보조."""
+    if prof and prof.get("blog_id"):
+        return prof["blog_id"]
     return request.cookies.get("kh_blog", "")
 
 
@@ -127,7 +140,7 @@ def _login_box(next_path):
     out = [render(ui.pitch, "먼저 로그인해주세요",
                   "키워드 조사는 회원만 쓸 수 있습니다",
                   "카카오·구글 계정으로 3초면 됩니다. "
-                  "가입하면 무료로 30번 조사할 수 있습니다.")]
+                  "가입하면 무료로 3번 조사할 수 있습니다.")]
     items = []
     import accounts
     for pid, (label, _bg, _fg) in accounts.PROVIDERS.items():
@@ -270,9 +283,32 @@ def me_page(request: Request):
         html = _login_box("/me")
     else:
         import me
-        html = _safe(me.build, user, _profile(user["id"]), _blog_of(request))
+        prof = _profile(user["id"])
+        html = _safe(me.build, user, prof, _blog_of(request, prof))
     return _page(request, "discover.html", "", "", "", html,
                  title="마이페이지", subs=[])
+
+
+@app.post("/me/blog")
+def me_blog(request: Request, blog: str = Form("")):
+    """블로그 주소를 계정(profiles.blog_id)에 저장. 쿠키는 보조로 같이."""
+    user = auth.current_user(request)
+    if not user:
+        return RedirectResponse("/me", status_code=303)
+    from naver_api import extract_blog_id
+    bid = extract_blog_id(blog) if blog.strip() else ""
+    try:
+        import db as _db
+        _db.client().table("profiles").update(
+            {"blog_id": bid or None}).eq("id", user["id"]).execute()
+    except Exception:
+        pass                       # 컬럼이 없어도 쿠키로는 동작한다
+    resp = RedirectResponse("/me", status_code=303)
+    if bid:
+        resp.set_cookie("kh_blog", bid, max_age=365 * 86400, samesite="lax")
+    else:
+        resp.delete_cookie("kh_blog")
+    return resp
 
 
 @app.post("/logout")
@@ -354,8 +390,8 @@ def blog_page(request: Request):
         html = _login_box("/blog")
     else:
         import blog
-        html = _safe(blog.build, user, _blog_of(request),
-                     _profile(user["id"]))
+        prof = _profile(user["id"])
+        html = _safe(blog.build, user, _blog_of(request, prof), prof)
     return _page(request, "discover.html", "/blog", "", "", html,
                  title="내 블로그 진단", subs=[])
 

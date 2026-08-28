@@ -32,22 +32,16 @@ def build(user, my_blog_id="", profile=None):
 
     out.append(render(ui.section, "내 블로그 진단", "지금 내 블로그는 어떤 상태인가"))
 
-    # --- 블로그 주소 입력 (한 곳뿐 — app.py와 동일) ---
-    out.append(f'''
-<form class="search-box" method="post" action="/blog/set">
-  <div class="stTextInput">
-    <input name="blog" value="{my_blog_id}"
-           placeholder="blog.naver.com/myid  또는  myid" autocomplete="off">
-  </div>
-  <div class="stButton kh-primary"><button type="submit">저장</button></div>
-</form>''')
-
+    # 주소 입력은 마이페이지로 옮겼다 (2026-08-28) — 매번 치지 않게 계정에 저장
     if not my_blog_id:
         out.append(render(ui.note,
-                          "위 칸에 블로그 주소를 넣어주세요. "
-                          "예: <code>blog.naver.com/myid</code> 또는 <code>myid</code>",
-                          True))
+                          "아직 블로그 주소가 등록되지 않았습니다. "
+                          '<a href="/me">마이페이지</a>에서 한 번만 등록하면 '
+                          "여기서 바로 진단해드립니다.", True))
         return "".join(out)
+    out.append(render(ui.note,
+                      f"진단 대상: <code>{my_blog_id}</code> · "
+                      '주소 변경은 <a href="/me">마이페이지</a>에서'))
 
     try:
         feed = get_my_blog_feed(my_blog_id)

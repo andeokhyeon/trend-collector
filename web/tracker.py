@@ -171,7 +171,8 @@ def _detail(summary, hdf, pick):
 
 def build(uid, my_blog_id="", detail_kw="", flash=""):
     out = [render(ui.section, "키워드 추적기",
-                  "저장해두면 순위 변화를 매일 기록합니다")]
+                  "저장해두면 순위 변화를 자동으로 기록합니다 · "
+                  "최소 하루가 지나야 변화 정보가 제공됩니다")]
     if not my_blog_id:
         out.append(render(ui.note,
                           "블로그를 등록하면 <b>내 글의 순위 변화</b>까지 함께 기록합니다. "
@@ -199,7 +200,9 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
         return "".join(out)
     if not tracked:
         out.append(render(ui.note,
-                          "아직 추적 중인 키워드가 없습니다. 위에서 추가해보세요."))
+                          "아직 추적 중인 키워드가 없습니다. 위에서 추가해보세요.<br>"
+                          "기록은 2시간마다 자동으로 쌓이며, 변화 비교는 "
+                          "<b>최소 하루</b>가 지나야 의미 있는 정보가 나옵니다."))
         return "".join(out)
 
     summary, hdf = summarize(tracked, history)
