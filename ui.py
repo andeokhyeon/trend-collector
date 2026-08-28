@@ -856,7 +856,8 @@ padding: 7px 0;
 }}
 .hb-kw {{
 font-size: .92rem; font-weight: 700; color: {INK};
-text-align: right;
+/* 2026-08-28: 오른쪽 정렬은 읽기 불편하다는 피드백 — 왼쪽으로 통일 */
+text-align: left;
 overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }}
 .hb-track {{

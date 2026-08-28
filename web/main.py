@@ -96,15 +96,16 @@ def _page(request, template, active_tab, active_sub, q, result,
     """공통 뼈대 — 탭·검색창·본문. (새 Starlette은 request가 첫 인자)"""
     user = auth.current_user(request)
     meta = _meta_line()
+    me_label = ""
     if user:
         prof = _profile(user["id"]) or {}
         name = (prof.get("nickname")
                 or (user.get("email") or "").split("@")[0] or "회원")
         cr = prof.get("credits")
-        who = name + (f" · 크레딧 {int(cr):,}" if cr is not None else "")
-        meta = who + ("　·　" + meta if meta else "")
+        # ⚠️ 이름·크레딧은 meta에 섞지 않고 따로 — 마이페이지(/me) 링크가 된다
+        me_label = name + (f" · 크레딧 {int(cr):,}" if cr is not None else "")
     return tpl.TemplateResponse(request, template, {
-        "tabs": TABS, "active_tab": active_tab,
+        "tabs": TABS, "active_tab": active_tab, "me_label": me_label,
         "subs": subs if subs is not None else SUB_RESEARCH,
         "active_sub": active_sub,
         "logo": logo_uri(),
@@ -260,6 +261,18 @@ def auth_cb(request: Request, code: str = "", vid: str = "", next: str = "/",
                     httponly=True, samesite="lax",
                     secure=request.url.scheme == "https")
     return resp
+
+
+@app.get("/me", response_class=HTMLResponse)
+def me_page(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        html = _login_box("/me")
+    else:
+        import me
+        html = _safe(me.build, user, _profile(user["id"]), _blog_of(request))
+    return _page(request, "discover.html", "", "", "", html,
+                 title="마이페이지", subs=[])
 
 
 @app.post("/logout")

@@ -16,7 +16,7 @@ def build(kw, sort="sim", my_blog_id=""):
                       "지금 밀어낼 수 있습니다",
                       "경쟁률 숫자만으로는 안 보이는 것입니다."))
     if not kw:
-        out.append(render(ui.note, "위쪽 입력칸에 키워드를 넣어주세요.", True))
+        # 빈 화면엔 피치만 — 안내 상자는 군더더기라 뺐다 (2026-08-28 요청)
         return "".join(out)
 
     sort_key = "date" if sort == "date" else "sim"

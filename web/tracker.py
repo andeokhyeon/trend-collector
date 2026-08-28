@@ -112,8 +112,7 @@ def _detail(summary, hdf, pick):
             if not hdf.empty else pd.DataFrame())
     if rows.empty:
         out.append(render(ui.note,
-                          "아직 기록이 없습니다. <b>3_데이터_수집.bat</b>을 실행하면 "
-                          "첫 기록이 만들어집니다."))
+                          "아직 기록이 없습니다. 다음 수집 때 첫 기록이 만들어집니다."))
         out.append('</div>')
         return "".join(out)
     latest = rows.iloc[-1]
@@ -200,8 +199,7 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
         return "".join(out)
     if not tracked:
         out.append(render(ui.note,
-                          "아직 추적 중인 키워드가 없습니다. 위에서 추가해보세요.<br>"
-                          "추가한 뒤 <b>3_데이터_수집.bat</b>을 실행하면 첫 기록이 쌓입니다."))
+                          "아직 추적 중인 키워드가 없습니다. 위에서 추가해보세요."))
         return "".join(out)
 
     summary, hdf = summarize(tracked, history)

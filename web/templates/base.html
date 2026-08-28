@@ -23,7 +23,9 @@
       {% if logo %}<img class="mast-logo" src="{{ logo }}" alt="">{% endif %}
       <span class="mast-name">키워드<b>헌터</b></span>
     </a>
-    <div class="mast-meta">{{ meta }}</div>
+    <div class="mast-meta">
+      {%- if me_label %}<a class="mast-me" href="/me" title="마이페이지">{{ me_label }}</a>{% if meta %}<span class="mast-sep">·</span>{% endif %}{% endif -%}
+      {{ meta }}</div>
   </div>
 
   <nav role="tablist">

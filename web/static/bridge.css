@@ -138,3 +138,51 @@ body.stApp {
   .kh-adm-row { flex-wrap: wrap; }
   .kh-adm-btn { flex: 1; }
 }
+
+/* ============================================================
+   마이페이지 (2026-08-28)
+   ============================================================ */
+.mast-me {
+  color: #1A56DB !important; text-decoration: none !important;
+  font-weight: 700;
+}
+.mast-me:hover { text-decoration: underline !important; }
+.mast-sep { margin: 0 6px; color: #C9CED6; }
+.me-rows { margin-top: 6px; }
+.me-row {
+  display: flex; gap: 14px; padding: 10px 2px;
+  border-bottom: 1px solid #F1F1EC; font-size: .92rem;
+}
+.me-row:last-child { border-bottom: 0; }
+.me-k { flex: 0 0 84px; color: #6B7280; font-weight: 600; }
+.me-v { color: #111827; min-width: 0; overflow-wrap: anywhere; }
+.me-logout { border-color: #E5B9AE; color: #9E3E28 !important; }
+.me-logout:hover { border-color: #9E3E28; color: #9E3E28 !important; }
+
+/* ============================================================
+   모바일 — 상단 탭이 오른쪽에서 잘리던 것 (2026-08-28)
+   브랜드(절대위치) 옆에 끼워 넣던 탭을 아래 줄로 내리고,
+   알약 크기를 줄인다. 그래도 넘치면 옆으로 민다(잘리지 않게).
+   ============================================================ */
+@media (max-width: 700px) {
+  .mast-meta { font-size: .72rem; top: 21px; max-width: 62vw;
+               overflow: hidden; text-overflow: ellipsis; }
+  /* 메인 탭 — 브랜드 아래 줄로 */
+  [role="tablist"] {
+    padding: 46px 0 12px !important; height: auto !important;
+    flex-wrap: nowrap !important; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    gap: 6px !important;
+  }
+  [role="tablist"]::-webkit-scrollbar { display: none; }
+  /* 서브 탭 — 여백만 보통으로 */
+  [role="tabpanel"] [role="tablist"] { padding: 4px 0 12px !important; }
+  [role="tab"] {
+    min-height: 36px !important; padding: 7px 13px !important;
+    font-size: .86rem !important; flex: none !important;
+    box-shadow: none !important;
+  }
+  [role="tab"] *, [role="tab"] p, [role="tab"] div, [role="tab"] span {
+    font-size: .86rem !important;
+  }
+}

@@ -11,14 +11,13 @@ def build(kw):
     kw = (kw or "").strip()
     out = []
     out.append(render(ui.section, "글감 만들기", "상위권은 실제로 어떻게 쓰는가"))
-    out.append(render(
-        ui.note,
-        "제목을 지어내지도, 남의 제목을 그대로 보여주지도 않습니다. "
-        "베껴 쓰게 되면 결국 손해이기 때문입니다. 대신 상위권 제목에서 "
-        "<b>어떤 형식이 통하는지</b>와 <b>실제로 검색되는 세부 주제</b>만 뽑아냅니다. "
-        "이걸 재료로 직접 쓰시는 게 훨씬 낫습니다."))
+    # 설명을 상자 대신 피치(상위노출 해부와 같은 결)로 (2026-08-28 요청)
+    out.append(render(ui.pitch, "남의 제목을 베끼면",
+                      "결국 내 글이 손해봅니다",
+                      "그래서 제목 대신, 상위권에서 <b>통하는 형식</b>과 "
+                      "<b>실제로 검색되는 세부 주제</b>만 뽑아드립니다. "
+                      "이걸 재료로 직접 쓰시는 게 훨씬 낫습니다."))
     if not kw:
-        out.append(render(ui.note, "위쪽 입력칸에 키워드를 넣어주세요.", True))
         return "".join(out)
 
     a = analyze_keyword(kw, with_recent=False)

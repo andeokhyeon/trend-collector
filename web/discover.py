@@ -50,8 +50,7 @@ def _empty_note(df, source, label=""):
     if all_rows.empty:
         return render(ui.note,
                       f"아직 {label or '이 항목'} 데이터가 수집되지 않았습니다.<br>"
-                      "GitHub의 <b>Actions → collector</b>를 실행하거나 "
-                      "<b>3_데이터_수집.bat</b>을 돌려주세요.")
+                      "수집기가 다음 회차에 자동으로 채웁니다. 잠시 후 다시 봐주세요.")
     last = all_rows['created_at_dt'].max()
     mins = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
     ago = f"{mins}분 전" if mins < 120 else f"{mins // 60}시간 전"
