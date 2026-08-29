@@ -79,6 +79,9 @@ async def _sec_headers(request, call_next):
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy",
                             "camera=(), microphone=(), geolocation=()")
+    # 글꼴은 절대 안 바뀐다 — 브라우저가 한 번 받으면 오래 기억하게
+    if request.url.path.startswith("/static/fonts/"):
+        resp.headers.setdefault("Cache-Control", "public, max-age=2592000, immutable")
     return resp
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")),
           name="static")
