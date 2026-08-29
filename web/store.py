@@ -42,22 +42,40 @@ def _sweep(c):
     c.execute("DELETE FROM kv WHERE exp < ?", (time.time(),))
 
 
+def _run(fn):
+    """연결을 열고 → 트랜잭션으로 실행하고 → 반드시 닫는다.
+
+    ⚠️ 2026-08-29 사고: `with _conn() as c`만 쓰면 커밋은 되지만
+    연결이 **닫히지 않는다**. 요청마다 연결이 하나씩 새고,
+    몇 시간 뒤 열린 파일 한도에 걸려 서버 전체가 매달렸다(504).
+    """
+    c = _conn()
+    try:
+        with c:
+            return fn(c)
+    finally:
+        c.close()
+
+
 def put(kind, key, value="", ttl=1200):
     """저장 (같은 키면 덮어쓴다)."""
-    with _conn() as c:
+    def _f(c):
         _sweep(c)
         c.execute("INSERT OR REPLACE INTO kv (kind, k, v, exp) VALUES (?,?,?,?)",
                   (kind, str(key), str(value), time.time() + ttl))
+    _run(_f)
 
 
 def take(kind, key):
     """꺼내면서 지운다 (한 번만 쓰는 값 — 로그인 확인코드).
     없거나 만료됐으면 None."""
-    with _conn() as c:              # with = 트랜잭션. 꺼내기+지우기가 한 몸이다.
+    def _f(c):
         row = c.execute("SELECT v, exp FROM kv WHERE kind=? AND k=?",
                         (kind, str(key))).fetchone()
         c.execute("DELETE FROM kv WHERE kind=? AND k=?", (kind, str(key)))
         _sweep(c)
+        return row
+    row = _run(_f)
     if not row or row[1] < time.time():
         return None
     return row[0]
@@ -65,10 +83,8 @@ def take(kind, key):
 
 def claim(kind, key, ttl):
     """'내가 처음인가?'를 원자적으로 판정한다.
-    처음이면 True(기록하고), 이미 있으면 False.
-    → 크레딧 이중차감 방지: 같은 (회원, 키워드)로 동시에 둘이 와도
-      INSERT는 한쪽만 성공한다."""
-    with _conn() as c:
+    처음이면 True(기록하고), 이미 있으면 False."""
+    def _f(c):
         _sweep(c)
         try:
             c.execute("INSERT INTO kv (kind, k, v, exp) VALUES (?,?,?,?)",
@@ -76,26 +92,27 @@ def claim(kind, key, ttl):
             return True
         except sqlite3.IntegrityError:
             return False
+    return _run(_f)
 
 
 def drop(kind, key):
     """기록 취소 (과금 실패했을 때 자리를 되돌려 준다)."""
-    with _conn() as c:
-        c.execute("DELETE FROM kv WHERE kind=? AND k=?", (kind, str(key)))
+    _run(lambda c: c.execute("DELETE FROM kv WHERE kind=? AND k=?",
+                             (kind, str(key))))
 
 
 def get(kind, key):
     """지우지 않고 읽는다. 없거나 만료면 None."""
-    with _conn() as c:
-        row = c.execute("SELECT v, exp FROM kv WHERE kind=? AND k=?",
-                        (kind, str(key))).fetchone()
+    row = _run(lambda c: c.execute(
+        "SELECT v, exp FROM kv WHERE kind=? AND k=?",
+        (kind, str(key))).fetchone())
     if not row or row[1] < time.time():
         return None
     return row[0]
 
 
 def has(kind, key):
-    with _conn() as c:
-        row = c.execute("SELECT exp FROM kv WHERE kind=? AND k=?",
-                        (kind, str(key))).fetchone()
+    row = _run(lambda c: c.execute(
+        "SELECT exp FROM kv WHERE kind=? AND k=?",
+        (kind, str(key))).fetchone())
     return bool(row) and row[0] >= time.time()
