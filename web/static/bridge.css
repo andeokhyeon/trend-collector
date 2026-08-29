@@ -265,3 +265,37 @@ body.stApp {
 @media (max-width: 700px) {
   .mast-guide { display: none; }   /* 모바일 상단은 좁다 — 가이드는 로그인 상자에서 */
 }
+
+/* ============================================================
+   AI 진단 보기 버튼 (2026-08-29) — 크게, 세련되게
+   ============================================================ */
+.kh-ai-cta {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  margin: 22px auto 6px; padding: 22px 26px; max-width: 560px;
+  background: linear-gradient(135deg, #1A56DB 0%, #3B82F6 55%, #6366F1 100%);
+  border-radius: 16px; text-decoration: none !important;
+  box-shadow: 0 10px 26px rgba(26, 86, 219, .28);
+  transition: transform .15s ease, box-shadow .15s ease;
+  position: relative; overflow: hidden;
+}
+.kh-ai-cta::after {                 /* 은은한 하이라이트 */
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(120% 90% at 18% 0%, rgba(255,255,255,.22), transparent 55%);
+  pointer-events: none;
+}
+.kh-ai-cta:hover { transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(26, 86, 219, .36); }
+.kh-ai-badge {
+  font-size: .68rem; font-weight: 800; letter-spacing: .14em;
+  color: #DBEafe; border: 1px solid rgba(255,255,255,.45);
+  border-radius: 999px; padding: 3px 12px;
+}
+.kh-ai-main { color: #fff; font-size: 1.22rem; font-weight: 800;
+  letter-spacing: -.02em; }
+.kh-ai-sub { color: rgba(255,255,255,.85); font-size: .84rem;
+  text-align: center; line-height: 1.5; }
+.kh-ai-sub b { color: #fff; }
+@media (max-width: 640px) {
+  .kh-ai-cta { padding: 18px 16px; margin-top: 16px; }
+  .kh-ai-main { font-size: 1.08rem; }
+}

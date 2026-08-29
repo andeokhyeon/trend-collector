@@ -240,7 +240,7 @@ def _safe(build, *a, **k):
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, q: str = "", rank: int = 0,
-         contains: int = 1, min: int = 0):
+         contains: int = 1, min: int = 0, ai: int = 0):
     result_html = ""
     q = _clean_kw(q)
     if q:
@@ -256,7 +256,7 @@ def home(request: Request, q: str = "", rank: int = 0,
                 import analyze
                 result_html = _safe(analyze.build, q, rank=bool(rank),
                                     only_contains=bool(contains), min_vol=min,
-                                    my_blog_id=_blog_of(request))
+                                    my_blog_id=_blog_of(request), ai=bool(ai))
     return _page(request, "analyze.html", "/", "/", q, result_html,
                  title=(f"{q} — 키워드 분석" if q else ""))
 
@@ -439,7 +439,8 @@ def logout():
 # 추적기
 # ------------------------------------------------------------
 @app.get("/tracker", response_class=HTMLResponse)
-def tracker_page(request: Request, detail: str = "", flash: str = ""):
+def tracker_page(request: Request, detail: str = "", flash: str = "",
+                 ai: int = 0):
     detail = _clean_kw(detail)
     user = auth.current_user(request)
     if not user:
@@ -447,7 +448,7 @@ def tracker_page(request: Request, detail: str = "", flash: str = ""):
     else:
         import tracker
         html = _safe(tracker.build, user["id"], _blog_of(request),
-                     detail, flash)
+                     detail, flash, ai=bool(ai))
     return _page(request, "discover.html", "/tracker", "", "", html,
                  title="키워드 추적기", subs=[])
 

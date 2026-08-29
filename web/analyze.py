@@ -83,7 +83,7 @@ def _row(cells, ratio=None):
     return f'<div class="row" style="{style}">{inner}</div>'
 
 
-def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id=""):
+def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False):
     """키워드 하나를 재서 화면 HTML을 돌려준다."""
     kw = (kw or "").strip()
     out = []
@@ -200,29 +200,33 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id=""):
             "위쪽 <b>내 블로그</b> 탭에서 주소를 넣으시면, "
             "<b>내 블로그로 이 키워드를 뚫을 수 있는지</b>까지 보여드립니다.", True))
 
-    # --- AI 판단 브리핑 (app.py와 같은 분기) ---
+    # --- AI 판단 브리핑 — 버튼을 눌렀을 때만 만든다 (2026-08-29)
+    #     매 조회마다 클로드를 부르면 느리고 비용도 든다. 원하는 사람만.
     if ai_brief is not None and ai_brief.is_enabled():
-        payload = {kk: r.get(kk) for kk in
-                   ("total_search", "monthly_pc", "monthly_mobile",
-                    "doc_count", "recent_docs", "recent_capped",
-                    "recent_estimated", "comp_ratio", "comp_grade",
-                    "recent_grade", "opportunity", "pl_avg_depth")}
-        try:
-            brief, berr = ai_brief.brief_keyword(kw, payload, None, None, None)
-        except Exception as e:
-            brief, berr = None, str(e)
-        if brief:
-            out.append(render(ui.brief_card, brief, "AI 판단 · 이 키워드 써도 될까"))
+        if not ai:
+            _aq = quote(kw)
+            out.append(
+                f'<a class="kh-ai-cta" id="ai" href="/?q={_aq}&ai=1#ai">'
+                '<span class="kh-ai-badge">AI</span>'
+                '<span class="kh-ai-main">AI 진단 보기</span>'
+                '<span class="kh-ai-sub">측정된 숫자를 읽고 '
+                '&lsquo;써라 / 조건부 / 피해라&rsquo;를 근거와 함께 알려드립니다</span></a>')
         else:
-            out.append(render(ui.note,
-                              f"판단 브리핑을 만들지 못했습니다. <small>{berr}</small>"))
-    else:
-        out.append(render(
-            ui.note,
-            "<b>AI 판단 브리핑</b>을 켜려면 <code>ai_brief.py</code>의 "
-            "<code>ANTHROPIC_API_KEY</code>에 키를 넣어주세요. "
-            "측정된 숫자를 읽고 '써라 / 조건부 / 피해라'를 근거와 함께 알려줍니다.",
-            True))
+            payload = {kk: r.get(kk) for kk in
+                       ("total_search", "monthly_pc", "monthly_mobile",
+                        "doc_count", "recent_docs", "recent_capped",
+                        "recent_estimated", "comp_ratio", "comp_grade",
+                        "recent_grade", "opportunity", "pl_avg_depth")}
+            try:
+                brief, berr = ai_brief.brief_keyword(kw, payload, None, None, None)
+            except Exception as e:
+                brief, berr = None, str(e)
+            if brief:
+                out.append('<div id="ai"></div>')
+                out.append(render(ui.brief_card, brief, "AI 판단 · 이 키워드 써도 될까"))
+            else:
+                out.append(render(ui.note,
+                                  f"판단 브리핑을 만들지 못했습니다. <small>{berr}</small>"))
 
     rel = r.get("related", [])
     qkw = quote(kw)

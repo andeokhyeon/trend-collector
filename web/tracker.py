@@ -185,7 +185,7 @@ def _detail(summary, hdf, pick):
     return "".join(out)
 
 
-def build(uid, my_blog_id="", detail_kw="", flash=""):
+def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
     out = [render(ui.section, "키워드 추적기",
                   "저장해두면 순위 변화를 자동으로 기록합니다 · "
                   "최소 하루가 지나야 변화 정보가 제공됩니다")]
@@ -287,10 +287,17 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
         cards.append(f'<div class="tc-cell">{body}{btns}</div>')
     out.append(f'<div class="tc-grid">{"".join(cards)}</div>')
 
-    # --- AI 추적 브리핑 ---
+    # --- AI 추적 브리핑 — 버튼을 눌렀을 때만 (2026-08-29) ---
     has_record = [x for x in summary if x["records"] > 0]
-    if ai_brief is not None and ai_brief.is_enabled():
-        if has_record:
+    if ai_brief is not None and ai_brief.is_enabled() and has_record:
+        if not ai:
+            out.append(
+                '<a class="kh-ai-cta" id="ai" href="/tracker?ai=1#ai">'
+                '<span class="kh-ai-badge">AI</span>'
+                '<span class="kh-ai-main">AI 진단 보기</span>'
+                '<span class="kh-ai-sub">순위 변화를 읽고 '
+                '<b>지금 어디에 집중할지</b> 알려드립니다</span></a>')
+        else:
             try:
                 tb, terr = ai_brief.brief_tracking([
                     {"keyword": x["keyword"], "first_rank": x["first_rank"],
@@ -301,15 +308,11 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
             except Exception as e:
                 tb, terr = None, str(e)
             if tb:
+                out.append('<div id="ai"></div>')
                 out.append(render(ui.brief_card, tb, "AI 판단 · 지금 어디에 집중할까"))
             elif terr:
                 out.append(render(ui.note,
                                   f"추적 브리핑을 만들지 못했습니다. <small>{terr}</small>"))
-    else:
-        out.append(render(ui.note,
-                          "<code>ai_brief.py</code>에 키를 넣으면 순위 변화를 읽고 "
-                          "<b>무엇에 집중할지</b> 알려주는 브리핑이 여기 표시됩니다.",
-                          True))
 
     if detail_kw and any(x["keyword"] == detail_kw for x in summary):
         # 상세는 팝업(모달)로 띄운다 (2026-08-28 요청) — 닫으면 /tracker로

@@ -80,6 +80,8 @@
     var href = a.getAttribute("href") || "";
     if (a.classList.contains("social-btn") || href.indexOf("/login/") === 0) {
       arm("로그인 중입니다…");
+    } else if (href.indexOf("ai=1") !== -1) {
+      arm("AI가 숫자를 읽고 진단을 쓰는 중입니다…");
     } else if (href.indexOf("rank=1") !== -1) {
       arm("연관 키워드의 문서수를 재는 중입니다…");   // 기회 있는 키워드 보기
     } else if (a.classList.contains("tc-btn")) {
