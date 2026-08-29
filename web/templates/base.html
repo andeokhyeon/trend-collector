@@ -11,9 +11,19 @@
      한글 폰트는 굵기 하나가 수백 조각이라 6종이면 모바일이 무겁고,
      화면도 너무 두꺼워 가독성이 떨어진다는 피드백.
      빠진 굵기는 브라우저가 700으로 대신 그린다. -->
-<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+<!-- ⚠️ 글꼴은 절대 화면을 막지 않는다 (2026-08-29).
+     jsDelivr가 한국에서 느려지면 흰 화면으로 몇십 초를 기다리게 했다.
+     media="print" 트릭: 브라우저가 '지금 필요 없음'으로 보고 비차단으로
+     받아온 뒤, 도착하면 onload로 전체 적용. 그동안은 시스템 글꼴로 그린다. -->
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+      rel="stylesheet" media="print" onload="this.media='all'">
+<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;700&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all'">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all'">
+<noscript>
 <link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;700&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+</noscript>
 <link rel="stylesheet" href="/static/app.css">
 <link rel="stylesheet" href="/static/bridge.css">
 <link rel="stylesheet" href="/static/parity.css">
