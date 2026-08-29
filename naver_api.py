@@ -285,6 +285,16 @@ def _cache_put(key, val):
     return val
 
 
+def _cache_fail(key, val):
+    """실패·빈 응답은 이 프로세스 안에만 잠깐 둔다 (5분).
+
+    ⚠️ 2026-08-29 사고: 서버가 잠깐 앓는 동안 실패한 빈 결과가
+    공용 캐시(24시간)에 저장돼, 복구 후에도 그 키워드들은
+    하루 종일 '자료 없음'으로 나왔다. 실패는 공유하지 않는다."""
+    _CALL_CACHE[_key(key)] = (time.time() - _CACHE_TTL + 300, val)
+    return val
+
+
 def _count_call(n=1):
     """실제로 네이버를 부른 횟수만 기록한다 (캐시로 해결된 건 세지 않는다)."""
     if _shared is not None:
@@ -541,7 +551,7 @@ def get_keyword_data(keyword, related_limit=200):
     path = "/keywordstool"
     hints = _build_hints(keyword)
     if not hints:
-        return _cache_put(ck, _empty())
+        return _cache_fail(ck, _empty())
     try:
         _count_call()
         res = requests.get(NAVER_BASE_URL + path,
@@ -549,10 +559,10 @@ def get_keyword_data(keyword, related_limit=200):
                                    "showDetail": "1"},
                            headers=get_naver_headers("GET", path), timeout=10)
         if res.status_code != 200:
-            return _cache_put(ck, _empty(f"http{res.status_code}"))
+            return _cache_fail(ck, _empty(f"http{res.status_code}"))
         kw_list = res.json().get("keywordList", [])
         if not kw_list:
-            return _cache_put(ck, _empty())
+            return _cache_fail(ck, _empty())
 
         # ⚠️ kw_list[0]이 내가 검색한 키워드라는 보장이 없다.
         # 네이버는 관련도 순으로 돌려주기 때문에 첫 항목이 전혀 다른 키워드일 수 있고,
@@ -614,7 +624,7 @@ def get_keyword_data(keyword, related_limit=200):
         return _cache_put(ck, {"stat": stat, "related": related,
                                "hints": hints, "error": None})
     except Exception as e:
-        return _cache_put(ck, _empty(type(e).__name__))
+        return _cache_fail(ck, _empty(type(e).__name__))
 
 
 def get_blog_stats(keyword, days=30, exact=True, light=False):
