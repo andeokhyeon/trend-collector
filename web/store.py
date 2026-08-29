@@ -84,6 +84,16 @@ def drop(kind, key):
         c.execute("DELETE FROM kv WHERE kind=? AND k=?", (kind, str(key)))
 
 
+def get(kind, key):
+    """지우지 않고 읽는다. 없거나 만료면 None."""
+    with _conn() as c:
+        row = c.execute("SELECT v, exp FROM kv WHERE kind=? AND k=?",
+                        (kind, str(key))).fetchone()
+    if not row or row[1] < time.time():
+        return None
+    return row[0]
+
+
 def has(kind, key):
     with _conn() as c:
         row = c.execute("SELECT exp FROM kv WHERE kind=? AND k=?",

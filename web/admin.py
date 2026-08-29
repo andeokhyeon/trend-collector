@@ -221,7 +221,16 @@ def cost_view():
     (cost, cmsg), (tok, _tmsg) = _cached("claude_cost", 300, _load)
 
     if cost is None:
-        out.append(render(ui.note, cmsg))
+        # ⚠️ 2026-08-29 확인: 개인(Individual) 조직은 콘솔에 Admin 키 발급
+        #    메뉴가 아예 없다 (문서에는 있지만 UI에 없음, 일반 키는 403).
+        #    그리고 지금 서비스는 클로드를 직접 부르는 기능이 없어서
+        #    비용도 발생하지 않는다. 사실대로 안내한다.
+        out.append(render(ui.note,
+                          "자동 조회는 개인 조직에 Admin 키 발급이 열리면 연결됩니다. "
+                          "현재 서비스는 클로드 API를 직접 부르지 않아 비용이 발생하지 "
+                          "않으며, 계정 전체 지출은 "
+                          '<a href="https://platform.claude.com" target="_blank">'
+                          "Claude 콘솔 대시보드</a>에서 확인할 수 있습니다."))
     else:
         s = sum(d["usd"] for d in cost)
         last = cost[-1]["usd"] if cost else 0
@@ -241,9 +250,12 @@ def cost_view():
 
     out.append(render(ui.section, "네이버 사용량", "우리가 직접 센 숫자입니다"))
     out.append(render(ui.note,
-                      "네이버 콘솔은 종류별로 나눠 보여주지 않습니다. "
-                      "여기 숫자는 앱이 부를 때마다 직접 센 것이라 "
-                      "<b>어떤 기능이 한도를 먹는지</b>까지 보입니다."))
+                      "여기 숫자는 앱이 네이버를 부를 때마다 직접 센 <b>전 종류 합계</b>입니다 — "
+                      "자동완성(한도 무관)·데이터랩(제한 없음)·검색광고·블로그 검색을 다 셉니다. "
+                      "네이버 콘솔의 '블로그 N회'는 그중 <b>블로그 검색 하나만</b> 센 숫자라 "
+                      "여기보다 훨씬 작게 보입니다. 25,000 한도가 실제로 걸리는 것도 "
+                      "블로그 검색뿐이니, 콘솔 숫자가 진짜 한도 잔량이고 "
+                      "여기 합계는 '무엇이 얼마나 부르는지' 감을 잡는 용도입니다."))
     if cache is not None:
         u2 = cache.usage()
         out.append(_kpirow([

@@ -8,7 +8,7 @@
 html, body { margin: 0; padding: 0; }
 body.stApp {
   min-height: 100vh;
-  font-family: 'Gothic A1','Pretendard','Noto Sans KR',
+  font-family: 'Pretendard Variable','Pretendard','Gothic A1','Noto Sans KR',
                -apple-system, BlinkMacSystemFont, sans-serif;
   color: #111827;
   -webkit-font-smoothing: antialiased;
@@ -231,6 +231,37 @@ body.stApp {
 }
 .kh-modal-x:hover { background: #E3E8EF; }
 @media (max-width: 640px) {
-  .kh-modal-back { padding: 10px; align-items: flex-end; }
-  .kh-modal { max-height: 92vh; border-radius: 16px 16px 8px 8px; }
+  /* 모바일에서도 화면 가운데 팝업으로 (아래 붙는 게 아니라) */
+  .kh-modal-back { padding: 12px; align-items: center; }
+  .kh-modal { max-height: 88vh; border-radius: 16px; }
+}
+
+/* ============================================================
+   이용 가이드 (2026-08-29)
+   ============================================================ */
+.mast-guide { color: #6B7280 !important; text-decoration: none !important;
+  font-weight: 600; }
+.mast-guide:hover { color: #1A56DB !important; }
+.kh-guide-link { text-align: center; font-size: .9rem; color: #6B7280;
+  margin: 14px 0 0; }
+.kh-guide-link a { color: #1A56DB; font-weight: 600; text-decoration: none; }
+.gd-steps { display: grid; gap: 12px; margin-top: 6px; }
+.gd-step { display: flex; gap: 12px; align-items: flex-start; }
+.gd-n { flex: none; width: 26px; height: 26px; border-radius: 50%;
+  background: #EAF1FD; color: #1A56DB; font-weight: 700; font-size: .85rem;
+  display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.gd-step p { margin: 3px 0 0; font-size: .9rem; color: #4B5563; line-height: 1.6; }
+.gd-card { margin-top: 12px; }
+.gd-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gd-badge { font-size: .72rem; font-weight: 700; color: #1A56DB;
+  background: #EAF1FD; border-radius: 6px; padding: 3px 8px; }
+.gd-head b { font-size: 1rem; }
+.gd-path { font-size: .76rem; color: #8A94A6; background: #F4F6F9;
+  border-radius: 6px; padding: 2px 8px; }
+.gd-what { margin: 10px 0 6px; font-size: .93rem; color: #111827; line-height: 1.65; }
+.gd-how { font-size: .88rem; color: #4B5563; line-height: 1.65; }
+.gd-tip { margin-top: 10px; font-size: .82rem; color: #8A6420;
+  background: #FBF2E1; border-radius: 8px; padding: 8px 12px; }
+@media (max-width: 700px) {
+  .mast-guide { display: none; }   /* 모바일 상단은 좁다 — 가이드는 로그인 상자에서 */
 }

@@ -61,6 +61,9 @@ def build(user, prof, blog_id=""):
 </form>""")
     out.append('</div>')
 
+    out.append('<p class="kh-guide-link" style="text-align:left">'
+               '<a href="/guide">이용 가이드 보기 →</a></p>')
+
     # 로그아웃 — POST 폼 (링크로 하면 미리보기 봇이 눌러버린다)
     out.append(
         '<form method="post" action="/logout" style="margin-top:18px">'

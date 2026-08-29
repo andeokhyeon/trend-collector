@@ -62,6 +62,10 @@ GRADE_TINT = {
     # 골든타임 '판단' 열 — 칩이 없어서 혼자 맨글자로 떠 있었다 (2026-08-28)
     '충분히 노려볼 만함': ('#DCEFE9', '#175247'),
     '쉽지 않음': ('#FAEAE5', '#9E3E28'),
+    # 주간 캘린더 '언제 쓸까' (이모지를 걷어내고 색으로)
+    '지금': ('#FCE7E7', '#9B2C2C'), '곧': ('#FBF2E1', '#8A6420'),
+    '여유': ('#E3F1E4', '#2C6B36'), '안 급함': ('#F1F1EC', '#6B7280'),
+    '신규': ('#E5EDFB', '#1F4590'),
     '보통': ('#FBF2E1', '#8A6420'),
     '지금 몰리는 중': ('#FBF2E1', '#8A6420'), '누적만 반영': ('#FBF2E1', '#8A6420'),
     '새 글 옛 글 섞임': ('#FBF2E1', '#8A6420'),
@@ -85,7 +89,7 @@ GRADE_TINT = {
     '청약': ('#E5EDFB', '#1F4590'),        # 부동산
 }
 
-TINT_COLS = {'검색량', '경쟁률', '진단', '판단', '등급', '종류', '경쟁'}
+TINT_COLS = {'검색량', '경쟁률', '진단', '판단', '등급', '종류', '경쟁', '언제 쓸까'}
 
 
 # 숫자로 다뤄야 하는 컬럼 (오른쪽 정렬 + 등폭 + 천 단위 쉼표)
@@ -167,7 +171,11 @@ def table_html(frame, height=None, center_cols=()):
                              f'<span class="kh-kw" title="{txt}">{txt}</span></td>')
                 continue
             # 등급/진단 계열은 의미별 색 칩으로
-            tint = GRADE_TINT.get(str(row[c])) if c in TINT_COLS else None
+            tint = None
+            if c in TINT_COLS:
+                raw = str(row[c])
+                # '지금 · D-3'처럼 꼬리가 붙어도 앞 낱말로 색을 찾는다
+                tint = GRADE_TINT.get(raw) or GRADE_TINT.get(raw.split(" ·")[0])
             if tint:
                 bg, fg = tint
                 cells.append(f'<td class="{cls(i, c)}"><span class="kh-chip" '

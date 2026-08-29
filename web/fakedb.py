@@ -76,6 +76,8 @@ class Q:
         return self
     def order(self, *a, **k): return self
     def gte(self, *a, **k): return self
+    def in_(self, *a, **k): return self
+    def is_(self, *a, **k): return self
     def eq(self, col=None, val=None, *a, **k):
         if not hasattr(self, "_eq"): self._eq = {}
         if col is not None: self._eq[col] = val

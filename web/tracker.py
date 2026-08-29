@@ -20,7 +20,17 @@ except Exception:
 
 
 def load_tracking(uid):
-    """추적 목록 + 90일 기록. (회원별 — 남의 목록이 섞이면 안 된다)"""
+    """추적 목록 + 90일 기록. (회원별 — 남의 목록이 섞이면 안 된다)
+
+    ⚠️ 매번 Supabase 왕복 2번이 탭 열기·상세·닫기를 다 느리게 했다
+    (2026-08-29). 60초 캐시하되, 추가·중단 때 store의 판이 바뀌므로
+    바뀐 즉시 어느 워커든 새로 읽는다."""
+    import store
+    ver = store.get("trackver", uid) or "0"
+    return db._memo(("track", uid, ver), 60, lambda: _load_tracking(uid))
+
+
+def _load_tracking(uid):
     sb = db.client()
     try:
         q = sb.table("tracked_keywords").select("*")
@@ -35,8 +45,14 @@ def load_tracking(uid):
         except Exception:
             tk = (sb.table("tracked_keywords").select("*")
                   .order("created_at", desc=True).execute().data or [])
+        if not tk:
+            return [], [], None      # 추적이 없으면 기록 조회도 안 한다
         since = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        # ⚠️ 예전엔 전 회원 90일치를 통째로 받아왔다 — 회원·기록이 늘수록
+        #    탭 열기가 느려지는 구조 (2026-08-29 딜레이 제보). 내 키워드만 받는다.
+        kws = list({x["keyword"] for x in tk})
         hist = (sb.table("tracking_history").select("*")
+                .in_("keyword", kws)
                 .gte("created_at", since).order("created_at").execute().data or [])
         return tk, hist, None
     except Exception as e:
@@ -178,7 +194,8 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
                           "블로그를 등록하면 <b>내 글의 순위 변화</b>까지 함께 기록합니다. "
                           "등록하지 않아도 검색량·문서수 변화는 추적됩니다.", True))
     if flash:
-        out.append(f'<div class="kh-flash">{flash}</div>')
+        from html import escape as _esc
+        out.append(f'<div class="kh-flash">{_esc(flash)}</div>')
 
     # --- 추가 폼 ---
     out.append('''
@@ -296,9 +313,14 @@ def build(uid, my_blog_id="", detail_kw="", flash=""):
 
     if detail_kw and any(x["keyword"] == detail_kw for x in summary):
         # 상세는 팝업(모달)로 띄운다 (2026-08-28 요청) — 닫으면 /tracker로
-        out.append('<div class="kh-modal-back" id="detail">'
-                   '<div class="kh-modal">'
-                   '<a class="kh-modal-x" href="/tracker" title="닫기">✕</a>'
-                   + _detail(summary, hdf, detail_kw)
-                   + '</div></div>')
+        out.append(
+            '<div class="kh-modal-back" id="detail" '
+            'onclick="if(event.target===this){this.remove();'
+            'history.replaceState(null,\'\',\'/tracker\');}">'
+            '<div class="kh-modal">'
+            '<a class="kh-modal-x" href="/tracker" title="닫기" '
+            'onclick="this.closest(\'.kh-modal-back\').remove();'
+            'history.replaceState(null,\'\',\'/tracker\');return false;">✕</a>'
+            + _detail(summary, hdf, detail_kw)
+            + '</div></div>')
     return "".join(out)

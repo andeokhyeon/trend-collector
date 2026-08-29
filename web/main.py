@@ -39,6 +39,47 @@ import auth
 
 app = FastAPI(title="키워드 헌터")
 auth.init()
+
+
+# 쿠키에 Secure를 붙일지 — 프록시 뒤에서는 request.url.scheme이 http로
+# 보이므로 주소 설정(SITE_URL)로 판단한다.
+def _is_https():
+    try:
+        from config import SITE_URL
+        return str(os.environ.get("KH_SITE") or SITE_URL or "").startswith("https")
+    except Exception:
+        return False
+
+
+_SECURE = None
+
+
+def _secure():
+    global _SECURE
+    if _SECURE is None:
+        _SECURE = _is_https()
+    return _SECURE
+
+
+import re as _re
+
+
+def _clean_kw(s, limit=60):
+    """키워드 입력 소독 — 꺾쇠·따옴표류는 키워드에 있을 일이 없고,
+    화면에 그대로 그려지는 경로가 많아 원천에서 걷어낸다 (XSS 방지)."""
+    s = (s or "").strip()[:limit]
+    return _re.sub(r'[<>"\'`\\]', "", s)
+
+
+@app.middleware("http")
+async def _sec_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy",
+                            "camera=(), microphone=(), geolocation=()")
+    return resp
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")),
           name="static")
 tpl = Jinja2Templates(directory=os.path.join(HERE, "templates"))
@@ -168,6 +209,8 @@ def _login_box(next_path):
         items.append((pid, f"{label}로 시작하기",
                       f"/login/{pid}?next={quote(next_path)}"))
     out.append(render(ui.social_links, items))
+    out.append('<p class="kh-guide-link">처음이신가요? '
+               '<a href="/guide">이용 가이드 3분 읽기 →</a></p>')
     return "".join(out)
 
 
@@ -196,7 +239,7 @@ def _safe(build, *a, **k):
 def home(request: Request, q: str = "", rank: int = 0,
          contains: int = 1, min: int = 0):
     result_html = ""
-    q = q.strip()
+    q = _clean_kw(q)
     if q:
         user = auth.current_user(request)
         if not user:
@@ -241,6 +284,7 @@ def _spend(user, kw):
 @app.get("/serp", response_class=HTMLResponse)
 def serp_page(request: Request, q: str = "", sort: str = "sim"):
     import serp
+    q = _clean_kw(q)
     user = auth.current_user(request) if q.strip() else None
     if q.strip() and not user:
         result_html = _login_box(f"/serp?q={q.strip()}")
@@ -258,6 +302,7 @@ def serp_page(request: Request, q: str = "", sort: str = "sim"):
 @app.get("/ideas", response_class=HTMLResponse)
 def ideas_page(request: Request, q: str = ""):
     import ideas
+    q = _clean_kw(q)
     user = auth.current_user(request) if q.strip() else None
     if q.strip() and not user:
         result_html = _login_box(f"/ideas?q={q.strip()}")
@@ -287,19 +332,62 @@ def login_start(provider: str, next: str = "/"):
 @app.get("/auth/cb")
 def auth_cb(request: Request, code: str = "", vid: str = "", next: str = "/",
             error: str = "", error_description: str = ""):
+    """카카오/구글에서 돌아오는 문.
+
+    ⚠️ 코드→세션 교환은 수 초 걸릴 수 있는데, 그동안 흰 화면이 떠서
+    '멈췄나?' 싶다는 제보 (2026-08-29). 그래서 두 단계로 쪼갠다:
+    여기서는 도넛 화면을 즉시 보여주고, 무거운 교환은
+    화면이 스스로 제출하는 /auth/finish 에서 한다."""
     if error:
         return HTMLResponse(
             f"<p>로그인이 거절됐습니다. ({error} — {error_description})</p>"
             f'<p><a href="/">돌아가기</a></p>', status_code=400)
+    if not code:
+        return HTMLResponse("<p>로그인 정보를 받지 못했습니다.</p>"
+                            "<p><a href='/'>돌아가기</a></p>", status_code=400)
+    from html import escape as _esc
+    body = f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>로그인 중 · 키워드 헌터</title><style>
+body{{margin:0;min-height:100vh;display:flex;flex-direction:column;
+align-items:center;justify-content:center;gap:14px;
+font-family:'Gothic A1',sans-serif;background:#fff;color:#374151}}
+.d{{width:44px;height:44px;border-radius:50%;border:5px solid #E3E8EF;
+border-top-color:#1A56DB;animation:s .8s linear infinite}}
+@keyframes s{{to{{transform:rotate(360deg)}}}}
+p{{font-size:.95rem;font-weight:700}}</style></head><body>
+<div class="d"></div><p>로그인 확인 중입니다…</p>
+<form id="f" method="post" action="/auth/finish">
+<input type="hidden" name="code" value="{_esc(code)}">
+<input type="hidden" name="vid" value="{_esc(vid)}">
+<input type="hidden" name="next" value="{_esc(next or '/')}">
+<noscript><button type="submit">계속하기</button></noscript></form>
+<script>document.getElementById("f").submit();</script></body></html>"""
+    return HTMLResponse(body)
+
+
+@app.post("/auth/finish")
+def auth_finish(request: Request, code: str = Form(""), vid: str = Form(""),
+                next: str = Form("/")):
     tok, msg = auth.finish_oauth(code, vid)
     if not tok:
         return HTMLResponse(f"<p>{msg}</p><p><a href='/'>돌아가기</a></p>",
                             status_code=400)
-    resp = RedirectResponse(next or "/", status_code=302)
+    # 열린 곳으로만 돌려보낸다 (밖의 주소를 넣어 보내는 장난 방지)
+    dest = next if (next or "").startswith("/") else "/"
+    resp = RedirectResponse(dest, status_code=303)
     resp.set_cookie(auth.COOKIE, tok, max_age=14 * 86400,
                     httponly=True, samesite="lax",
-                    secure=request.url.scheme == "https")
+                    secure=_secure())
     return resp
+
+
+@app.get("/guide", response_class=HTMLResponse)
+def guide_page(request: Request):
+    import guide
+    html = _safe(guide.build, bool(auth.current_user(request)))
+    return _page(request, "discover.html", "", "", "", html,
+                 title="이용 가이드", subs=[])
 
 
 @app.get("/me", response_class=HTMLResponse)
@@ -349,6 +437,7 @@ def logout():
 # ------------------------------------------------------------
 @app.get("/tracker", response_class=HTMLResponse)
 def tracker_page(request: Request, detail: str = "", flash: str = ""):
+    detail = _clean_kw(detail)
     user = auth.current_user(request)
     if not user:
         html = _login_box("/tracker")
@@ -363,6 +452,7 @@ def tracker_page(request: Request, detail: str = "", flash: str = ""):
 @app.post("/tracker/add")
 def tracker_add(request: Request, kw: str = Form(""), wrote: str = Form("")):
     user = auth.current_user(request)
+    kw = _clean_kw(kw)
     if user and kw.strip():
         import db as _db
         row = {"keyword": kw.strip(), "blog_id": _blog_of(request) or "",
@@ -376,17 +466,27 @@ def tracker_add(request: Request, kw: str = Form(""), wrote: str = Form("")):
                     _db.client().table("tracked_keywords").insert(row).execute()
                 except Exception:
                     pass
+        _track_dirty(user["id"])
     return RedirectResponse("/tracker", status_code=303)
+
+
+def _track_dirty(uid):
+    """추적 목록이 바뀌었다는 신호 — 어느 워커의 캐시든 다음 요청에 새로 읽는다."""
+    import time as _t
+    import store
+    store.put("trackver", uid, str(_t.time()), ttl=7 * 86400)
 
 
 @app.post("/tracker/stop")
 def tracker_stop(request: Request, id: str = Form(""), kw: str = Form("")):
-    if auth.current_user(request) and id:
+    user = auth.current_user(request)
+    if user and id:
         import db as _db
         try:
             _db.client().table("tracked_keywords").delete().eq("id", id).execute()
         except Exception:
             pass
+        _track_dirty(user["id"])
     return RedirectResponse("/tracker", status_code=303)
 
 
@@ -403,6 +503,7 @@ def tracker_flip(request: Request, id: str = Form("")):
                 {"has_post": not bool(cur.get("has_post"))}).eq("id", id).execute()
         except Exception:
             pass
+        _track_dirty(user["id"])
     return RedirectResponse("/tracker", status_code=303)
 
 
@@ -498,7 +599,7 @@ def manage_login(request: Request, pw: str = Form("")):
         resp = RedirectResponse("/manage", status_code=303)
         resp.set_cookie(ADMIN_COOKIE, accounts.make_token("pw-admin", days=0.5),
                         max_age=12 * 3600, httponly=True, samesite="lax",
-                        secure=request.url.scheme == "https")
+                        secure=_secure())
         return resp
     return RedirectResponse("/manage?wrong=1", status_code=303)
 
@@ -558,6 +659,12 @@ def manage_csv(request: Request):
 def discover_page(request: Request, v: str = "trend", p: str = "",
                   t: str = "파생 키워드"):
     import discover
+    # 2026-08-29: 발굴 탭도 회원 전용 — 여기 데이터가 이 서비스의 알맹이다
+    if not auth.current_user(request):
+        subs0 = [(name, f"/discover?v={key}") for name, key in SUB_DISCOVER]
+        return _page(request, "discover.html", "/discover", f"/discover?v={v}",
+                     "", _login_box(f"/discover?v={v}"),
+                     title="키워드 발굴", subs=subs0)
     if v == "golden":
         html = _safe(discover.build_golden, p or "일별", t)
     elif v == "weekly":
@@ -602,7 +709,7 @@ def _csv_gate(request, q):
 @app.get("/csv/rel")
 def csv_rel(request: Request, q: str = "", contains: int = 1, min: int = 0):
     import pandas as pd
-    q = q.strip()
+    q = _clean_kw(q)
     if not q:
         return RedirectResponse("/", status_code=303)
     blocked = _csv_gate(request, q)
@@ -628,7 +735,7 @@ def csv_rel(request: Request, q: str = "", contains: int = 1, min: int = 0):
 def csv_rank(request: Request, q: str = ""):
     import pandas as pd
     import analyze as _an
-    q = q.strip()
+    q = _clean_kw(q)
     if not q:
         return RedirectResponse("/", status_code=303)
     blocked = _csv_gate(request, q)

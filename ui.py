@@ -1544,7 +1544,7 @@ word-break: normal !important;
 /* ================= 첫 화면 히어로 ================= */
 .hero {{ text-align:center; padding: 30px 10px 22px; }}
 .hero-h {{
-font-family:'Gothic A1','Pretendard',sans-serif;
+font-family:'Pretendard Variable','Pretendard','Gothic A1',sans-serif;
 font-size: clamp(1.9rem, 5.4vw, 3.2rem); font-weight: 900;
 letter-spacing: -.035em; line-height: 1.22; color: {INK}; margin: 0;
 }}
@@ -1598,7 +1598,7 @@ display: flex; gap: 10px; margin: 4px 0 2px; flex-wrap: wrap;
 .social-btn {{
 flex: 1 1 200px; display: flex; align-items: center; justify-content: center;
 gap: 8px; height: 48px; border-radius: 10px; text-decoration: none !important;
-font-family: 'Gothic A1','Pretendard',sans-serif;
+font-family: 'Pretendard Variable','Pretendard','Gothic A1',sans-serif;
 font-weight: 800; font-size: .98rem; letter-spacing: -.02em;
 border: 1px solid transparent; transition: filter .12s, box-shadow .12s;
 }}
@@ -1611,7 +1611,7 @@ background: #FFFFFF; color: #3C4043 !important; border-color: #DADCE0;
 /* 탭 첫머리 한 방 문구 — 히어로와 같은 어법, 크기만 한 단계 아래 */
 .pitch {{ margin: 2px 0 16px; }}
 .pitch-h {{
-font-family:'Gothic A1','Pretendard',sans-serif;
+font-family:'Pretendard Variable','Pretendard','Gothic A1',sans-serif;
 font-size: clamp(1.22rem, 2.9vw, 1.72rem); font-weight: 900;
 letter-spacing: -.03em; line-height: 1.34; color: {INK};
 }}
@@ -1852,6 +1852,71 @@ border-color: {LINE} !important; background: transparent !important;
 .st-key-discover_reload .stButton button:hover {{
 color: {DEEP} !important; border-color: {DEEP} !important;
 }}
+/* ============================================================
+   C 톤 — 프로덕트 톤 (2026-08-29)
+   '대학생 과제 같다'는 피드백에 대한 답.
+   · 종이(회색 바탕) 위에 흰 카드 — 위계가 눈에 잡히게
+   · 포인트는 파랑 하나. 금색은 '내 글' 표시에만 남긴다
+   · 선·모서리·간격 통일. 요란한 그림자·이모지 제거
+   맨 뒤에 두어 앞의 모든 규칙을 이긴다.
+   ============================================================ */
+body.stApp, .stApp {{ background: #F6F7F9 !important; }}
+.block-container {{ max-width: 1180px; }}
+/* 카드류 — 흰 종이 + 옅은 헤어라인 */
+.box, .kpi, .kh-tw, .search-box, .chart-box, .track-card,
+.outline-card, .note, .kh-modal, .brief-box {{
+background: #FFFFFF;
+border-color: #E6E8EC;
+}}
+.note {{ border: 1px solid #E6E8EC; border-left: 3px solid #1A56DB; }}
+.note-gold {{ border-left-color: #C8963E; }}
+/* 위계 — 눈썹줄·제목 */
+.eyebrow {{
+font-size: .72rem; font-weight: 700; letter-spacing: .08em;
+color: #8A94A6; text-transform: uppercase;
+}}
+.section-title {{ font-size: 1.04rem; font-weight: 700; color: #111827; }}
+/* KPI — 숫자가 주인공 */
+.kpi {{ border-radius: 12px; padding: 15px 17px 13px; }}
+.kpi-label {{ font-size: .76rem; font-weight: 600; color: #8A94A6; }}
+.kpi-val {{ font-size: 1.42rem; font-weight: 700; letter-spacing: -.02em; }}
+/* 표 — 머리글을 낮추고 줄에 호흡 */
+.kh-t th {{
+background: #FAFBFC; color: #8A94A6; font-size: .72rem;
+letter-spacing: .04em;
+}}
+.kh-t th.kh-key {{ background: #FAFBFC; }}
+.kh-t tbody tr:hover td {{ background: #F7FAFF; }}
+.kh-t tbody tr:hover td.kh-key {{ background: #F7FAFF; }}
+/* 알약(필터) — 흰 알약, 선택은 옅은 파랑 */
+.kh-pill {{
+background: #FFFFFF; border: 1px solid #E4E7EC; color: #55606D;
+box-shadow: none;
+}}
+.kh-pill:hover {{ border-color: #B9C4D4; color: #111827; }}
+.kh-pill.on {{
+background: #EAF1FD; border-color: transparent; color: #1A56DB;
+font-weight: 700;
+}}
+/* 히어로 — 크기를 한 단계 낮추고 무게는 700까지만 */
+.hero-h {{ font-weight: 700 !important; letter-spacing: -.035em; }}
+/* 마스트헤드 — 금색 줄 제거, 여백 정리 */
+.masthead .rule {{ background: #1A56DB; width: 28px; height: 2px; }}
+.mast-meta {{ color: #98A2B3; }}
+/* 버튼 반경 통일 */
+.stButton button, .kh-btn {{ border-radius: 10px; }}
+/* 하위 탭 알약도 같은 결로 */
+[role="tabpanel"] [role="tab"] {{ background: #FFFFFF !important;
+border: 1px solid #E4E7EC !important; }}
+[role="tabpanel"] [role="tab"]:hover {{ background: #F4F6F9 !important;
+border-color: #B9C4D4 !important; }}
+[role="tabpanel"] [role="tab"][aria-selected="true"] {{
+background: #EAF1FD !important; border-color: transparent !important; }}
+/* 검색 상자 — 카드 톤 통일 */
+.search-box {{ border-radius: 12px; }}
+.stTextInput input {{ border: 1px solid #E4E7EC; border-radius: 10px; }}
+.stTextInput input:focus {{ border-color: #1A56DB;
+box-shadow: 0 0 0 3px rgba(26,86,219,.12); }}
 </style>"""
     return "\n".join(ln for ln in _css.splitlines() if ln.strip())
 

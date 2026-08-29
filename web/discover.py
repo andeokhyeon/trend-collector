@@ -141,11 +141,11 @@ def build_golden(period="일별", part="파생 키워드"):
         if money_first and '황금 점수' in golden.columns:
             extra = [('황금 점수', '황금 점수'), ('광고단가', '광고단가')] + extra
             sort = '황금 점수'
-        parts = ["🔍 파생 키워드", "🔥 오늘 트렌드", "전체"]
+        parts = ["파생 키워드", "오늘 트렌드", "전체"]
         chosen = part if part in ("파생 키워드", "오늘 트렌드", "전체") else "파생 키워드"
         pill = ['<div class="kh-filter">']
         for p in parts:
-            plain = p.split(" ", 1)[-1] if p[0] in "🔍🔥" else p
+            plain = p
             cls = "kh-pill on" if plain == chosen else "kh-pill"
             pill.append(f'<a class="{cls}" href="/discover?v=golden'
                         f'&p={quote(period)}&t={quote(plain)}">{p}</a>')
@@ -189,12 +189,13 @@ def build_weekly():
                 "lead": int(float(getattr(r_, 'comp_ratio', 0) or 7)),
                 "days_left": (r_.d - today).days,
             }
-        VERDICT = {"now": "🔴 지금", "soon": "🟡 곧",
-                   "later": "🟢 여유", "flat": "⚪ 안 급함"}
+        # 이모지 대신 색 라벨(표의 색칩)로 — 차분하게 (2026-08-29)
+        VERDICT = {"now": "지금", "soon": "곧",
+                   "later": "여유", "flat": "안 급함"}
 
         def lift_cols(name, kind):
             if kind == '청약':
-                return "신규", "🟢 여유"
+                return "신규", "여유"
             v = lifts.get(str(name))
             if not v:
                 return "—", "—"
