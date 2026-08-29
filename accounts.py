@@ -241,15 +241,30 @@ def ensure_profile(user):
 # ------------------------------------------------------------
 # 프로필 · 크레딧
 # ------------------------------------------------------------
-def profile(uid):
-    """회원 한 명의 프로필. 없으면 None."""
+_prof_cache = {}                      # uid -> (시각, 프로필)
+
+
+def profile(uid, fresh=False):
+    """회원 한 명의 프로필. 없으면 None.
+
+    ⚠️ 2026-08-29: 화면 하나 그릴 때마다 이걸 2~3번 불렀고, DB가
+    느려진 날엔 그 왕복이 페이지를 몇 초씩 잡아먹었다. 20초만 기억한다.
+    (크레딧 차감 직후처럼 정확해야 하는 곳은 fresh=True로 바로 읽는다)"""
     if not ready() or not uid:
         return None
+    now = time.time()
+    hit = _prof_cache.get(uid)
+    if not fresh and hit and now - hit[0] < 20:
+        return hit[1]
     try:
         r = _sb.table("profiles").select("*").eq("id", uid).limit(1).execute()
-        return (r.data or [None])[0]
+        p = (r.data or [None])[0]
+        if len(_prof_cache) > 500:
+            _prof_cache.clear()
+        _prof_cache[uid] = (now, p)
+        return p
     except Exception:
-        return None
+        return hit[1] if hit else None    # 못 읽으면 최근 값이라도
 
 
 def credits(uid):
@@ -283,6 +298,8 @@ def spend(uid, n=ANALYZE_COST, reason="analyze", keyword=""):
             "user_id": uid, "delta": -n, "reason": reason,
             "keyword": keyword or None, "balance": new,
         }).execute()
+        p2 = dict(p); p2["credits"] = new
+        _prof_cache[uid] = (time.time(), p2)   # 상단 크레딧 표시 즉시 반영
     except Exception:
         return True, left, ""         # 기록에 실패해도 사용은 막지 않는다
     return True, new, ""

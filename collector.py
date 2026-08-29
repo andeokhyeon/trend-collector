@@ -1314,6 +1314,16 @@ def main():
     except Exception:
         pass
 
+    # ⚠️ 2026-08-29: api_cache가 무한정 쌓여 Supabase 전체를 느리게 만들었다.
+    #    수집이 끝날 때마다 이틀 지난 캐시를 지운다.
+    try:
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        supabase.table("api_cache").delete().lt("created_at", cutoff).execute()
+        print("🧹 이틀 지난 공용 캐시 청소 완료")
+    except Exception as e:
+        print(f"⚠️ 캐시 청소 실패(무시): {e}")
+
     print("\n🎉 전체 수집 프로세스 종료")
 
 
