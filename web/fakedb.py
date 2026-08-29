@@ -103,6 +103,13 @@ class Q:
         if self.t == "tracked_keywords": return Res(_tracked())
         if self.t == "tracking_history": return Res(_history())
         if self.t == "profiles":
+            if getattr(self, "_ins", None) is not None:
+                row = dict(self._ins); self._ins = None
+                PROFILES[row["id"]] = {"plan": "free", "credits": 3,
+                                       "is_admin": False, "last_seen": None,
+                                       "created_at": "2026-08-29T00:00:00Z",
+                                       **row}
+                return Res([row])
             if getattr(self, "_upd", None) is not None:
                 for pid in (self._eq.get("id"),) if self._eq.get("id") else PROFILES:
                     if pid in PROFILES: PROFILES[pid].update(self._upd)

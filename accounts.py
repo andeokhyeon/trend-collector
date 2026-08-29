@@ -212,6 +212,32 @@ def _touch(uid):
         pass
 
 
+def ensure_profile(user):
+    """로그인은 됐는데 profiles 행이 없는 계정을 복구한다.
+
+    ⚠️ 2026-08-29: 실제로 이런 계정이 나왔다 — 가입 트리거가 놓쳤거나
+    트리거를 깔기 전에 만들어진 계정. 프로필이 없으면 이름이 '회원'으로
+    뜨고 크레딧 관리도 안 된다. 로그인에 성공한 순간이 유일하게
+    이메일까지 확실한 때라, 여기서 없는 행을 만들어준다."""
+    try:
+        uid = str(user.id)
+        r = _sb.table("profiles").select("id").eq("id", uid).limit(1).execute()
+        if r.data:
+            return
+        email = getattr(user, "email", "") or ""
+        meta = getattr(user, "user_metadata", None) or {}
+        nick = (meta.get("name") or meta.get("full_name")
+                or meta.get("preferred_username")
+                or (email.split("@")[0] if email else "회원"))
+        _sb.table("profiles").insert({
+            "id": uid, "email": email, "nickname": nick,
+            "plan": "free",
+            "credits": PLANS.get("free", {}).get("credits", 3),
+        }).execute()
+    except Exception:
+        pass                        # 못 만들어도 로그인 자체는 막지 않는다
+
+
 # ------------------------------------------------------------
 # 프로필 · 크레딧
 # ------------------------------------------------------------
@@ -503,6 +529,7 @@ def exchange(code, verifier=None, note=""):
         user = getattr(res, "user", None)
         if user is None:
             return False, "로그인하지 못했습니다.", None
+        ensure_profile(user)
         _touch(user.id)
         return True, "", _pack(user)
     except Exception as e:
