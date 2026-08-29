@@ -47,7 +47,7 @@ def get_naver_stat(keyword):
     params = {"hintKeywords": keyword.strip().replace(" ", ""),
               "showDetail": "1"}
     try:
-        _count_call()
+        _count_call(quota=False)
         res = requests.get(NAVER_BASE_URL + path, params=params, headers=headers, timeout=10)
         if res.status_code == 200:
             kw_list = res.json().get("keywordList", [])
@@ -101,7 +101,7 @@ def get_related_keywords(keyword, limit=15):
               "showDetail": "1"}
     related = []
     try:
-        _count_call()
+        _count_call(quota=False)
         res = requests.get(NAVER_BASE_URL + path, params=params, headers=headers, timeout=10)
         if res.status_code == 200:
             kw_list = res.json().get("keywordList", [])
@@ -295,9 +295,14 @@ def _cache_fail(key, val):
     return val
 
 
-def _count_call(n=1):
-    """실제로 네이버를 부른 횟수만 기록한다 (캐시로 해결된 건 세지 않는다)."""
-    if _shared is not None:
+def _count_call(n=1, quota=True):
+    """네이버 호출 횟수 기록 (캐시로 해결된 건 세지 않는다).
+
+    ⚠️ 2026-08-29: 하루 25,000 한도는 **블로그 검색 API에만** 있다.
+    검색광고(자체 한도 넉넉)·데이터랩(제한 없음)까지 다 세니
+    오후만 되면 가짜로 한도에 걸려 조회가 빈 결과를 냈다.
+    한도 대상(quota=True: 블로그 검색)만 세고, 나머지는 안 센다."""
+    if quota and _shared is not None:
         _shared.add_calls(n)
 
 
@@ -495,7 +500,7 @@ def get_volumes(keywords):
     out = {}
     path = "/keywordstool"
     try:
-        _count_call()
+        _count_call(quota=False)
         res = requests.get(NAVER_BASE_URL + path,
                            params={"hintKeywords": ",".join(words),
                                    "showDetail": "1"},
@@ -553,7 +558,7 @@ def get_keyword_data(keyword, related_limit=200):
     if not hints:
         return _cache_fail(ck, _empty())
     try:
-        _count_call()
+        _count_call(quota=False)
         res = requests.get(NAVER_BASE_URL + path,
                            params={"hintKeywords": ",".join(hints),
                                    "showDetail": "1"},
@@ -2102,7 +2107,7 @@ def get_search_trend(keyword, days=365, time_unit="date", total_search=None):
             "Content-Type": "application/json",
         }
         try:
-            _count_call()
+            _count_call(quota=False)
             res = requests.post(DATALAB_URL, headers=headers,
                                 json=body, timeout=8)
             if res.status_code != 200:
@@ -2197,7 +2202,7 @@ def get_min_bids(keywords, device="PC"):
     path = "/estimate/exposure-minimum-bid/keyword"
     out = {}
     try:
-        _count_call()
+        _count_call(quota=False)
         res = requests.post(
             NAVER_BASE_URL + path,
             headers={**get_naver_headers("POST", path),
