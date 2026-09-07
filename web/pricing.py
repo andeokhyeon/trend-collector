@@ -41,10 +41,9 @@ def build(prof=None, why=""):
         out.append(_plans.upgrade_box(why))
     left = _plans.trial_left_days(prof)
     if trial and left:
-        eb = " (얼리버드 보너스 적용)" if (prof or {}).get("early_bird") else ""
         out.append(render(ui.note,
                           f"지금 <b>프로 체험 중</b>입니다 — 남은 기간 "
-                          f"<b>{left}일</b>{eb}. 체험이 끝나면 무료 플랜으로 "
+                          f"<b>{left}일</b>. 체험이 끝나면 무료 플랜으로 "
                           "돌아갑니다."))
     out.append('<div class="pr-grid">'
                + "".join(_card(k, cur, trial)

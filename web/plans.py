@@ -11,9 +11,9 @@
      그래서 체험이 끝나도 크레딧 원장은 아무 일도 없다.
    · DB에 trial 컬럼이 아직 없어도 사이트는 그대로 돈다 (전부 best-effort).
 
-가입 혜택 (스펙 4항 — Early Bird 100):
-   · 선착순 100명: 프로 체험 37일 (7일 + 얼리버드 보너스 30일)
-   · 이후 가입:    프로 체험 7일
+체험: 가입 시 자동 부여는 하지 않는다 (2026-09-07 결정 — 없앴다).
+   다만 profiles.trial_ends_at에 날짜를 넣으면 그때까지 프로 대우가 되므로,
+   관리자가 이벤트로 특정 회원에게 수동으로 줄 수는 있다.
 """
 import os
 from datetime import datetime, timezone
@@ -35,11 +35,6 @@ PLANS = {
                "track": 100, "csv": True,  "ai": True,
                "blurb": "대량 운영 — 한도 걱정 없이"},
 }
-
-EARLY_BIRD_SEATS = 100      # 선착순 얼리버드 자리
-TRIAL_DAYS = 7              # 기본 체험
-TRIAL_DAYS_EARLY = 37       # 얼리버드 체험 (7 + 30)
-
 
 def install():
     """accounts.PLANS에 4단계 표를 얹는다 — 관리 콘솔 플랜 변경 드롭다운용."""
@@ -92,36 +87,6 @@ def allow_csv(prof):
 
 def track_limit(prof):
     return int(_feat(prof, "track") or 3)
-
-
-# ── 가입 혜택 부여 ──────────────────────────────────────
-def on_login(uid):
-    """로그인할 때마다 부른다 — 체험을 아직 못 받은 계정에 딱 한 번 준다.
-
-    ⚠️ trial_ends_at 컬럼이 아직 없으면 (SQL 미실행) 조용히 지나간다.
-       한 번 값이 들어간 계정은 다시 안 건드린다 — 재로그인으로 연장 불가."""
-    try:
-        import db
-        from datetime import timedelta
-        sb = db.client()
-        row = (sb.table("profiles").select("id, trial_ends_at")
-               .eq("id", uid).limit(1).execute().data or [])
-        if not row or row[0].get("trial_ends_at") is not None:
-            return
-        # 선착순 판정 — 정확한 등수보다 '대략 100번째 안'이면 된다.
-        try:
-            cnt = (sb.table("profiles").select("id", count="exact")
-                   .limit(1).execute().count or 0)
-        except Exception:
-            cnt = EARLY_BIRD_SEATS + 1
-        early = cnt <= EARLY_BIRD_SEATS
-        days = TRIAL_DAYS_EARLY if early else TRIAL_DAYS
-        end = datetime.now(timezone.utc) + timedelta(days=days)
-        sb.table("profiles").update(
-            {"trial_ends_at": end.isoformat(), "early_bird": early}
-        ).eq("id", uid).execute()
-    except Exception:
-        pass
 
 
 # ── 업그레이드 안내 상자 ────────────────────────────────
