@@ -371,3 +371,8 @@ body.stApp {
 .lg-art h3 { font-size: .95rem; margin: 0 0 6px; color: #111827; }
 .lg-art p { margin: 4px 0; font-size: .86rem; color: #4B5563;
   word-break: keep-all; }
+
+/* ⚠️ app.css의 스트림릿 유물 `footer { display:none !important }`가
+   사업자 푸터까지 숨겼다 (2026-09-07 실제 화면에서 발견).
+   더 구체적인 선택자로 되살린다. */
+footer.kh-foot { display: block !important; }
