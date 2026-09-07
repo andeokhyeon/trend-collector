@@ -29,6 +29,12 @@ def init():
         cache.attach(db.client())
     except Exception:
         pass
+    # 플랜 표(무료·베이직·프로·마스터)를 관리 콘솔 드롭다운에도 얹는다.
+    try:
+        import plans
+        plans.install()
+    except Exception:
+        pass
 
 
 def current_user(request):
@@ -59,4 +65,10 @@ def finish_oauth(code, vid):
                                       note="표=%s" % ("있음" if verifier else "없음"))
     if not ok:
         return None, msg
+    # 가입 혜택(프로 체험) — 아직 못 받은 계정에 딱 한 번 준다.
+    try:
+        import plans
+        plans.on_login(user["id"])
+    except Exception:
+        pass
     return accounts.make_token(user["id"]), ""

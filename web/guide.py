@@ -81,7 +81,8 @@ def build(logged_in=False):
     out.append(render(ui.note,
                       "키워드 조회 1회 = 크레딧 1개 · <b>같은 키워드는 그날 다시 봐도 "
                       "무료</b> (분석·상위노출·글감 어디서 봐도 하루 1개만) · "
-                      "가입하면 무료 3회 · 충전(월결제)은 준비 중입니다."))
+                      "가입하면 무료 3회 + 프로 체험 · 플랜별 차이는 "
+                      '<a href="/pricing">요금 안내</a>에서 볼 수 있습니다.'))
     out.append('</div>')
 
     if not logged_in:

@@ -87,6 +87,13 @@ app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")),
           name="static")
 tpl = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 
+# 전 페이지 푸터 — 사업자 정보는 .env에서 (비어 있으면 그 줄은 안 보인다)
+try:
+    import legal as _legal
+    tpl.env.globals["biz"] = _legal.biz()
+except Exception:
+    tpl.env.globals["biz"] = {}
+
 
 def logo_uri():
     """로고를 주소 안에 통째로 박는다 (파일 하나 덜 요청하게)."""
@@ -224,9 +231,8 @@ def _no_credit_box(why=""):
         return (render(ui.pitch, "회원 정보를 확인하지 못했습니다",
                        "다시 로그인해주세요", "")
                 + _login_box("/"))
-    return render(ui.pitch, "크레딧을 다 쓰셨습니다",
-                  "충전하면 이어서 볼 수 있습니다",
-                  "관리자에게 문의하시거나 잠시 후 다시 시도해주세요.")
+    import plans
+    return plans.upgrade_box("credit")
 
 
 def _safe(build, *a, **k):
@@ -253,10 +259,15 @@ def home(request: Request, q: str = "", rank: int = 0,
             if not ok:
                 result_html = _no_credit_box(why)
             else:
+                # AI 진단은 프로부터 — 서버가 지킨다 (주소로 ai=1을 쳐도 막힌다)
+                import plans
+                ai_ok = bool(ai) and plans.allow_ai(_profile(user["id"]))
                 import analyze
                 result_html = _safe(analyze.build, q, rank=bool(rank),
                                     only_contains=bool(contains), min_vol=min,
-                                    my_blog_id=_blog_of(request), ai=bool(ai))
+                                    my_blog_id=_blog_of(request), ai=ai_ok)
+                if ai and not ai_ok:
+                    result_html = plans.upgrade_box("ai") + result_html
     return _page(request, "analyze.html", "/", "/", q, result_html,
                  title=(f"{q} — 키워드 분석" if q else ""))
 
@@ -385,6 +396,69 @@ def auth_finish(request: Request, code: str = Form(""), vid: str = Form(""),
     return resp
 
 
+@app.get("/pricing", response_class=HTMLResponse)
+def pricing_page(request: Request, why: str = ""):
+    import pricing
+    user = auth.current_user(request)
+    prof = _profile(user["id"]) if user else None
+    # why는 화면 문구 선택에만 쓴다 — 정해진 값만 통과
+    why = why if why in ("ai", "csv", "track", "credit") else ""
+    html = _safe(pricing.build, prof, why)
+    return _page(request, "discover.html", "", "", "", html,
+                 title="요금 안내", subs=[])
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page(request: Request):
+    import legal
+    return _page(request, "discover.html", "", "", "",
+                 _safe(legal.build_terms), title="이용약관", subs=[])
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page(request: Request):
+    import legal
+    return _page(request, "discover.html", "", "", "",
+                 _safe(legal.build_privacy), title="개인정보처리방침", subs=[])
+
+
+@app.get("/me/withdraw", response_class=HTMLResponse)
+def withdraw_page(request: Request):
+    user = auth.current_user(request)
+    if not user:
+        return RedirectResponse("/me", status_code=303)
+    import tracker as _tr
+    import wipe
+    try:
+        cnt = len(_tr.load_tracking(user["id"])[0] or [])
+    except Exception:
+        cnt = 0
+    html = _safe(wipe.confirm_page, _profile(user["id"]), cnt)
+    return _page(request, "discover.html", "", "", "", html,
+                 title="회원 탈퇴", subs=[])
+
+
+@app.post("/me/withdraw/confirm")
+def withdraw_confirm(request: Request, agree: str = Form("")):
+    user = auth.current_user(request)
+    if not user:
+        return RedirectResponse("/me", status_code=303)
+    if agree.strip() != "탈퇴":
+        return RedirectResponse("/me/withdraw", status_code=303)
+    import wipe
+    ok, msg = wipe.execute(user["id"])
+    body = (f"<!doctype html><html lang='ko'><head><meta charset='utf-8'>"
+            f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>키워드 헌터</title></head>"
+            f"<body style='font-family:sans-serif;text-align:center;"
+            f"padding:80px 20px'><h2>{msg}</h2>"
+            f"<p><a href='/'>첫 화면으로</a></p></body></html>")
+    resp = HTMLResponse(body)
+    resp.delete_cookie(auth.COOKIE)
+    resp.delete_cookie("kh_blog")
+    return resp
+
+
 @app.get("/guide", response_class=HTMLResponse)
 def guide_page(request: Request):
     import guide
@@ -446,9 +520,13 @@ def tracker_page(request: Request, detail: str = "", flash: str = "",
     if not user:
         html = _login_box("/tracker")
     else:
+        import plans
         import tracker
+        ai_ok = bool(ai) and plans.allow_ai(_profile(user["id"]))
         html = _safe(tracker.build, user["id"], _blog_of(request),
-                     detail, flash, ai=bool(ai))
+                     detail, flash, ai=ai_ok)
+        if ai and not ai_ok:
+            html = plans.upgrade_box("ai") + html
     return _page(request, "discover.html", "/tracker", "", "", html,
                  title="키워드 추적기", subs=[])
 
@@ -458,6 +536,22 @@ def tracker_add(request: Request, kw: str = Form(""), wrote: str = Form("")):
     user = auth.current_user(request)
     kw = _clean_kw(kw)
     if user and kw.strip():
+        # 플랜별 추적 한도 — 서버가 지킨다 (스펙 1항 entitlement)
+        import plans
+        import tracker as _tr
+        from urllib.parse import quote as _q
+        limit = plans.track_limit(_profile(user["id"]))
+        try:
+            # load_tracking은 (목록, 기록, 오류) 세 짝 — 첫 짝이 목록이다
+            cur = len(_tr.load_tracking(user["id"])[0] or [])
+        except Exception:
+            cur = 0
+        if cur >= limit:
+            return RedirectResponse(
+                "/tracker?flash=" + _q(
+                    f"추적은 지금 플랜에서 {limit}개까지예요. "
+                    "요금 안내에서 플랜을 올리면 더 담을 수 있습니다."),
+                status_code=303)
         import db as _db
         row = {"keyword": kw.strip(), "blog_id": _blog_of(request) or "",
                "has_post": bool(wrote), "user_id": user["id"]}
@@ -707,6 +801,10 @@ def _csv_gate(request, q):
         return RedirectResponse(f"/?q={q}", status_code=303)
     if not store.has("charged", _charged_key(user, q)):
         return RedirectResponse(f"/?q={q}", status_code=303)
+    # CSV는 베이직 플랜부터 (체험 중이면 프로 대우라 통과)
+    import plans
+    if not plans.allow_csv(_profile(user["id"])):
+        return RedirectResponse("/pricing?why=csv", status_code=303)
     return None
 
 

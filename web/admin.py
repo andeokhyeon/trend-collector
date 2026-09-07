@@ -38,14 +38,19 @@ def _cached(key, ttl, fn):
 
 
 def clear_members():
-    _memo.pop("members", None)
+    for k in ("members", "members_uu", "members_clog"):
+        _memo.pop(k, None)
 
 
 def _members():
-    return _cached("members", 120, lambda: (
-        accounts.all_members(300),
-        accounts.usage_by_user(7),
-        accounts.recent_credit_log(40)))
+    # ⚠️ 회원 목록은 캐시하지 않는다 (2026-09-05).
+    #    9/1~9/4 서버가 재시작 없이 돌던 사이 목록이 굳어 새 가입자가
+    #    안 보였다. 관리자만 보는 화면이라 매번 읽어도 싸다.
+    #    호출량 집계·크레딧 내역은 무거워서 2분 캐시를 유지한다.
+    return (accounts.all_members(300),
+            _cached("members_uu", 120, lambda: accounts.usage_by_user(7)),
+            _cached("members_clog", 120,
+                    lambda: accounts.recent_credit_log(40)))
 
 
 def login_box(wrong=False):

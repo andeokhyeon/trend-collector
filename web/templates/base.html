@@ -54,6 +54,30 @@
     {% block body %}{% endblock %}
   </div>
 
+  <!-- 사업자 푸터 — 전자상거래·PG 심사 기준 (비어 있는 항목은 표시하지 않는다) -->
+  <footer class="kh-foot">
+    <nav class="kh-foot-links">
+      <a href="/guide">이용 가이드</a><span>·</span>
+      <a href="/pricing">요금 안내</a><span>·</span>
+      <a href="/terms">이용약관</a><span>·</span>
+      <a href="/privacy"><b>개인정보처리방침</b></a>
+    </nav>
+    {% if biz %}
+    <p class="kh-foot-biz">
+      {%- if biz.name %}상호 {{ biz.name }}{% endif -%}
+      {%- if biz.owner %} <i>·</i> 대표 {{ biz.owner }}{% endif -%}
+      {%- if biz.reg %} <i>·</i> 사업자등록번호 {{ biz.reg }}{% endif -%}
+      {%- if biz.mail %} <i>·</i> 통신판매업신고 {{ biz.mail }}{% endif -%}
+    </p>
+    <p class="kh-foot-biz">
+      {%- if biz.addr %}{{ biz.addr }} <i>·</i> {% endif -%}
+      {%- if biz.phone %}고객센터 {{ biz.phone }} <i>·</i> {% endif -%}
+      {%- if biz.email %}{{ biz.email }}{% endif -%}
+    </p>
+    {% endif %}
+    <p class="kh-foot-copy">Copyright © 2026 KeywordHunter. All rights reserved.</p>
+  </footer>
+
 </div>
 
 <!-- 로딩 표시 — 조회·로그인이 2초 넘게 걸리면 도넛을 띄운다 -->

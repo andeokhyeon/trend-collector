@@ -299,3 +299,75 @@ body.stApp {
   .kh-ai-cta { padding: 18px 16px; margin-top: 16px; }
   .kh-ai-main { font-size: 1.08rem; }
 }
+
+/* ── 사업자 푸터 (2026-09-05) ─────────────────────────── */
+.kh-foot { margin: 46px 0 18px; padding-top: 18px;
+  border-top: 1px solid #E6E8EC; text-align: center; }
+.kh-foot-links { display: flex; justify-content: center; flex-wrap: wrap;
+  gap: 8px; font-size: .82rem; margin-bottom: 10px; }
+.kh-foot-links a { color: #6B7280; text-decoration: none; }
+.kh-foot-links a:hover { color: #1A56DB; }
+.kh-foot-links a b { color: #4B5563; font-weight: 700; }
+.kh-foot-links span { color: #D1D5DB; }
+.kh-foot-biz { margin: 2px 0; font-size: .72rem; color: #9CA3AF;
+  line-height: 1.6; word-break: keep-all; }
+.kh-foot-biz i { font-style: normal; color: #D1D5DB; margin: 0 2px; }
+.kh-foot-copy { margin: 8px 0 0; font-size: .72rem; color: #C3C8D0; }
+
+/* ── 요금 안내 (2026-09-05) ───────────────────────────── */
+.pr-grid { display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; margin: 16px 0; }
+.pr-card { position: relative; background: #fff; border: 1px solid #E6E8EC;
+  border-radius: 14px; padding: 20px 16px 16px; }
+.pr-card.pr-cur { border-color: #1A56DB;
+  box-shadow: 0 0 0 3px rgba(26,86,219,.12); }
+.pr-tag { position: absolute; top: -10px; left: 14px; font-size: .68rem;
+  font-weight: 800; border-radius: 999px; padding: 3px 10px; }
+.pr-tag.pr-now { background: #1A56DB; color: #fff; }
+.pr-tag.pr-pop { background: #EEF2FF; color: #4F46E5;
+  border: 1px solid #C7D2FE; }
+.pr-name { font-weight: 800; font-size: 1.02rem; color: #111827; }
+.pr-price { margin-top: 6px; font-size: 1.5rem; font-weight: 800;
+  color: #1A56DB; letter-spacing: -.02em; }
+.pr-per { font-size: .82rem; color: #9CA3AF; font-weight: 600; }
+.pr-blurb { margin: 8px 0 10px; font-size: .8rem; color: #6B7280;
+  line-height: 1.5; word-break: keep-all; }
+.pr-feats { list-style: none; margin: 0; padding: 10px 0 0;
+  border-top: 1px dashed #E6E8EC; }
+.pr-feats li { font-size: .82rem; color: #374151; padding: 4px 0 4px 20px;
+  position: relative; }
+.pr-feats li::before { content: "✓"; position: absolute; left: 2px;
+  color: #1A56DB; font-weight: 800; }
+.pr-feats li .pr-no { color: #C3C8D0; text-decoration: line-through; }
+.pr-feats li:has(.pr-no)::before { content: "—"; color: #D1D5DB; }
+@media (max-width: 760px) {
+  .pr-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 420px) {
+  .pr-grid { grid-template-columns: 1fr; }
+}
+
+/* ── 회원 탈퇴 (2026-09-05) ───────────────────────────── */
+.wd-box { border-left: 4px solid #E02424; }
+.wd-warn { font-size: .95rem; color: #111827; }
+.wd-list { margin: 10px 0 18px; padding-left: 20px; }
+.wd-list li { font-size: .86rem; color: #4B5563; margin: 5px 0;
+  line-height: 1.55; }
+.wd-label { display: block; font-size: .84rem; color: #6B7280;
+  margin-bottom: 6px; }
+.wd-form .stTextInput input { max-width: 220px; }
+.wd-btns { display: flex; gap: 10px; margin-top: 14px; }
+.wd-danger { background: #E02424 !important; border-color: #E02424 !important;
+  color: #fff !important; }
+.wd-danger:hover { background: #C81E1E !important; }
+.me-withdraw { margin-top: 26px; text-align: right; }
+.me-withdraw a { font-size: .74rem; color: #C3C8D0;
+  text-decoration: underline; }
+.me-withdraw a:hover { color: #E02424; }
+
+/* ── 약관·방침 문서 (2026-09-05) ─────────────────────── */
+.lg-doc { line-height: 1.7; }
+.lg-art { margin-bottom: 18px; }
+.lg-art h3 { font-size: .95rem; margin: 0 0 6px; color: #111827; }
+.lg-art p { margin: 4px 0; font-size: .86rem; color: #4B5563;
+  word-break: keep-all; }

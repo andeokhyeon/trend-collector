@@ -28,10 +28,19 @@ def build(user, prof, blog_id=""):
     credits = prof.get("credits")
     joined = _kst(prof.get("created_at")) if prof.get("created_at") else "—"
 
+    # 체험 중이면 플랜 칸에 남은 기간을 보여준다
+    try:
+        import plans as _pl
+        left = _pl.trial_left_days(prof)
+        _eff, _trial = _pl.effective(prof)
+        if _trial and left:
+            plan = f"프로 체험 · {left}일 남음"
+    except Exception:
+        pass
     k1 = render(ui.kpi, "남은 크레딧",
                 f"{int(credits):,}" if credits is not None else "—",
                 "키워드 조회 1회에 1개 · 같은 키워드는 그날 무료")
-    k2 = render(ui.kpi, "플랜", plan, "충전·업그레이드는 준비 중입니다")
+    k2 = render(ui.kpi, "플랜", plan, '<a href="/pricing">요금 안내 보기 →</a>')
     k3 = render(ui.kpi, "가입", joined, "")
     out.append(f'<div class="row" style="grid-template-columns:repeat(3,1fr)">'
                f'<div class="cell">{k1}</div><div class="cell">{k2}</div>'
@@ -68,4 +77,6 @@ def build(user, prof, blog_id=""):
     out.append(
         '<form method="post" action="/logout" style="margin-top:18px">'
         '<button class="kh-btn me-logout" type="submit">로그아웃</button></form>')
+    # 탈퇴 — 일부러 눈에 안 띄게 작게 (파괴적 동작은 구석에)
+    out.append('<p class="me-withdraw"><a href="/me/withdraw">회원 탈퇴</a></p>')
     return "".join(out)
