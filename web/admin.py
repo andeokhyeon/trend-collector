@@ -64,7 +64,7 @@ def login_box(wrong=False):
         out.append('<div class="note" style="border-left-color:#E02424">'
                    '비밀번호가 맞지 않습니다.</div>')
     out.append('''
-<form class="search-box" method="post" action="/manage/login" style="max-width:460px">
+<form class="search-box" method="post" action="/admin/login" style="max-width:460px">
   <div class="stTextInput"><input type="password" name="pw" placeholder="비밀번호"></div>
   <div class="stButton kh-primary"><button type="submit">확인</button></div>
 </form>''')
@@ -76,8 +76,8 @@ def _subnav(view):
     out = ['<div class="kh-filter" style="margin-bottom:14px">']
     for name, key in tabs:
         cls = "kh-pill on" if key == view else "kh-pill"
-        out.append(f'<a class="{cls}" href="/manage?view={key}">{name}</a>')
-    out.append('''<form method="post" action="/manage/lock" style="margin-left:auto">
+        out.append(f'<a class="{cls}" href="/admin?view={key}">{name}</a>')
+    out.append('''<form method="post" action="/admin/lock" style="margin-left:auto">
 <button class="kh-btn" style="margin-top:0;padding:5px 14px;font-size:.85rem"
  type="submit">잠그기</button></form>''')
     out.append('</div>')
@@ -135,7 +135,7 @@ def members_view(flash=""):
     mf = pd.DataFrame(rows)
     mf.index = range(1, len(mf) + 1)
     out.append(table_html(mf, center_cols=("플랜", "가입", "마지막 접속")))
-    out.append('<a class="kh-btn" href="/manage/csv" download>CSV 내려받기</a>')
+    out.append('<a class="kh-btn" href="/admin/csv" download>CSV 내려받기</a>')
 
     # --- 크레딧 손보기 ---
     opts = "".join(
@@ -149,12 +149,12 @@ def members_view(flash=""):
     out.append(render(ui.section, "크레딧 손보기", "충전하거나 플랜을 바꿉니다"))
     out.append(f'''
 <div class="box">
-  <form class="kh-adm-row" method="post" action="/manage/grant">
+  <form class="kh-adm-row" method="post" action="/admin/grant">
     <select name="uid" class="kh-sel">{opts}</select>
     <input class="kh-amt" type="number" name="amt" value="100" step="50">
     <button class="kh-btn kh-btn-primary kh-adm-btn" type="submit">충전</button>
   </form>
-  <form class="kh-adm-row" method="post" action="/manage/plan">
+  <form class="kh-adm-row" method="post" action="/admin/plan">
     <select name="uid" class="kh-sel">{opts}</select>
     <select name="plan" class="kh-sel">{plan_opts}</select>
     <button class="kh-btn kh-adm-btn" type="submit">플랜 변경</button>
@@ -176,7 +176,7 @@ def members_view(flash=""):
                                              for a in admins) + "</b>"))
     out.append(f'''
 <div class="box">
-  <form class="kh-adm-row" method="post" action="/manage/admin">
+  <form class="kh-adm-row" method="post" action="/admin/admin">
     <select name="uid" class="kh-sel">{opts}</select>
     <button class="kh-btn kh-adm-btn" name="on" value="1" type="submit">관리자로</button>
     <button class="kh-btn kh-adm-btn" name="on" value="0" type="submit">해제</button>
@@ -294,7 +294,7 @@ def pool_view(sort="최근 추가순"):
     pills = ['<div class="kh-filter">']
     for o in ("최근 추가순", "검색량 많은순"):
         cls = "kh-pill on" if o == sort else "kh-pill"
-        pills.append(f'<a class="{cls}" href="/manage?view=pool'
+        pills.append(f'<a class="{cls}" href="/admin?view=pool'
                      f'&sort={quote(o)}">{o}</a>')
     pills.append('</div>')
     out.append("".join(pills))

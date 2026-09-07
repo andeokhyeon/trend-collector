@@ -652,7 +652,7 @@ def dev_login(request: Request):
 # ------------------------------------------------------------
 # 관리 콘솔
 #
-# ⚠️ 상단 탭에는 없다 — 주소를 아는 사람만 들어온다 (/manage).
+# ⚠️ 상단 탭에는 없다 — 주소를 아는 사람만 들어온다 (/admin).
 #    문은 두 짝: 회원 계정의 관리자 표시, 또는 비밀번호(12시간 도장 쿠키).
 # ------------------------------------------------------------
 ADMIN_COOKIE = "kh_a"
@@ -671,7 +671,13 @@ def _is_admin(request):
     return bool(tok) and accounts.read_token(tok) == "pw-admin"
 
 
-@app.get("/manage", response_class=HTMLResponse)
+@app.get("/manage")
+def manage_legacy():
+    """옛 주소 — 즐겨찾기해둔 사람을 새 주소로 보낸다 (2026-09-07 /admin으로 개명)."""
+    return RedirectResponse("/admin", status_code=302)
+
+
+@app.get("/admin", response_class=HTMLResponse)
 def manage(request: Request, view: str = "members", sort: str = "최근 추가순",
            wrong: int = 0, flash: str = ""):
     import admin
@@ -687,22 +693,22 @@ def manage(request: Request, view: str = "members", sort: str = "최근 추가�
                  title="관리자 콘솔", subs=[])
 
 
-@app.post("/manage/login")
+@app.post("/admin/login")
 def manage_login(request: Request, pw: str = Form("")):
     import accounts
     import config as _cfg
     _set = getattr(_cfg, "ADMIN_PASSWORD", "") or ""
     # ⚠️ 비밀번호를 아예 안 정해뒀으면(빈 값) 이 문은 잠긴 채로 둔다.
     if _set and pw == _set:
-        resp = RedirectResponse("/manage", status_code=303)
+        resp = RedirectResponse("/admin", status_code=303)
         resp.set_cookie(ADMIN_COOKIE, accounts.make_token("pw-admin", days=0.5),
                         max_age=12 * 3600, httponly=True, samesite="lax",
                         secure=_secure())
         return resp
-    return RedirectResponse("/manage?wrong=1", status_code=303)
+    return RedirectResponse("/admin?wrong=1", status_code=303)
 
 
-@app.post("/manage/lock")
+@app.post("/admin/lock")
 def manage_lock():
     resp = RedirectResponse("/", status_code=303)
     resp.delete_cookie(ADMIN_COOKIE)
@@ -713,31 +719,31 @@ def _admin_act(request, fn, ok_msg, fail_msg):
     import admin
     from urllib.parse import quote as _q
     if not _is_admin(request):
-        return RedirectResponse("/manage", status_code=303)
+        return RedirectResponse("/admin", status_code=303)
     try:
         done = fn()
     except Exception:
         done = False
     admin.clear_members()
     msg = ok_msg if done else fail_msg
-    return RedirectResponse(f"/manage?flash={_q(msg)}", status_code=303)
+    return RedirectResponse(f"/admin?flash={_q(msg)}", status_code=303)
 
 
-@app.post("/manage/grant")
+@app.post("/admin/grant")
 def manage_grant(request: Request, uid: str = Form(...), amt: int = Form(100)):
     import accounts
     return _admin_act(request, lambda: accounts.grant(uid, int(amt)),
                       "충전했습니다.", "충전하지 못했습니다.")
 
 
-@app.post("/manage/plan")
+@app.post("/admin/plan")
 def manage_plan(request: Request, uid: str = Form(...), plan: str = Form(...)):
     import accounts
     return _admin_act(request, lambda: accounts.set_plan(uid, plan),
                       "플랜을 바꿨습니다.", "바꾸지 못했습니다.")
 
 
-@app.post("/manage/admin")
+@app.post("/admin/admin")
 def manage_admin(request: Request, uid: str = Form(...), on: str = Form("1")):
     import accounts
     return _admin_act(request, lambda: accounts.set_admin(uid, on == "1"),
@@ -745,10 +751,10 @@ def manage_admin(request: Request, uid: str = Form(...), on: str = Form("1")):
                       "바꾸지 못했습니다.")
 
 
-@app.get("/manage/csv")
+@app.get("/admin/csv")
 def manage_csv(request: Request):
     if not _is_admin(request):
-        return RedirectResponse("/manage", status_code=303)
+        return RedirectResponse("/admin", status_code=303)
     import admin
     return _csv(admin.members_csv(), "회원목록")
 
