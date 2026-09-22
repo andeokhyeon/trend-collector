@@ -1,20 +1,24 @@
 {% extends "base.html" %}
-{% block title %}{% if q %}{{ q }} — 키워드 분석 · 키워드 헌터{% else %}키워드 헌터 — 검색량만 보면 경쟁을 알 수 없습니다{% endif %}{% endblock %}
+{% block title %}{% if q %}{{ q }} — 키워드 분석 · 키워드 헌터{% else %}키워드 헌터 — 검색량만 보면 돈이 되는지 알 수 없습니다{% endif %}{% endblock %}
 {% block body %}
 
+{% if q %}
 <nav role="tablist">
   {% for name, href in subs %}
-  <a role="tab" href="{{ href }}{% if q %}?q={{ q | urlencode }}{% endif %}"
+  <a role="tab" href="{{ href }}?q={{ q | urlencode }}"
      aria-selected="{{ 'true' if href == active_sub else 'false' }}">{{ name }}</a>
   {% endfor %}
 </nav>
+{% endif %}
 
 {% if not q %}
 <div class="hero">
-  <h1 class="hero-h">검색량만 보면<br><em>경쟁을 알 수 없습니다</em></h1>
+  <div class="hero-kick"><i></i>Keyword Value Intelligence</div>
+  <h1 class="hero-h">검색량만 보면<br><em>돈이 되는지 알 수 없습니다</em></h1>
   <div class="hero-lead">
     <p class="hero-cap">
-      <b>키워드 검색</b><i>·</i><b>추적</b><i>·</i><b>발굴</b><i>·</i><b>단가</b><i>·</i><b>발행량</b><i class="gap"></i><span class="tail"><em class="ai">AI 진단</em>까지 한 번에, <em class="aio">올인원</em></span>
+      광고주가 실제로 거는 금액을 함께 봅니다.
+      검색량 4만짜리보다 <b>3천짜리가 나을 때</b>가 있습니다.
     </p>
   </div>
 </div>
@@ -42,6 +46,32 @@
   <span class="hs-live"><i></i>{{ freshness }} 갱신</span>
   <span class="hs-part hs-src">구글 트렌드 · 네이버 검색광고 · 데이터랩</span>
 </div>
+
+<section class="lp">
+  <div class="lp-card">
+    <span class="lp-n">01</span>
+    <b>재본다</b>
+    <p>검색량·문서수·최근 발행량·광고 단가를 한 번에 재서
+      <em>지금 뛰어들어도 되는 자리인지</em> 판정합니다.</p>
+  </div>
+  <div class="lp-card">
+    <span class="lp-n">02</span>
+    <b>골라준다</b>
+    <p>수집기가 매시간 모아둔 재료에서 <em>뜨는데 아직 안 붐비는</em>
+      키워드만 추려 순위로 보여줍니다.</p>
+  </div>
+  <div class="lp-card">
+    <span class="lp-n">03</span>
+    <b>지켜본다</b>
+    <p>키워드를 저장해두면 검색량·문서수·<em>내 글 순위</em>가
+      매일 자동으로 기록됩니다.</p>
+  </div>
+</section>
+
+<p class="lp-foot">
+  요금을 숨기지 않습니다 — <a href="/pricing">무료 3회부터 월 9,900원까지</a>
+  첫 화면에서 바로 보실 수 있습니다.
+</p>
 {% endif %}
 
 {% endblock %}

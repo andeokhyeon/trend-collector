@@ -2,46 +2,42 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0A0B0D">
 <title>{% block title %}키워드 헌터{% endblock %}</title>
-<meta name="description" content="{% block desc %}검색량만 보면 경쟁을 알 수 없습니다. 키워드 검색·추적·발굴·단가·발행량·AI 진단까지 한 번에.{% endblock %}">
+<meta name="description" content="{% block desc %}검색량만 보면 돈이 되는지 알 수 없습니다. 광고주가 거는 금액까지 함께 재는 네이버 키워드 도구.{% endblock %}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- ⚠️ 800·900 굵기를 일부러 뺐다 (2026-08-28).
-     한글 폰트는 굵기 하나가 수백 조각이라 6종이면 모바일이 무겁고,
-     화면도 너무 두꺼워 가독성이 떨어진다는 피드백.
-     빠진 굵기는 브라우저가 700으로 대신 그린다. -->
 <!-- ⚠️ 글꼴은 절대 화면을 막지 않는다 (2026-08-29).
      jsDelivr가 한국에서 느려지면 흰 화면으로 몇십 초를 기다리게 했다.
      media="print" 트릭: 브라우저가 '지금 필요 없음'으로 보고 비차단으로
-     받아온 뒤, 도착하면 onload로 전체 적용. 그동안은 시스템 글꼴로 그린다. -->
+     받아온 뒤, 도착하면 onload로 전체 적용. 그동안은 시스템 글꼴로 그린다.
+     Pretendard는 서버가 직접 들고 있다 (static/fonts/pretendard). -->
 <link href="/static/fonts/pretendard/pretendard.css"
       rel="stylesheet" media="print" onload="this.media='all'">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap"
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       rel="stylesheet" media="print" onload="this.media='all'">
-<noscript>
-<link href="/static/fonts/pretendard/pretendard.css" rel="stylesheet">
-</noscript>
-<link rel="stylesheet" href="/static/app.css">
-<link rel="stylesheet" href="/static/bridge.css">
-<link rel="stylesheet" href="/static/parity.css">
+<noscript><link href="/static/fonts/pretendard/pretendard.css" rel="stylesheet"></noscript>
+<!-- ⚠️ 2026-09-22: app.css(ui.py 자동추출) + bridge.css + parity.css 세 갈래를
+     kh.css 하나로 합쳤다. 세 파일이 서로를 덮어써서 어느 규칙이 이겼는지
+     아무도 몰랐고, 스트림릿 시절 `footer{display:none}`이 사업자 푸터까지
+     지워버린 사고가 있었다. 이제 디자인의 원본은 kh.css 하나다. -->
+<link rel="stylesheet" href="/static/kh.css">
 </head>
-<!-- ⚠️ 클래스 이름(stApp, block-container …)을 스트림릿 것 그대로 쓴다.
-     ui.py에서 뽑아낸 CSS를 한 줄도 고치지 않고 쓰기 위해서다.
-     눈으로 베껴 옮기면 반드시 어딘가 달라진다. 이름은 나중에 한 번에 바꾼다. -->
 <body class="stApp">
 <div class="block-container">
 
-  <div class="masthead">
+  <header class="masthead">
     <a class="mast-brand" href="/">
       {% if logo %}<img class="mast-logo" src="{{ logo }}" alt="">{% endif %}
       <span class="mast-name">키워드<b>헌터</b></span>
     </a>
     <div class="mast-meta">
-      <a class="mast-guide" href="/guide" title="이용 가이드">이용법</a><span class="mast-sep">·</span>
-      {%- if me_label %}<a class="mast-me" href="/me" title="마이페이지">{{ me_label }}</a>{% if meta %}<span class="mast-sep">·</span>{% endif %}{% endif -%}
-      {{ meta }}</div>
-  </div>
+      {%- if me_label %}<a class="mast-me" href="/me" title="마이페이지">{{ me_label }}</a>{% endif -%}
+      <a class="mast-guide" href="/guide" title="이용 가이드">이용법</a>
+    </div>
+  </header>
 
   <nav role="tablist">
     {% for name, href in tabs %}
@@ -54,7 +50,8 @@
     {% block body %}{% endblock %}
   </div>
 
-  <!-- 사업자 푸터 — 전자상거래·PG 심사 기준 (비어 있는 항목은 표시하지 않는다) -->
+  <!-- 사업자 푸터 — 전자상거래·PG 심사 기준.
+       값은 .env에서 읽고, 비어 있는 항목은 줄째로 숨긴다 (가짜 번호를 내걸지 않는다) -->
   <footer class="kh-foot">
     <nav class="kh-foot-links">
       <a href="/guide">이용 가이드</a><span>·</span>
@@ -64,21 +61,42 @@
     </nav>
     {% if biz %}
     <p class="kh-foot-biz">
-      {%- if biz.name %}상호 {{ biz.name }}{% endif -%}
-      {%- if biz.owner %} <i>·</i> 대표 {{ biz.owner }}{% endif -%}
-      {%- if biz.reg %} <i>·</i> 사업자등록번호 {{ biz.reg }}{% endif -%}
-      {%- if biz.mail %} <i>·</i> 통신판매업신고 {{ biz.mail }}{% endif -%}
+      {%- if biz.name %}<b>{{ biz.name }}</b>{% endif -%}
+      {%- if biz.owner %}<i>·</i>대표 {{ biz.owner }}{% endif -%}
+      {%- if biz.reg %}<i>·</i>사업자등록번호 {{ biz.reg }}{% endif -%}
+      {%- if biz.mail %}<i>·</i>통신판매업신고 {{ biz.mail }}{% endif -%}
     </p>
     <p class="kh-foot-biz">
-      {%- if biz.addr %}{{ biz.addr }} <i>·</i> {% endif -%}
-      {%- if biz.phone %}고객센터 {{ biz.phone }} <i>·</i> {% endif -%}
-      {%- if biz.email %}{{ biz.email }}{% endif -%}
+      {%- if biz.addr %}{{ biz.addr }}{% endif -%}
+      {%- if biz.phone %}<i>·</i>Tel {{ biz.phone }}{% endif -%}
+      {%- if biz.email %}<i>·</i>{{ biz.email }}{% endif -%}
+      {%- if biz.owner %}<i>·</i>개인정보보호책임자 {{ biz.owner }}{% endif -%}
     </p>
     {% endif %}
-    <p class="kh-foot-copy">Copyright © 2026 KeywordHunter. All rights reserved.</p>
+    <p class="kh-foot-copy">Copyright © 2026 AD SoftWare. All rights reserved.</p>
   </footer>
 
 </div>
+
+<!-- 모바일 하단 탭바 — 엄지가 닿는 자리에 주요 메뉴를 고정한다.
+     좁은 화면에서만 보이고, 상단 탭은 그때 감춘다 (CSS에서 처리). -->
+<nav class="kh-tabbar" aria-label="주요 메뉴">
+  <a href="/" class="{{ 'on' if active_tab == '/' else '' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>조사</a>
+  <a href="/tracker" class="{{ 'on' if active_tab == '/tracker' else '' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg>추적</a>
+  <a href="/discover" class="{{ 'on' if active_tab == '/discover' else '' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>발굴</a>
+  <a href="/blog" class="{{ 'on' if active_tab == '/blog' else '' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9.5h8M8 13.5h5"/></svg>블로그</a>
+  <a href="/me" class="{{ 'on' if active_tab == '/me' else '' }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c.6-3.8 3.9-5.8 7.5-5.8s6.9 2 7.5 5.8"/></svg>내 정보</a>
+</nav>
 
 <!-- 로딩 표시 — 조회·로그인이 2초 넘게 걸리면 도넛을 띄운다 -->
 <div id="kh-busy" hidden><div class="kh-donut"></div><p id="kh-busy-msg">잠시만요…</p></div>
@@ -92,12 +110,10 @@
       document.getElementById("kh-busy").hidden = false;
     }, 2000);
   }
-  // 검색(조회) 폼 제출
   document.addEventListener("submit", function (e) {
     var f = e.target;
     if (f.classList && f.classList.contains("search-box")) arm("조회 중입니다…");
   });
-  // 오래 걸릴 수 있는 링크들
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a");
     if (!a) return;
@@ -107,12 +123,11 @@
     } else if (href.indexOf("ai=1") !== -1) {
       arm("AI가 숫자를 읽고 진단을 쓰는 중입니다…");
     } else if (href.indexOf("rank=1") !== -1) {
-      arm("연관 키워드의 문서수를 재는 중입니다…");   // 기회 있는 키워드 보기
+      arm("연관 키워드의 문서수를 재는 중입니다…");
     } else if (a.classList.contains("tc-btn")) {
-      arm("기록을 불러오는 중입니다…");               // 추적기 자세히
+      arm("기록을 불러오는 중입니다…");
     }
   });
-  // 뒤로가기로 돌아왔을 때 남아있지 않게
   window.addEventListener("pageshow", function () {
     if (t) { clearTimeout(t); t = null; }
     document.getElementById("kh-busy").hidden = true;

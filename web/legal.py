@@ -22,17 +22,25 @@ from uihtml import ui, render
 EFFECTIVE = "2026-09-05"      # 약관 시행일 — 바꾸면 여기서
 
 
+# 사업자 정보 — 이미 adsoftware.co.kr에 공개된 값이라 기본값으로 박아둔다.
+# (.env에 BIZ_*를 넣으면 그게 이긴다 — 주소나 번호가 바뀌면 배포 없이 고칠 수 있게)
+_BIZ = {
+    "name":  "에이디소프트웨어",
+    "owner": "안덕현",
+    "reg":   "875-51-01007",
+    "mail":  "2026-경기광주-1487",     # 통신판매업 신고번호 (2026-09 발급)
+    "addr":  "경기도 광주시 파발로137번길 3, 3층 66호 (경안동)",
+    "phone": "070-4577-7574",
+    "email": "adsoftware@nate.com",
+}
+_ENV = {"name": "BIZ_NAME", "owner": "BIZ_OWNER", "reg": "BIZ_REG_NO",
+        "mail": "BIZ_MAIL_NO", "addr": "BIZ_ADDR", "phone": "BIZ_PHONE",
+        "email": "BIZ_EMAIL"}
+
+
 def biz():
-    g = os.environ.get
-    return {
-        "name":  g("BIZ_NAME", "AD소프트웨어"),
-        "owner": g("BIZ_OWNER", ""),
-        "reg":   g("BIZ_REG_NO", ""),
-        "mail":  g("BIZ_MAIL_NO", ""),
-        "addr":  g("BIZ_ADDR", ""),
-        "email": g("BIZ_EMAIL", ""),
-        "phone": g("BIZ_PHONE", ""),
-    }
+    """푸터·약관에 쓰는 사업자 정보. 빈 항목은 화면에서 줄째로 빠진다."""
+    return {k: (os.environ.get(_ENV[k]) or v) for k, v in _BIZ.items()}
 
 
 def _art(no, title, *paras):
