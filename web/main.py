@@ -2,12 +2,11 @@
 """
 키워드 헌터 — 웹 서버 (FastAPI)
 
-⚠️ 스트림릿을 걷어내는 중이다. 지금은 첫 화면 하나만 있다.
-   두뇌(naver_api, cache, accounts …)는 손대지 않는다.
-   이 파일은 그 위에 얇게 얹혀 HTML을 만들어 보내는 일만 한다.
+스트림릿은 걷어냈다. 두뇌(naver_api, cache, accounts …)는 손대지 않고,
+이 파일은 그 위에 얇게 얹혀 HTML을 만들어 보내는 일만 한다.
 
-⚠️ CSS는 손으로 옮기지 않는다. `build_css.py`가 ui.py에서 뽑아낸다.
-   눈으로 베끼면 미묘하게 달라지고, 달라진 걸 나중에 찾기가 더 어렵다.
+⚠️ 디자인의 원본은 web/static/kh.css 하나다 (2026-09-22 통합).
+   색 토큰만은 ui.py 상단 열 줄이 원본 — 거기를 바꾸면 인라인 색이 따라온다.
 """
 import base64
 import os
@@ -105,24 +104,39 @@ def logo_uri():
         return ""
 
 
-# 상위 탭 — 이름과 주소. 스트림릿의 st.tabs를 대신한다.
+# 상위 탭 — 쓰는 순서대로 셋.
+#
+# ⚠️ 2026-09-22 정리. 예전엔 다섯이었는데 "정리가 안 되는 느낌"이라는
+#    피드백을 받았다. 이유가 셋이었다:
+#     1) '키워드 조사'와 '키워드 발굴' — 이름이 똑같은 꼴이라 뭐가 다른지
+#        알 수 없었다. 실제 차이는 "내가 넣어 검사" vs "시스템이 뿌려줌"이라
+#        이름을 검사/찾기로 갈랐다.
+#     2) '마이페이지'가 탭에 있었는데 우상단 이름 링크와 중복이었다 → 탭에서 뺐다.
+#     3) '추적기'와 '내 블로그'는 둘 다 "내 것을 본다"인데 따로 떨어져 있었다
+#        → '내 블로그' 하나로 묶고 하위 탭으로 나눴다.
+#
+#    이름은 여기 이 표가 원본이다. 단어만 고치면 화면·하단탭바가 같이 바뀐다.
 TABS = [
-    ("키워드 조사", "/"),
-    ("추적기", "/tracker"),
-    ("내 블로그", "/blog"),
-    ("키워드 발굴", "/discover"),
-    ("마이페이지", "/me"),
+    ("키워드 검사", "/"),          # 내가 키워드를 넣는다
+    ("키워드 찾기", "/discover"),  # 시스템이 후보를 준다
+    ("내 블로그", "/tracker"),     # 내 키워드·내 글을 본다
 ]
 SUB_RESEARCH = [
-    ("키워드 분석", "/"),
+    ("진단", "/"),
     ("상위노출 해부", "/serp"),
     ("글감 만들기", "/ideas"),
 ]
+# 쓸모 순서로 다시 세웠다 — 구글 트렌드는 출처 이름이라 맨 뒤로.
 SUB_DISCOVER = [
-    ("구글 트렌드", "trend"),
     ("골든타임", "golden"),
     ("주간 캘린더", "weekly"),
+    ("구글 트렌드", "trend"),
     ("뉴스", "news"),
+]
+# '내 블로그' 아래 둘 — 추적과 진단
+SUB_MINE = [
+    ("순위 추적", "/tracker"),
+    ("발행 진단", "/blog"),
 ]
 
 
@@ -210,7 +224,7 @@ def _login_box(next_path):
     from uihtml import ui, render
     from urllib.parse import quote
     out = [render(ui.pitch, "먼저 로그인해주세요",
-                  "키워드 조사는 회원만 쓸 수 있습니다",
+                  "키워드 검사는 회원만 쓸 수 있습니다",
                   "카카오·구글 계정으로 3초면 됩니다. "
                   "가입하면 무료로 3번 조사할 수 있습니다.")]
     items = []
@@ -527,8 +541,8 @@ def tracker_page(request: Request, detail: str = "", flash: str = "",
                      detail, flash, ai=ai_ok)
         if ai and not ai_ok:
             html = plans.upgrade_box("ai") + html
-    return _page(request, "discover.html", "/tracker", "", "", html,
-                 title="키워드 추적기", subs=[])
+    return _page(request, "discover.html", "/tracker", "/tracker", "", html,
+                 title="순위 추적", subs=SUB_MINE)
 
 
 @app.post("/tracker/add")
@@ -617,8 +631,8 @@ def blog_page(request: Request):
         import blog
         prof = _adopt_blog(user, _profile(user["id"]), request)
         html = _safe(blog.build, user, _blog_of(request, prof), prof)
-    return _page(request, "discover.html", "/blog", "", "", html,
-                 title="내 블로그 진단", subs=[])
+    return _page(request, "discover.html", "/tracker", "/blog", "", html,
+                 title="발행 진단", subs=SUB_MINE)
 
 
 @app.post("/blog/set")
@@ -760,7 +774,7 @@ def manage_csv(request: Request):
 
 
 @app.get("/discover", response_class=HTMLResponse)
-def discover_page(request: Request, v: str = "trend", p: str = "",
+def discover_page(request: Request, v: str = "golden", p: str = "",
                   t: str = "파생 키워드"):
     import discover
     # 2026-08-29: 발굴 탭도 회원 전용 — 여기 데이터가 이 서비스의 알맹이다
@@ -775,9 +789,11 @@ def discover_page(request: Request, v: str = "trend", p: str = "",
         html = _safe(discover.build_weekly)
     elif v == "news":
         html = _safe(discover.build_news, p or "최근")
-    else:
-        v = "trend"
+    elif v == "trend":
         html = _safe(discover.build_trend, p or "최근")
+    else:
+        v = "golden"
+        html = _safe(discover.build_golden, p or "일별", t)
     subs = [(name, f"/discover?v={key}") for name, key in SUB_DISCOVER]
     return _page(request, "discover.html", "/discover", f"/discover?v={v}",
                  "", html, title="키워드 발굴", subs=subs)
