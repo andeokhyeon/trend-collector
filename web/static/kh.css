@@ -1488,3 +1488,14 @@ a{color:var(--iris2)}
   .search-box.kh-track-add .stButton button{flex:1 1 auto;width:100%}
   .search-box.kh-track-add .kh-check{flex:1 1 100%;white-space:normal}
 }
+
+/* ── 돈 숫자 강조 ──────────────────────────────
+   화면에서 딱 하나만 강조한다. 단가가 이 제품의 머릿수라
+   첫 칸만 민트로 띄우고 나머지 지표는 조용히 둔다. */
+.kh-money{height:100%}
+.kh-money .kpi{
+  border-color:var(--mint-dim);
+  background:linear-gradient(180deg,var(--mint-wash),var(--surf) 72%);
+}
+.kh-money .kpi-val{color:var(--mint)}
+.kh-money .kpi-label{color:var(--mint2)}

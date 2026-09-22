@@ -62,7 +62,7 @@ def _empty_note(df, source, label=""):
 
 def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit=30,
                   show_docs=True, show_volume=True, source=None, label="",
-                  empty_msg=None):
+                  empty_msg=None, lead_cols=None):
     """app.py render_table 이식 — HTML을 돌려준다."""
     if data.empty:
         if empty_msg:
@@ -74,6 +74,10 @@ def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit
     d = data.sort_values(by=sort_col, ascending=False).head(limit)
     d = d.reset_index(drop=True)
     cols, names = ['keyword'], ['키워드']
+    # 키워드 바로 다음에 세울 열 — 화면의 머릿수를 앞으로 당긴다
+    for c, lb in (lead_cols or []):
+        if c in d.columns:
+            cols.append(c); names.append(lb)
     if show_volume:
         cols += ['총 검색량', '검색량 등급']
         names += ['월 검색량', '검색량']
@@ -88,6 +92,100 @@ def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit
     out.columns = names
     out.index = out.index + 1
     return table_html(out)
+
+
+def build_money(period="일별", part="전체"):
+    """돈 되는 키워드 — 단가 순으로 세운다.
+
+    ⚠️ 골든타임과 다른 질문이다.
+       골든타임 = "지금 선점하기 좋은 곳" (뜨는데 아직 안 붐빔, 복합 점수 순)
+       여기     = "유입당 값이 비싼 곳"   (광고 단가 순)
+       검색량 4만에 단가 300원인 키워드보다 3천에 8천원인 쪽이 나을 때가 있다.
+       그 판단을 하려면 단가만으로 세운 줄이 따로 있어야 한다.
+
+    ⚠️ 이 화면은 네이버 '검색광고 API'만 쓴다 (검색 API가 아니다).
+       검색 API 특약조건(저장·AI·수익화 제한)의 사정권 밖이라,
+       유료화까지 가려면 이 방향이 가장 안전하다.
+    """
+    from naver_api import calc_gold_score
+    df = db.load_data()
+    h = PERIOD_HOURS.get(period, 24)
+    out = [render(ui.section, "돈 되는 키워드",
+                  "광고주가 실제로 거는 금액 순"),
+           render(ui.pitch, "검색량이 많다고",
+                  "돈이 되지는 않습니다",
+                  "광고주가 한 번 클릭에 8천원을 내는 검색어와 300원을 내는 "
+                  "검색어는 같은 유입이어도 값이 다릅니다. "
+                  "여기는 <b>비싼 쪽부터</b> 보여줍니다."),
+           _pills("/discover?v=money&t=" + quote(part), "p",
+                  PERIOD_SETS["slow"], period)]
+
+    EMPTY = "아직 볼 수 있는 키워드가 없습니다. 수집기가 한 번 돌면 채워집니다."
+    # ⚠️ 수집 데이터가 아예 없을 때 열 이름을 찾으면 터진다 — 먼저 막는다
+    if df.empty or '총 검색량' not in df.columns:
+        out.append(render(ui.note, EMPTY))
+        return "".join(out)
+
+    # 최근 수집분 전체에서 검색량이 있는 것만 — 뉴스는 키워드가 아니라 제외
+    pool = df[(df['source'] != 'naver_news') & (df['총 검색량'].fillna(0) > 0)]
+    pool = db.latest_snapshot(pool, hours=h)
+    if pool.empty:
+        out.append(render(ui.note, EMPTY))
+        return "".join(out)
+
+    # 단가 조회는 배치로 한 번에 (6시간 캐시). 너무 많이 물으면 느려지니 상위 120개.
+    pool = pool.sort_values('총 검색량', ascending=False).head(120)
+    kws = pool['keyword'].tolist()
+    bids = db.cached_min_bids(tuple(kws))
+    if not bids:
+        out.append(render(ui.note,
+                          "광고 단가를 가져오지 못했습니다. 검색광고 API 키를 "
+                          "확인하거나 잠시 후 다시 시도해주세요."))
+        return "".join(out)
+
+    pool = pool.copy()
+    pool['광고단가'] = pool['keyword'].map(bids)
+    pool = pool[pool['광고단가'].notna() & (pool['광고단가'] > 0)]
+    if pool.empty:
+        out.append(render(ui.note, EMPTY))
+        return "".join(out)
+    pool['황금 점수'] = [
+        (calc_gold_score(row['총 검색량'], row.get('blog_total_docs'),
+                         row.get('광고단가'), row.get('comp_ratio')) or {}).get('score')
+        for _, row in pool.iterrows()]
+    pool = pool.sort_values('광고단가', ascending=False)
+
+    # 세부/트렌드 갈라보기 — 세부 키워드가 대개 단가가 높고 경쟁이 낮다
+    parts = ["전체", "세부 키워드", "트렌드"]
+    chosen = part if part in parts else "전체"
+    pill = ['<div class="kh-filter">']
+    for p in parts:
+        cls = "kh-pill on" if p == chosen else "kh-pill"
+        pill.append(f'<a class="{cls}" href="/discover?v=money'
+                    f'&p={quote(period)}&t={quote(p)}">{p}</a>')
+    pill.append('</div>')
+    out.append("".join(pill))
+
+    if chosen == "세부 키워드":
+        data, lim = pool[pool['keyword_category'] == '세부'], 30
+    elif chosen == "트렌드":
+        data, lim = pool[pool['keyword_category'] == '트렌드'], 30
+    else:
+        data, lim = pool, 30
+
+    data = data.copy()
+    data['광고단가'] = data['광고단가'].astype(int)
+    out.append(_render_table(
+        df, data, sort_col='광고단가', show_docs=True, limit=lim,
+        lead_cols=[('광고단가', '클릭단가(원)')],
+        extra_cols=[('황금 점수', '황금 점수')],
+        empty_msg=EMPTY))
+    out.append(render(ui.note,
+                      "단가는 네이버 검색광고의 <b>최소노출입찰가</b>입니다 — "
+                      "광고주가 그 검색어에 거는 금액이지, 블로그 수익을 "
+                      "보장하는 값이 아닙니다. 판단의 재료로 보세요. "
+                      "여기서 목록을 보는 것만으로는 크레딧이 들지 않습니다."))
+    return "".join(out)
 
 
 def build_trend(period="최근"):

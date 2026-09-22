@@ -127,7 +127,10 @@ SUB_RESEARCH = [
     ("글감 만들기", "/ideas"),
 ]
 # 쓸모 순서로 다시 세웠다 — 구글 트렌드는 출처 이름이라 맨 뒤로.
+# ⚠️ '돈 되는 키워드'가 맨 앞이다. 이 제품이 약속하는 게 그거라서,
+#    발굴 탭을 열면 제일 먼저 보여야 한다 (2026-09-22 방향 전환).
 SUB_DISCOVER = [
+    ("돈 되는 키워드", "money"),
     ("골든타임", "golden"),
     ("주간 캘린더", "weekly"),
     ("구글 트렌드", "trend"),
@@ -774,8 +777,8 @@ def manage_csv(request: Request):
 
 
 @app.get("/discover", response_class=HTMLResponse)
-def discover_page(request: Request, v: str = "golden", p: str = "",
-                  t: str = "파생 키워드"):
+def discover_page(request: Request, v: str = "money", p: str = "",
+                  t: str = ""):
     import discover
     # 2026-08-29: 발굴 탭도 회원 전용 — 여기 데이터가 이 서비스의 알맹이다
     if not auth.current_user(request):
@@ -783,8 +786,10 @@ def discover_page(request: Request, v: str = "golden", p: str = "",
         return _page(request, "discover.html", "/discover", f"/discover?v={v}",
                      "", _login_box(f"/discover?v={v}"),
                      title="키워드 발굴", subs=subs0)
-    if v == "golden":
-        html = _safe(discover.build_golden, p or "일별", t)
+    if v == "money":
+        html = _safe(discover.build_money, p or "일별", t or "전체")
+    elif v == "golden":
+        html = _safe(discover.build_golden, p or "일별", t or "파생 키워드")
     elif v == "weekly":
         html = _safe(discover.build_weekly)
     elif v == "news":
@@ -792,8 +797,8 @@ def discover_page(request: Request, v: str = "golden", p: str = "",
     elif v == "trend":
         html = _safe(discover.build_trend, p or "최근")
     else:
-        v = "golden"
-        html = _safe(discover.build_golden, p or "일별", t)
+        v = "money"
+        html = _safe(discover.build_money, p or "일별", t or "전체")
     subs = [(name, f"/discover?v={key}") for name, key in SUB_DISCOVER]
     return _page(request, "discover.html", "/discover", f"/discover?v={v}",
                  "", html, title="키워드 발굴", subs=subs)

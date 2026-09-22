@@ -119,10 +119,21 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
     recent_grade = r.get("recent_grade", "정보없음")
     opp = r.get("opportunity") or {"score": 0, "label": "정보없음", "note": ""}
 
-    # --- KPI 4칸 (문구는 app.py 그대로) ---
-    k1 = render(ui.kpi, "월 검색량", compact_num(r["total_search"]),
+    # --- KPI 4칸 ---
+    # ⚠️ 2026-09-22 순서를 바꿨다. 예전엔 월 검색량이 첫 칸이었는데,
+    #    제품이 약속하는 게 "돈이 되는지"라 첫 칸도 단가여야 말이 맞는다.
+    #    검색량은 둘째 칸으로 내렸다 (없어진 게 아니다).
+    if bid:
+        k1 = render(ui.kpi, "예상 클릭단가", f"{bid:,}원",
+                    "광고주가 한 번 클릭에 내는 돈 · 최소노출입찰가")
+    else:
+        k1 = render(ui.kpi, "예상 클릭단가", "—",
+                    "입찰가를 가져오지 못했습니다")
+    # 돈 숫자는 화면에서 하나만 강조한다 (kh.css의 .kh-money)
+    k1 = '<div class="kh-money">' + k1 + '</div>'
+    k2 = render(ui.kpi, "월 검색량", compact_num(r["total_search"]),
                 f"PC {r['monthly_pc']:,} · 모바일 {r['monthly_mobile']:,}")
-    k2 = render(ui.kpi, "이미 쓰인 글", compact_num(r["doc_count"]),
+    k3 = render(ui.kpi, "이미 쓰인 글", compact_num(r["doc_count"]),
                 f"{r['doc_count']:,}편" if r["doc_count"] is not None else "조회 실패")
     if recent_docs is not None:
         if r.get("recent_estimated"):
@@ -131,11 +142,9 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
             val, sub = f"{recent_docs:,}+", f"너무 많아 정확히 못 셈 · {recent_grade}"
         else:
             val, sub = f"{recent_docs:,}", f"요즘 분위기 · {recent_grade}"
-        k3 = render(ui.kpi, "최근 30일 새 글", val, sub)
+        k4 = render(ui.kpi, "최근 30일 새 글", val, sub)
     else:
-        k3 = render(ui.kpi, "최근 30일 새 글", "—", "조회 실패")
-    ad_pct, ad_label = ad_density_pct(r["pl_avg_depth"])
-    k4 = render(ui.kpi, "광고 경쟁", f"{ad_pct}%", f"{ad_label} · 높을수록 단가가 비쌈")
+        k4 = render(ui.kpi, "최근 30일 새 글", "—", "조회 실패")
     out.append(_row([k1, k2, k3, k4]))
 
     # --- 도넛 + 점수 구성 ---
