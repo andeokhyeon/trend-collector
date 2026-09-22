@@ -2,12 +2,12 @@
 {% block title %}{{ page_title or "키워드 헌터" }} · 키워드 헌터{% endblock %}
 {% block body %}
 
-<nav role="tablist">
+{% if subs %}<nav role="tablist">
   {% for name, href in subs %}
   <a role="tab" href="{{ href }}{% if q %}?q={{ q | urlencode }}{% endif %}"
      aria-selected="{{ 'true' if href == active_sub else 'false' }}">{{ name }}</a>
   {% endfor %}
-</nav>
+</nav>{% endif %}
 
 <form class="search-box" method="get" action="{{ active_sub }}">
   <div class="stTextInput">

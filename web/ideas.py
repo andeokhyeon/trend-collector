@@ -26,8 +26,7 @@ def build(kw):
     outline = build_outline(kw, an)
 
     if not an:
-        out.append(render(ui.note,
-                          "상위 글을 가져오지 못했습니다. 다른 키워드로 시도해보세요."))
+        out.append(render(ui.note, "상위 글을 가져오지 못했습니다."))
         return "".join(out)
 
     k1 = render(ui.kpi, "제목 길이", f"{an['median_len']}자",
@@ -66,15 +65,15 @@ def build(kw):
     if an["question_ratio"] >= 0.2:
         hints.append("<b>질문형</b> 제목이 눈에 띕니다")
     hints.append(f"길이는 <b>{an['median_len']}자</b> 안팎이 평균입니다")
-    out.append(render(ui.note, " · ".join(hints)))
+    out.append(render(ui.tip, " · ".join(hints)))
 
     if an["common_words"]:
         out.append(render(ui.section, "제목에 자주 나오는 단어",
                           "상위권이 공통으로 짚는 지점"))
         mx = an["common_words"][0][1]
         chips = " ".join(
-            f'<span class="wchip" style="background:rgba(27,58,75,'
-            f'{0.12 + 0.55 * (c / mx):.2f})">{w}<b>{c}</b></span>'
+            f'<span class="wchip" style="background:rgba(91,75,214,'
+            f'{0.06 + 0.20 * (c / mx):.2f})">{w}<b>{c}</b></span>'
             for w, c in an["common_words"])
         out.append(f'<div class="chart-box">{chips}</div>')
 

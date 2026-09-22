@@ -9,48 +9,58 @@
       안 보였던 것도 app.css의 `footer{display:none}` 때문이었다.
 
    컨셉: 정밀 계측기 (ui.py의 원래 설계 의도를 그대로 이어받는다)
-      · 바닥은 adsoftware.co.kr의 브랜드 블랙 #08090A
-      · 액센트는 '놋쇠' 하나 — 단가·돈·결제에만 쓴다
+      · 바닥은 밝은 회백 #FBFBFD — 표와 숫자를 오래 보는 도구니까
+      · 액센트는 둘 — 아이리스=제품이 하는 일 / 에메랄드=당신이 벌 돈
       · 등급·경쟁도는 별도 상태색, 언제나 글자 라벨과 함께
       · 모든 수치는 등폭 서체로 자리를 맞춘다
+      · 파일 맨 끝 '밝은 톤 덧칠'이 최종 층이다 — 거기가 이긴다
    ============================================================ */
 
 :root{
-  /* 바탕 — 순검정은 화면에서 구멍처럼 보인다. 살짝 따뜻한 그라파이트 */
-  --bg:#0A0B0D;          /* 페이지 바닥 */
-  --bg2:#0E1013;         /* 푸터 등 더 어두운 면 */
-  --surf:#14171C;        /* 카드·표 표면 */
-  --surf2:#191D23;       /* 표 머리글·인셋 */
-  --surf3:#1F242C;       /* 트랙(막대 바탕) */
-  --edge:#252A33;        /* 헤어라인 */
-  --edge2:#333A45;       /* 강조 경계 */
-  --hi:rgba(255,255,255,.055);   /* 카드 위쪽에 닿는 빛 — 면이 물성을 갖는다 */
-  /* 글자 */
-  --txt:#F2F4F7;
-  --txt2:#AAB2BF;
-  --txt3:#79828F;
-  --txt4:#5A626E;
-  /* 액센트 둘 — 역할이 겹치지 않는다.
-     아이리스 = 우리 제품이 하는 일 (버튼·AI·탭·링크)
-     민트     = 당신이 벌 돈 (단가·수익·점수·좋음) */
-  --iris:#8B7CFF;
-  --iris2:#A79AFF;
-  --iris-dim:#4A3FA8;
-  --iris-wash:rgba(139,124,255,.12);
-  --iris-wash2:rgba(139,124,255,.2);
-  --mint:#3DDC97;
-  --mint2:#6EEBB4;
-  --mint-dim:#1E7A54;
-  --mint-wash:rgba(61,220,151,.12);
-  /* 상태색 — 액센트와 따로 둔다 */
-  --slate:#8A93A3; --slate-wash:rgba(138,147,163,.14);
-  --coral:#FF6B6B; --coral-wash:rgba(255,107,107,.12);
-  --amber:#FFB84D;
+  /* ⚠️ 2026-09-22 밤: 다크+보라는 가독성이 떨어진다는 피드백으로 밝은 톤으로 전환.
+     표와 숫자를 오래 보는 도구라 밝은 쪽이 눈이 덜 피곤하고,
+     지금 한국 SaaS 결(토스·당근)에도 맞는다.
+     '싸 보이는 밝은 화면'과 갈리는 지점은 셋이다 —
+      1) 바탕을 순백이 아니라 살짝 낮춰 카드가 '떠 보이게'
+      2) 테두리를 두르지 말고 옅은 그림자로 띄우기
+      3) 액센트는 하나만, 나머지는 회색으로 조용히 */
+  --bg:#FBFBFD;          /* 페이지 바닥 — 순백보다 반 톤 낮다 */
+  --bg2:#F7F8FB;         /* 푸터 */
+  --surf:#FFFFFF;        /* 카드·표 — 바닥보다 밝아서 뜬다 */
+  --surf2:#F5F6F9;       /* 표 머리글·인셋 */
+  --surf3:#EDEFF4;       /* 트랙(막대 바탕) */
+  --edge:#E8EBF0;        /* 헤어라인 */
+  --edge2:#D7DCE5;       /* 강조 경계 */
+  --hi:rgba(16,24,40,.04);
+  /* 그림자 — 테두리 대신 이걸로 띄운다 */
+  --sh:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  --sh-lg:0 4px 12px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.05);
+  /* 글자 — 대비를 넉넉히 */
+  --txt:#0E1117;
+  --txt2:#4A5262;
+  --txt3:#7A8494;
+  --txt4:#A2AAB8;
+  /* 액센트 둘 — 역할이 겹치지 않는다
+     아이리스 = 제품이 하는 일 (버튼·AI·탭·링크)
+     에메랄드 = 당신이 벌 돈 (단가·수익·좋음) */
+  --iris:#5B4BD6;
+  --iris2:#7A6BEA;
+  --iris-dim:#C7C0F5;
+  --iris-wash:rgba(91,75,214,.07);
+  --iris-wash2:rgba(91,75,214,.13);
+  --mint:#0A9D6B;
+  --mint2:#0B8A5E;
+  --mint-dim:#A8E2CC;
+  --mint-wash:rgba(10,157,107,.08);
+  /* 상태색 — 액센트와 따로. 색만으로 뜻을 전하지 않고 항상 글자를 같이 둔다 */
+  --slate:#7A86A8; --slate-wash:rgba(122,134,168,.12);
+  --coral:#E0455C; --coral-wash:rgba(224,69,92,.09);
+  --amber:#A8690A;
   /* 서체 */
   --sans:'Pretendard','IBM Plex Sans KR',-apple-system,BlinkMacSystemFont,
          'Apple SD Gothic Neo',sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
-  --r:14px;              /* 기본 모서리 — 10px은 요즘 결에 조금 딱딱하다 */
+  --r:14px;
   --r-sm:10px;
 }
 
@@ -326,8 +336,8 @@ hr,.rule{border:0;height:1px;background:var(--edge);margin:18px 0}
 /* ── 칩·알약 ────────────────────────────────────
    ⚠️ 등급 칩의 배경색은 ui.py가 인라인으로 박는다(상태색).
       다크 바탕에 흰 글자를 올리면 읽기 힘들어서, 글자는 먹색으로 둔다. */
-.chip,.tc-pill,.wchip,.brief-tag,.sc-verdict,.diag-mark,.outline-num,.mine-tag{
-  color:#0B0D10 !important; font-weight:600;
+.diag-mark,.outline-num,.mine-tag{
+  color:#0B0D10; font-weight:600;
 }
 .chip{
   display:inline-block; padding:4px 10px; border-radius:5px;
@@ -335,7 +345,7 @@ hr,.rule{border:0;height:1px;background:var(--edge);margin:18px 0}
 }
 .kh-chip{
   display:inline-block; font-family:var(--mono); font-size:.7rem;
-  font-weight:500; padding:3px 8px; border-radius:4px; color:#0B0D10;
+  font-weight:600; padding:3px 8px; border-radius:4px;
 }
 .kh-pill{
   display:inline-block; background:var(--surf); border:1px solid var(--edge);
@@ -599,7 +609,7 @@ hr,.rule{border:0;height:1px;background:var(--edge);margin:18px 0}
   font-family:var(--mono); color:var(--txt2);
 }
 .mine-tag{
-  background:var(--iris2); font-size:.66rem; font-weight:700;
+  background:var(--iris); font-size:.66rem; font-weight:700;
   padding:2px 7px; border-radius:999px; margin-left:6px;
   font-family:var(--mono);
 }
@@ -1313,8 +1323,7 @@ body::before{
 .kh-btn:hover{border-color:var(--iris-dim)}
 
 /* ── 칩·알약 ─────────────────────────────────── */
-.chip,.tc-pill,.wchip,.brief-tag,.sc-verdict,.diag-mark,.outline-num,
-.mine-tag,.kh-chip{color:#0B0916 !important}
+.diag-mark,.outline-num,.mine-tag{color:#0B0916}
 .kh-pill.on{background:var(--surf3);border-color:var(--edge2);
   color:var(--txt) !important;box-shadow:inset 0 1px 0 var(--hi)}
 [role="tab"],.kh-pill,.tc-btn,.kh-btn{transition:all .14s ease}
@@ -1499,3 +1508,170 @@ a{color:var(--iris2)}
 }
 .kh-money .kpi-val{color:var(--mint)}
 .kh-money .kpi-label{color:var(--mint2)}
+
+/* ============================================================
+   밝은 톤 덧칠  (2026-09-22 밤)
+
+   ⚠️ 위쪽 규칙들은 다크 바탕을 전제로 쓰였다.
+      다크에서 면을 띄우는 방법은 '위쪽에 1px 빛'(inset highlight)이지만,
+      밝은 바탕에서 같은 걸 하면 아무 일도 일어나지 않는다.
+      밝은 화면에서 면을 띄우는 건 '아래로 떨어지는 옅은 그림자'다.
+      토큰만 바꾸고 이 차이를 안 고치면 카드가 전부 종이처럼 납작해진다.
+      여기가 그 차이를 메우는 마지막 층이다.
+   ============================================================ */
+
+/* 1. 그레인 끄기 — 다크 면이 죽지 않게 깔았던 잡티다.
+      밝은 바탕에서는 화면이 지저분해 보이게만 한다. */
+body::before{display:none}
+
+/* 2. 인셋 하이라이트 → 드롭 섀도우.
+      테두리는 그대로 두고 그림자로 한 겹 띄운다. */
+.box,.chart-box,.trend-box,.gk-box,.hr-box,.ws-box,.gauge-wrap,
+.brief-box,.outline-card,.serp-box,.kh-tw,.track-card,.kpi,
+.pr-card,.gd-card,.lp-card{
+  box-shadow:var(--sh);
+}
+.note{box-shadow:none}
+[role="tab"][aria-selected="true"],
+[role="tabpanel"] [role="tab"][aria-selected="true"],
+.kh-pill.on,
+.search-box.kh-track-add .stTextInput{box-shadow:var(--sh)}
+
+/* 3. 붙어 있는 면들 — 흰 유리로 */
+.masthead{background:rgba(255,255,255,.78)}
+@media (max-width:640px){
+  .kh-tabbar{background:rgba(255,255,255,.92);
+    box-shadow:0 -1px 0 var(--edge),0 -6px 20px rgba(16,24,40,.05)}
+}
+#kh-busy{background:rgba(251,251,253,.86)}
+.kh-modal-back{background:rgba(16,24,40,.38);backdrop-filter:blur(3px)}
+.kh-modal{box-shadow:0 24px 60px rgba(16,24,40,.18),0 2px 8px rgba(16,24,40,.08)}
+
+/* 4. 검색창 — 거대한 검은 그림자 대신 옅게 떠 있기 */
+.search-box{box-shadow:0 2px 6px rgba(16,24,40,.05),0 10px 28px rgba(16,24,40,.07)}
+.search-box:focus-within{
+  border-color:var(--iris);
+  box-shadow:0 0 0 4px var(--iris-wash),0 10px 28px rgba(16,24,40,.09);
+}
+
+/* 5. 짙은 색 위의 글자는 흰색.
+      다크 시절에는 채색 칩 위에 먹색을 올렸다(밝은 민트·코랄이었으니까).
+      지금 상태색은 어두워졌으니 반대로 흰 글자가 맞다. */
+/* 상태 칩은 ui.py가 인라인으로 '옅은 배경 + 진한 글자'를 박는다 —
+   여기서 색을 덮어쓰면 안 된다. 진짜로 짙은 면에 얹히는 것만 흰 글자. */
+/* ⚠️ .kh-chip은 tables.py가 인라인으로 '옅은 배경 + 진한 글자'를 박는다.
+      여기서 흰 글자를 강제하면 표 안의 등급 칩이 전부 사라진다. */
+.diag-mark,.outline-num,.mine-tag,.hb-score{color:#FFFFFF !important}
+.chip,.tc-pill,.brief-tag,.sc-verdict{font-weight:600}
+/* 빈도 칩은 배경 진하기로 세기를 나타낸다 — 옅은 쪽에 흰 글자는 안 읽힌다.
+   그래서 글자는 늘 진한 아이리스로 두고 배경만 옅게↔진하게 움직인다. */
+.wchip{color:var(--iris) !important}
+.wchip b{background:rgba(255,255,255,.7);color:var(--iris)}
+.stButton button,.kh-btn-primary,.kh-btn-primary:hover,
+.kh-pill.on,[role="tabpanel"] [role="tab"][aria-selected="true"].on,
+.pr-tag.pr-now,.wd-danger{color:#FFFFFF !important}
+.wd-danger:hover{background:#C93A50 !important;border-color:#C93A50 !important}
+.social-btn.kakao{color:#191600 !important}
+
+/* 6. 선택된 탭·알약 — 보라 채움은 상단 탭에만 남기고
+      나머지는 조용한 회색 판으로 (밝은 화면에서 보라 덩어리가 많으면 시끄럽다) */
+[role="tabpanel"] [role="tab"][aria-selected="true"]{
+  background:var(--surf); color:var(--txt) !important;
+}
+.kh-pill.on{
+  background:var(--iris); border-color:var(--iris); color:#FFFFFF !important;
+}
+
+/* 7. AI 진단 버튼 — 짙은 보라 유리판에서 옅은 보라 종이로 */
+.kh-ai-cta{
+  background:linear-gradient(135deg,#F6F4FF 0%,#EFECFE 55%,#F6F4FF 100%);
+  border-color:var(--iris-dim);
+}
+.kh-ai-cta:hover{
+  border-color:var(--iris);
+  box-shadow:0 6px 18px rgba(91,75,214,.12);
+}
+.kh-ai-badge{background:#FFFFFF}
+.kh-ai-cta,.kh-ai-cta *{color:var(--txt)}
+.kh-ai-badge,.kh-ai-sub b{color:var(--iris) !important}
+
+/* 8. 링크·액센트 — 밝은 바탕에서는 옅은 쪽(iris2)이 아니라 진한 쪽이 읽힌다 */
+a{color:var(--iris)}
+.hero-cap em.ai,.eyebrow,.gd-n,.gd-badge,.lp-n,.hero-kick,
+.tc-tag,.pr-tag.pr-pop,.hint-chip,.gd-how code,.gd-what code,
+.pr-card.pr-cur .pr-price,.mast-name b{color:var(--iris) !important}
+@media (max-width:640px){.kh-tabbar a.on{color:var(--iris)}}
+
+/* 9. 돈 색도 진한 쪽으로 */
+.hero-cap em.aio,.lp-foot a,.kh-money .kpi-val{color:var(--mint) !important}
+.mast-meta .kh-cr{color:var(--mint);border-color:rgba(10,157,107,.28)}
+.pr-feats li::before{box-shadow:inset 0 0 0 1px rgba(10,157,107,.34)}
+
+/* 10. 히어로 뒤 빛 — 밝은 바탕에서는 아주 옅게만 */
+.hero::before{
+  background:radial-gradient(50% 50% at 50% 50%,rgba(91,75,214,.06),transparent 70%);
+}
+.hero-kick i{box-shadow:0 0 0 3px rgba(10,157,107,.16)}
+
+/* 11. 표 — 머리글을 한 톤 눌러 본문과 구분 */
+thead th,.kh-th{background:var(--surf2) !important}
+tbody tr:hover td{background:var(--surf2)}
+
+/* 12. 순위 밖 / 회색 문구 대비 보정 */
+.kh-foot-copy{color:var(--txt4)}
+
+/* ── 조용한 한 줄 도움말 ────────────────────────
+   상자(.note)는 에러와 텅 빈 상태에만. 부가설명은 여기로 내린다. */
+.kh-tip{
+  margin:-6px 0 18px; padding:0;
+  font-size:.82rem; line-height:1.7; color:var(--txt3);
+}
+.kh-tip b{color:var(--txt2);font-weight:500}
+.kh-tip a{color:var(--iris)}
+.kh-tip code{
+  font-family:var(--mono); font-size:.76rem; color:var(--txt2);
+  background:var(--surf2); border-radius:4px; padding:1px 5px;
+}
+/* 상자는 더 조용하게 — 왼쪽 선 하나로 */
+.note{
+  background:var(--surf2); border:1px solid var(--edge);
+  border-left:2px solid var(--iris); border-radius:var(--r-sm);
+  padding:13px 16px; font-size:.86rem; color:var(--txt2); line-height:1.75;
+}
+.note b{color:var(--txt);font-weight:600}
+/* 접히는 각주 — 긴 면책·설명은 여기로 */
+.kh-more{margin:14px 0 18px;font-size:.82rem;color:var(--txt3)}
+.kh-more > summary{
+  cursor:pointer; color:var(--txt3); list-style:none;
+  display:inline-flex; align-items:center; gap:5px;
+  border-bottom:1px dashed var(--edge2); padding-bottom:1px;
+}
+.kh-more > summary::-webkit-details-marker{display:none}
+.kh-more > summary::after{content:"▾";font-size:.7rem}
+.kh-more[open] > summary::after{content:"▴"}
+.kh-more > summary:hover{color:var(--txt2)}
+.kh-more p{margin:10px 0 0;line-height:1.75}
+
+/* ── 추적 카드 격자 (2026-09-22) ──────────────────
+   ⚠️ .tc-grid에 열 정의가 없어서 1280px 화면에서도 카드가 한 줄에
+      하나씩 떨어졌다 — 8개를 보려면 스크롤을 한참 내려야 했다.
+      카드 안에 있어야 할 버튼 줄(.tc-btns)도 카드 밖 띠처럼 떠 있었다.
+      여기서 둘 다 바로잡는다: 격자를 채우고, 버튼은 카드의 바닥으로. */
+.tc-grid{grid-template-columns:repeat(auto-fill,minmax(292px,1fr));gap:12px}
+.tc-cell{display:flex;flex-direction:column}
+.tc-cell > .track-card{
+  flex:1; margin-bottom:0;
+  border-bottom-left-radius:0; border-bottom-right-radius:0; border-bottom:0;
+  box-shadow:none;
+}
+.tc-btns{
+  margin-top:0; padding:9px 10px; gap:7px;
+  background:var(--surf2); border:1px solid var(--edge); border-top:0;
+  border-radius:0 0 var(--r) var(--r); box-shadow:var(--sh);
+}
+.tc-cell > .track-card.mine + .tc-btns{border-color:var(--iris-dim)}
+.tc-cell > .track-card.watching + .tc-btns{border-style:dashed;border-top:0}
+.tc-btn{background:var(--surf)}
+@media (max-width:640px){
+  .tc-grid{grid-template-columns:1fr}
+}

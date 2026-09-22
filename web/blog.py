@@ -16,19 +16,9 @@ from naver_api import (
 def build(user, my_blog_id="", profile=None):
     out = []
 
-    # --- 로그인 헤더 + 로그아웃 ---
-    if user:
-        name = ((profile or {}).get("nickname")
-                or (user.get("email") or "").split("@")[0] or "회원")
-        credits = (profile or {}).get("credits")
-        mail = user.get("email") or ""
-        line = (f"<b>{name}</b>" + (f" ({mail})" if mail else "") + " 로 로그인 중"
-                + (f"　·　남은 크레딧 <b>{int(credits):,}</b>"
-                   if credits is not None else ""))
-        out.append(f'<div class="kh-row-split"><div class="kh-cap">{line}</div>'
-                   f'<form method="post" action="/logout">'
-                   f'<button class="kh-btn" type="submit">로그아웃</button>'
-                   f'</form></div>')
+    # ⚠️ 2026-09-22: 계정·크레딧·로그아웃 줄을 여기서 지웠다.
+    #    상단바의 내 이름 알약과 마이페이지가 이미 같은 말을 하고 있어서,
+    #    이 페이지에만 계정 띠가 하나 더 붙어 화면이 정리가 안 돼 보였다.
 
     out.append(render(ui.section, "내 블로그 진단", "지금 내 블로그는 어떤 상태인가"))
 
@@ -39,9 +29,9 @@ def build(user, my_blog_id="", profile=None):
                           '<a href="/me">마이페이지</a>에서 한 번만 등록하면 '
                           "여기서 바로 진단해드립니다.", True))
         return "".join(out)
-    out.append(render(ui.note,
-                      f"진단 대상: <code>{my_blog_id}</code> · "
-                      '주소 변경은 <a href="/me">마이페이지</a>에서'))
+    out.append(render(ui.tip,
+                      f"진단 대상 <code>{my_blog_id}</code> · "
+                      '<a href="/me">주소 변경</a>'))
 
     try:
         feed = get_my_blog_feed(my_blog_id)
@@ -50,8 +40,7 @@ def build(user, my_blog_id="", profile=None):
 
     if feed["error"]:
         out.append(render(ui.note,
-                          f"{feed['error']}<br>아이디가 맞는지, 블로그가 공개 상태인지 "
-                          "확인해주세요."))
+                          f"{feed['error']} — 아이디와 공개 상태를 확인해주세요."))
         return "".join(out)
 
     power = estimate_blog_power(feed["posts"])
@@ -90,13 +79,11 @@ def build(user, my_blog_id="", profile=None):
                           accent=ui.DEEP))
         empty_weeks = sum(1 for _, v in series if v == 0)
         if empty_weeks >= 6:
-            out.append(render(ui.note,
-                              "최근 12주 중 절반 이상 글이 없습니다. "
-                              "발행 간격이 벌어지면 노출에 불리하게 작용하는 경향이 있습니다."))
+            out.append(render(ui.tip,
+                              "최근 12주 중 절반 이상 글이 없습니다 — 간격이 벌어지면 "
+                              "노출에 불리한 경향이 있습니다."))
         elif empty_weeks == 0:
-            out.append(render(ui.note,
-                              "12주 내내 빠짐없이 발행했습니다. 꾸준함이 잘 유지되고 있습니다.",
-                              True))
+            out.append(render(ui.tip, "12주 내내 빠짐없이 발행했습니다."))
         wd_names = ['월', '화', '수', '목', '금', '토', '일']
         wd_count = {i: 0 for i in range(7)}
         for d in dated:
@@ -105,11 +92,12 @@ def build(user, my_blog_id="", profile=None):
                           [(wd_names[i], wd_count[i]) for i in range(7)],
                           "요일별 발행 분포", height=130, accent=ui.GOOD))
 
-    out.append(render(ui.note,
-                      "네이버는 블로그 지수를 공개하지 않습니다. 여기 점수는 "
-                      "<b>공개된 RSS로 관측한 발행 빈도와 최근성</b>을 조합한 추정치이며, "
-                      "네이버 내부 지수와는 다릅니다. 꾸준한 발행이 노출에 유리하다는 "
-                      "일반적 경향을 참고 지표로 만든 것입니다."))
+    out.append(
+        '<details class="kh-more"><summary>이 점수는 어떻게 나온 건가요</summary>'
+        '<p>네이버는 블로그 지수를 공개하지 않습니다. 여기 점수는 공개된 RSS로 '
+        '관측한 <b>발행 빈도와 최근성</b>을 조합한 추정치이며, 네이버 내부 지수와는 '
+        '다릅니다. 꾸준한 발행이 노출에 유리하다는 일반적 경향을 참고 지표로 '
+        '만든 것입니다.</p></details>')
 
     if posts:
         out.append(render(ui.section, "최근 발행", "내가 최근에 쓴 글"))
@@ -134,8 +122,7 @@ def build(user, my_blog_id="", profile=None):
     golden = (db.latest_snapshot(df[df['source'] == 'golden_time'], hours=24)
               if not df.empty else pd.DataFrame())
     if golden.empty:
-        out.append(render(ui.note,
-                          "골든타임 데이터가 아직 없습니다. collector.py를 실행해주세요."))
+        out.append(render(ui.note, "골든타임 데이터가 아직 없습니다."))
     else:
         top = golden.sort_values('rise_score', ascending=False).head(10)
         rows = []

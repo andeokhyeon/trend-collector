@@ -49,15 +49,14 @@ def _empty_note(df, source, label=""):
     all_rows = df[df['source'] == source] if not df.empty else df
     if all_rows.empty:
         return render(ui.note,
-                      f"아직 {label or '이 항목'} 데이터가 수집되지 않았습니다.<br>"
-                      "수집기가 다음 회차에 자동으로 채웁니다. 잠시 후 다시 봐주세요.")
+                      f"아직 {label or '이 항목'} 데이터가 없습니다 — "
+                      "다음 수집 회차에 자동으로 채워집니다.")
     last = all_rows['created_at_dt'].max()
     mins = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
     ago = f"{mins}분 전" if mins < 120 else f"{mins // 60}시간 전"
     return render(ui.note,
-                  f"선택한 기간 안에 수집된 것이 없습니다. "
-                  f"가장 최근 수집은 <b>{ago}</b>입니다.<br>"
-                  "위에서 더 넓은 기간을 눌러보세요.", True)
+                  f"이 기간에는 수집된 것이 없습니다 (최근 수집 <b>{ago}</b>) — "
+                  "위에서 기간을 넓혀보세요.", True)
 
 
 def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit=30,
@@ -69,8 +68,7 @@ def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit
             return render(ui.note, empty_msg)
         if source:
             return _empty_note(df_all, source, label)
-        return render(ui.note, "아직 이 항목에 수집된 데이터가 없습니다. "
-                               "수집기를 실행하면 채워집니다.")
+        return render(ui.note, "아직 수집된 데이터가 없습니다.")
     d = data.sort_values(by=sort_col, ascending=False).head(limit)
     d = d.reset_index(drop=True)
     cols, names = ['keyword'], ['키워드']
@@ -138,9 +136,7 @@ def build_money(period="일별", part="전체"):
     kws = pool['keyword'].tolist()
     bids = db.cached_min_bids(tuple(kws))
     if not bids:
-        out.append(render(ui.note,
-                          "광고 단가를 가져오지 못했습니다. 검색광고 API 키를 "
-                          "확인하거나 잠시 후 다시 시도해주세요."))
+        out.append(render(ui.note, "광고 단가를 가져오지 못했습니다 — 잠시 후 다시 시도해주세요."))
         return "".join(out)
 
     pool = pool.copy()
@@ -180,11 +176,9 @@ def build_money(period="일별", part="전체"):
         lead_cols=[('광고단가', '클릭단가(원)')],
         extra_cols=[('황금 점수', '황금 점수')],
         empty_msg=EMPTY))
-    out.append(render(ui.note,
-                      "단가는 네이버 검색광고의 <b>최소노출입찰가</b>입니다 — "
-                      "광고주가 그 검색어에 거는 금액이지, 블로그 수익을 "
-                      "보장하는 값이 아닙니다. 판단의 재료로 보세요. "
-                      "여기서 목록을 보는 것만으로는 크레딧이 들지 않습니다."))
+    out.append(render(ui.tip,
+                      "단가 = 네이버 검색광고 <b>최소노출입찰가</b> · "
+                      "목록 보기는 크레딧이 들지 않습니다."))
     return "".join(out)
 
 
@@ -225,9 +219,7 @@ def build_golden(period="일별", part="파생 키워드"):
                 for _, row in golden.iterrows()]
             golden = golden.sort_values('황금 점수', ascending=False)
         else:
-            out.append(render(ui.note,
-                              "광고 단가를 가져오지 못했습니다. "
-                              "검색광고 API 키를 확인하거나 잠시 후 다시 시도해주세요."))
+            out.append(render(ui.tip, "광고 단가를 가져오지 못해 검색량 순으로 보여드립니다."))
             money_first = False
 
     GT_EMPTY = "추천할만한 키워드가 아직은 없습니다."

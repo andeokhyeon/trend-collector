@@ -32,8 +32,7 @@ def build(kw, sort="sim", my_blog_id=""):
     meta = analyze_serp(base, top_n=10)
 
     if not serp:
-        out.append(render(ui.note,
-                          "검색 결과를 가져오지 못했습니다. API 키 설정을 확인해주세요."))
+        out.append(render(ui.note, "검색 결과를 가져오지 못했습니다."))
         return "".join(out)
 
     out.append(render(ui.weak_strip, weak_spots(base, kw), kw))
@@ -53,9 +52,8 @@ def build(kw, sort="sim", my_blog_id=""):
           f'{_sopt("최신 발행순", "date")}</div></div>')
     if my_blog_id:
         out.append(render(
-            ui.note,
-            f"내 블로그(<code>{my_blog_id}</code>)의 글이 있으면 금색으로 표시됩니다. "
-            "다른 사람의 블로그 이름은 표시하지 않습니다."))
+            ui.tip,
+            f"내 블로그(<code>{my_blog_id}</code>) 글은 따로 표시됩니다."))
     out.append(render(ui.serp_list, serp, my_blog_id=my_blog_id, limit=10))
 
     # 11~30위 — 스트림릿 expander 대신 접이식 details
@@ -106,9 +104,8 @@ def build(kw, sort="sim", my_blog_id=""):
     g2 = (render(ui.gauge, "신규 유입 압력", int(fresh_pct), ("낮음", "보통", "높음"),
                  color=ui.BAD if fresh_pct >= 70 else (
                      ui.WARN if fresh_pct >= 40 else ui.GOOD))
-          + render(ui.note,
-                   "최근 3개월 글이 많을수록 계속 새 글이 들어오는 자리라 "
-                   "한 번 올라가도 유지가 어렵습니다."))
+          + render(ui.tip,
+                   "최근 3개월 글이 많으면 한 번 올라가도 유지가 어렵습니다."))
     out.append(f'<div class="row" style="grid-template-columns:3fr 2fr">'
                f'<div class="cell">{g1}</div><div class="cell">{g2}</div></div>')
     return "".join(out)

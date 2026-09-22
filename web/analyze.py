@@ -205,9 +205,9 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
             out.append(f'<div class="note" style="margin-top:6px">{rank_txt}</div>')
     else:
         out.append(render(
-            ui.note,
-            "위쪽 <b>내 블로그</b> 탭에서 주소를 넣으시면, "
-            "<b>내 블로그로 이 키워드를 뚫을 수 있는지</b>까지 보여드립니다.", True))
+            ui.tip,
+            '<a href="/me">블로그 주소를 등록</a>하면 내 블로그로 이 키워드를 '
+            "뚫을 수 있는지까지 판정합니다."))
 
     # --- AI 판단 브리핑 — 버튼을 눌렀을 때만 만든다 (2026-08-29)
     #     매 조회마다 클로드를 부르면 느리고 비용도 든다. 원하는 사람만.
@@ -218,14 +218,15 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
                 f'<a class="kh-ai-cta" id="ai" href="/?q={_aq}&ai=1#ai">'
                 '<span class="kh-ai-badge">AI</span>'
                 '<span class="kh-ai-main">AI 진단 보기</span>'
-                '<span class="kh-ai-sub">측정된 숫자를 읽고 '
-                '&lsquo;써라 / 조건부 / 피해라&rsquo;를 근거와 함께 알려드립니다</span></a>')
+                '<span class="kh-ai-sub">단가와 검색 수요를 읽고 '
+                '&lsquo;써라 / 조건부 / 피해라&rsquo;를 근거와 함께</span></a>')
         else:
+            # ⚠️ 검색 API에서 온 값(문서수·경쟁률·기회점수)은 AI에 넘기지
+            #    않는다 — 약관 2.3. ai_brief.brief_keyword 주석 참고.
             payload = {kk: r.get(kk) for kk in
                        ("total_search", "monthly_pc", "monthly_mobile",
-                        "doc_count", "recent_docs", "recent_capped",
-                        "recent_estimated", "comp_ratio", "comp_grade",
-                        "recent_grade", "opportunity", "pl_avg_depth")}
+                        "pl_avg_depth")}
+            payload["min_bid"] = bid
             try:
                 brief, berr = ai_brief.brief_keyword(kw, payload, None, None, None)
             except Exception as e:
@@ -244,8 +245,7 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
     out.append('<div class="box">')
     out.append(render(ui.section, "노려볼 만한 연관 키워드", ""))
     if not rel:
-        out.append(render(ui.note,
-                          "연관 키워드를 찾지 못했습니다. 더 일반적인 키워드로 시도해보세요."))
+        out.append(render(ui.tip, "연관 키워드를 찾지 못했습니다 — 더 일반적인 말로 시도해보세요."))
     else:
         pool_rel = [i for i in rel if i.get("contains", True) or not only_contains]
         pool_rel = sorted(pool_rel,
@@ -260,9 +260,8 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
 
         if not rank:
             out.append(render(
-                ui.note,
-                "<b>기회 있는 키워드 보기</b>를 누르면 연관 키워드의 문서수를 재서 "
-                "노려볼 만한 순서대로 세웁니다."))
+                ui.tip,
+                "연관 키워드의 문서수까지 재서 노려볼 순서대로 세웁니다."))
             out.append(f'<a class="kh-btn kh-btn-primary" '
                        f'href="/?q={qkw}&rank=1#rank">기회 있는 키워드 보기</a>')
         else:
@@ -285,19 +284,18 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
                     "진단": sopp["label"],
                 })
             if not rows:
-                out.append(render(ui.note,
-                                  "순위를 매길 만한 연관 키워드를 찾지 못했습니다. "
-                                  "더 일반적인 키워드로 시도해보세요."))
+                out.append(render(ui.tip,
+                                  "순위를 매길 만한 연관 키워드가 없습니다 — "
+                                  "더 일반적인 말로 시도해보세요."))
             else:
                 rel_df = pd.DataFrame(rows).sort_values(
                     "기회 점수", ascending=False).reset_index(drop=True)
                 rel_df.index = rel_df.index + 1
                 out.append('<div id="rank"></div>')
                 out.append(render(
-                    ui.note,
-                    "기회 점수가 높은 순입니다. "
-                    "<b>찾는 사람은 있는데 쓰인 글이 적을수록</b> 위로 옵니다. "
-                    "1~3위는 특히 노려볼 만한 자리입니다."))
+                    ui.tip,
+                    "기회 점수 높은 순 — <b>찾는 사람은 있는데 쓰인 글이 적을수록</b> "
+                    "위로 옵니다."))
                 out.append(render(
                     ui.hunt_rank,
                     [{"keyword": row["키워드"], "search": int(row["월 검색량"]),
@@ -348,8 +346,7 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
                  or (i["monthly_pc"] + i["monthly_mobile"]) >= min_vol)]
 
         if not rows_all:
-            out.append(render(ui.note,
-                              "조건에 맞는 연관 키워드가 없습니다. 최소 검색량을 낮춰보세요."))
+            out.append(render(ui.tip, "조건에 맞는 것이 없습니다 — 최소 검색량을 낮춰보세요."))
         else:
             adf = pd.DataFrame(rows_all).sort_values(
                 "월 검색량", ascending=False, na_position="last").reset_index(drop=True)

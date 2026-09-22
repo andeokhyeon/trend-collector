@@ -41,18 +41,15 @@ def build(prof=None, why=""):
         out.append(_plans.upgrade_box(why))
     left = _plans.trial_left_days(prof)
     if trial and left:
-        out.append(render(ui.note,
-                          f"지금 <b>프로 체험 중</b>입니다 — 남은 기간 "
-                          f"<b>{left}일</b>. 체험이 끝나면 무료 플랜으로 "
-                          "돌아갑니다."))
+        out.append(render(ui.tip,
+                          f"<b>프로 체험 중</b> · 남은 기간 {left}일"))
     out.append('<div class="pr-grid">'
                + "".join(_card(k, cur, trial)
                          for k in ("free", "basic", "pro", "master"))
                + '</div>')
     out.append(render(
-        ui.note,
-        "월결제는 <b>오픈 준비 중</b>입니다. 지금 유료 플랜이 필요하시면 "
-        "마이페이지의 이메일로 문의해주세요 — 오픈 전에는 수동으로 "
-        "충전해드립니다. 크레딧은 키워드 조회 1회에 1개, <b>같은 키워드는 "
-        "그날 다시 봐도 무료</b>입니다."))
+        ui.tip,
+        "월결제 오픈 준비 중 — 지금 필요하시면 "
+        '<a href="/me">마이페이지</a>의 이메일로 문의해주세요. '
+        "조회 1회 = 크레딧 1개 · 같은 키워드는 그날 무료."))
     return "".join(out)

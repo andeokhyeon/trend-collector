@@ -3,12 +3,12 @@
 {% block body %}
 
 {% if q %}
-<nav role="tablist">
+{% if subs %}<nav role="tablist">
   {% for name, href in subs %}
   <a role="tab" href="{{ href }}?q={{ q | urlencode }}"
      aria-selected="{{ 'true' if href == active_sub else 'false' }}">{{ name }}</a>
   {% endfor %}
-</nav>
+</nav>{% endif %}
 {% endif %}
 
 {% if not q %}

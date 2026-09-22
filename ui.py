@@ -19,16 +19,28 @@ import streamlit as st
 #    민트=당신이 벌 돈. 상태색은 그 둘과 따로 둔다.
 #    여기 열 줄만 바꾸면 ui.py가 뿜는 인라인 색이 전부 따라온다.
 #    화면 구조·글자는 web/static/kh.css 하나가 담당한다.
-INK = "#F2F4F7"        # 본문 (다크에서는 글자가 밝다)
-MUTED = "#79828F"      # 보조 텍스트 — 청색 편향 중성
-LINE = "#252A33"       # 경계선 (헤어라인)
-BASE = "#0A0B0D"       # 배경 — 그라파이트 (순검정은 구멍처럼 보인다)
-SURFACE = "#14171C"    # 카드·패널
-DEEP = "#8B7CFF"       # 구조 액센트 — 아이리스 (제품·차트선·버튼)
-GOLD = "#FFB84D"       # 기회 신호 (골든타임·당장 사냥 구역) — 네 번째 색조
-GOOD = "#3DDC97"       # 좋음 · 돈 (민트)
-WARN = "#8A93A3"       # 보통 — 중립은 회색이 정직하다
-BAD = "#FF6B6B"        # 나쁨 (코랄)
+INK = "#0E1117"        # 본문 — 먹색  (2026-09-22 밤: 다크→밝은 톤 전환)
+MUTED = "#7A8494"      # 보조 텍스트 — 청색 편향 중성
+LINE = "#E8EBF0"       # 경계선 (헤어라인)
+BASE = "#FBFBFD"       # 배경 — 순백보다 반 톤 낮다 (카드가 떠 보이게)
+SURFACE = "#FFFFFF"    # 카드·패널 — 바닥보다 밝다
+DEEP = "#5B4BD6"       # 구조 액센트 — 아이리스 (제품·차트선·버튼)
+GOLD = "#A8690A"       # 기회 신호 (골든타임) — 앰버 (흰 글자 4.5:1 확보)
+GOOD = "#0A9D6B"       # 좋음 · 돈 (에메랄드)
+WARN = "#7A86A8"       # 보통 — 중립은 회색이 정직하다
+BAD = "#E0455C"        # 나쁨 (코랄)
+
+def _tint(hex_color, alpha=0.10):
+    """#RRGGBB → rgba(r,g,b,alpha).
+
+    ⚠️ 2026-09-22 밝은 톤 전환: 밝은 화면에서 상태색을 면으로 꽉 채우면
+       (a) 흰 글자 대비가 3:1 근처로 떨어지고 (b) 색 덩어리가 커서 싸 보인다.
+       그래서 '칠하기'는 옅은 tint + 진한 테두리 + 원래 글자색으로 바꾼다.
+       색은 여전히 뜻을 나르지만, 읽는 건 글자가 한다.
+    """
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
 
 GRADE_COLORS = {
     # 누적 경쟁률
@@ -1958,13 +1970,13 @@ def hunter_icon(size=34):
         f'<circle cx="24" cy="24" r="14" fill="none" stroke="{GOLD}" '
         f'stroke-width="2.5" opacity=".7"/>'
         f'<circle cx="24" cy="24" r="6.5" fill="{GOLD}"/>'
-        f'<path d="M24 24 L41 7" stroke="#FFFFFF" stroke-width="4.5" '
+        f'<path d="M24 24 L41 7" stroke="{INK}" stroke-width="4.5" '
         f'stroke-linecap="round"/>'
         f'<path d="M24 24 L41 7" stroke="{DEEP}" stroke-width="2.6" '
         f'stroke-linecap="round"/>'
         f'<path d="M41 7 L41 14 M41 7 L34 7" stroke="{DEEP}" '
         f'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>'
-        f'<circle cx="24" cy="24" r="2.4" fill="#FFFFFF"/>'
+        f'<circle cx="24" cy="24" r="2.4" fill="{INK}"/>'
         f'</svg>')
 
 
@@ -2058,7 +2070,12 @@ def kpi(label, value, sub=""):
 
 
 def chip(text, color):
-    return f'<span class="chip" style="background:{color}">{text}</span>'
+    # ⚠️ 밝은 톤(2026-09-22): 상태색으로 면을 꽉 채우면 흰 글자 대비가
+    #    3:1대로 떨어진다. 옅게 깔고 글자를 그 색으로 두면 5:1 위로 올라가고,
+    #    색 덩어리가 작아져 화면도 조용해진다.
+    return (f'<span class="chip" style="background:{_tint(color, .13)};'
+            f'color:{color};box-shadow:inset 0 0 0 1px {_tint(color, .3)}">'
+            f'{text}</span>')
 
 
 def grade_chip_html(grade):
@@ -2135,6 +2152,16 @@ def social_links(items):
 def note(text, gold=False):
     cls = "note note-gold" if gold else "note"
     st.markdown(f'<div class="{cls}">{text}</div>', unsafe_allow_html=True)
+
+
+def tip(text):
+    """조용한 한 줄 도움말 (2026-09-22).
+
+    ⚠️ note(상자)를 너무 많이 쓰면 화면이 '설명서'가 된다 — 정작
+       숫자가 안 보이고, 제품이 자신 없어 보인다. 상자는 '에러'와
+       '텅 빈 상태'에만 쓰고, 나머지 부가설명은 이 한 줄로 내린다.
+    """
+    st.markdown(f'<p class="kh-tip">{text}</p>', unsafe_allow_html=True)
 
 
 # ============================================================
@@ -2508,9 +2535,11 @@ def diagnosis_matrix(total_grade, recent_grade, label, note):
             '<div class="diag-grid">']
     for sat, bz, name, desc, color in cells:
         on = (sat == saturated and bz == busy)
-        style = (f'background:{color};color:#fff;border-color:{color}'
+        style = (f'background:{_tint(color, .12)};color:{INK};'
+                 f'border-color:{color};box-shadow:inset 0 0 0 1px {color}'
                  if on else f'background:{SURFACE};color:{MUTED};border-color:{LINE}')
-        mark = '<div class="diag-mark">지금 여기</div>' if on else ''
+        mark = (f'<div class="diag-mark" style="background:{color}">지금 여기</div>'
+                if on else '')
         html.append(f'<div class="diag-cell" style="{style}">{mark}'
                     f'<div class="diag-name">{name}</div>'
                     f'<div class="diag-desc">{desc}</div></div>')
@@ -2624,7 +2653,7 @@ def serp_row(item, my_blog_id=""):
         age_txt, age_color = f"{age // 365}년 전", GOOD
 
     mine = my_blog_id and item.get("blog_id", "").lower() == my_blog_id.lower()
-    bg = "background:rgba(200,150,62,.15);" if mine else ""
+    bg = "background:rgba(91,75,214,.08);" if mine else ""
     badge = ' <span class="mine-tag">내 글</span>' if mine else ""
     r = item["rank"]
     rank_color = GOOD if r <= 3 else (DEEP if r <= 10 else MUTED)
@@ -2670,7 +2699,8 @@ def brief_card(data, title="AI 판단"):
 
     html = [f'<div class="brief-box" style="border-color:{color}">']
     html.append(f'<div class="brief-top">'
-                f'<span class="brief-tag" style="background:{color}">{_esc(label)}</span>'
+                f'<span class="brief-tag" style="background:{_tint(color, .13)};'
+                f'color:{color}">{_esc(label)}</span>'
                 f'<span class="brief-title">{_esc(title)}</span></div>')
     html.append(f'<div class="brief-head">{_esc(data.get("headline", ""))}</div>')
     if reasons:
@@ -2770,7 +2800,8 @@ def _one_track_card(it):
     label = it.get("opp_label") or it.get("grade", "정보없음")
     lcolor = GRADE_COLORS.get(label, MUTED)
     meta = (f'<div class="tc-meta">'
-            f'<span class="tc-pill" style="background:{lcolor}">{_esc(label)}</span>'
+            f'<span class="tc-pill" style="background:{_tint(lcolor, .13)};'
+            f'color:{lcolor}">{_esc(label)}</span>'
             f'<span class="tc-rec">기록 {it.get("records", 0)}회</span></div>')
 
     if mine:
@@ -2778,7 +2809,7 @@ def _one_track_card(it):
         rank = it.get("rank")
         chg = it.get("change")
         if rank is None:
-            main_html = ('<div class="tc-rank" style="color:#C4553D">순위 밖</div>'
+            main_html = ('<div class="tc-rank" style="color:#E0455C">순위 밖</div>'
                          '<div class="tc-chg tc-flat">아직 100위 안에 없음</div>')
         else:
             color = GOOD if rank <= 10 else (WARN if rank <= 20 else BAD)
@@ -3016,7 +3047,7 @@ def hit_rate(stats):
         f'</div>', unsafe_allow_html=True)
 
 
-WEAK_COLORS = {"open": GOOD, "mid": WARN, "hard": BAD, "boss": "#5A6570"}
+WEAK_COLORS = {"open": GOOD, "mid": WARN, "hard": BAD, "boss": "#5A6470"}
 WEAK_NAMES = {"open": "빈틈", "mid": "보통", "hard": "단단함", "boss": "강자"}
 
 
@@ -3164,7 +3195,8 @@ def since_compare(data, since_label=""):
     st.markdown(
         f'<div class="chart-box">'
         f'<div class="sc-top"><span class="chart-title">등록 당시와 비교</span>'
-        f'<span class="sc-verdict" style="background:{color}">'
+        f'<span class="sc-verdict" style="background:{_tint(color, .13)};'
+        f'color:{color}">'
         f'{_esc(data["verdict"])}</span></div>'
         f'<div class="sc-since">{_esc(since_label)}</div>'
         + row("찾는 사람", data["search_from"], data["search_to"])
@@ -3209,7 +3241,7 @@ def hunt_rank(items, main=None, limit=10):
         label = it.get("label", "")
         # 1~3위는 눈에 띄는 색을 쓰고, 그 아래는 점수대로 정한다.
         if rank <= 3:
-            color = (GOLD, "#7B9E8B", "#A8A093")[rank - 1]
+            color = (GOLD, "#6E7A92", "#9AA3B2")[rank - 1]
         else:
             color = GRADE_COLORS.get(label)
             if not color:

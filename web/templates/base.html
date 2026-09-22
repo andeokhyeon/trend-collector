@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0A0B0D">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#FBFBFD">
 <title>{% block title %}키워드 헌터{% endblock %}</title>
 <meta name="description" content="{% block desc %}검색량만 보면 돈이 되는지 알 수 없습니다. 광고주가 거는 금액까지 함께 재는 네이버 키워드 도구.{% endblock %}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,7 +30,21 @@
 
   <header class="masthead">
     <a class="mast-brand" href="/">
-      {% if logo %}<img class="mast-logo" src="{{ logo }}" alt="">{% endif %}
+      <!-- 로고 — 2026-09-22: 예전 logo.png(주황+파랑)이 새 팔레트와 부딪혀
+           인라인 SVG로 바꿨다. 과녁='노린다', 화살='맞힌다'.
+           currentColor를 쓰지 않고 토큰 색을 직접 박아 어느 배경에서도 같다. -->
+      <svg class="mast-logo" viewBox="0 0 32 32" width="26" height="26"
+           fill="none" aria-hidden="true">
+        <circle cx="14.5" cy="17.5" r="11" stroke="#5B4BD6" stroke-width="2"
+                opacity=".28"/>
+        <circle cx="14.5" cy="17.5" r="6.5" stroke="#5B4BD6" stroke-width="2"
+                opacity=".62"/>
+        <circle cx="14.5" cy="17.5" r="2.3" fill="#5B4BD6"/>
+        <path d="M14.5 17.5 L28 4" stroke="#A8690A" stroke-width="2.6"
+              stroke-linecap="round"/>
+        <path d="M28 4 L28 10 M28 4 L22 4" stroke="#A8690A" stroke-width="2.6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
       <span class="mast-name">키워드<b>헌터</b></span>
     </a>
     <div class="mast-meta">

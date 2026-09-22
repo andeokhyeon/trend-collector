@@ -6,8 +6,14 @@ AI 판단 브리핑.
 그건 ChatGPT를 직접 열면 되는 일이라 굳이 여기서 할 이유가 약하다.
 
 이 모듈은 반대로 간다. 글을 쓰지 않고, **이미 측정한 숫자를 읽고 판단만** 내린다.
-경쟁률·상위글 나이·내 블로그 발행 리듬·순위 기록은 이 서비스에만 있는 재료라,
-ChatGPT를 따로 열어서는 얻을 수 없는 결론이 나온다.
+광고주가 그 검색어에 거는 금액(최소노출입찰가)·검색 수요·내 블로그 발행 리듬은
+이 서비스에만 있는 재료라, ChatGPT를 따로 열어서는 얻을 수 없는 결론이 나온다.
+
+⚠️⚠️ 2026-09-22: 프롬프트에 넣을 항목은 함부로 늘리지 말 것.
+   네이버 API 서비스 이용약관(시행 2026-09-07) 2.3이 <검색 API> 데이터를
+   "가공·파생물 포함" AI에 입력하는 것을 금지한다. 그래서 문서수·경쟁률·
+   상위권 판정·순위는 화면에만 두고 AI에는 넘기지 않는다.
+   자세한 갈래는 brief_keyword()의 주석에 적어뒀다.
 
 ⚠️ 키가 없으면 조용히 비활성화된다. 나머지 기능은 그대로 동작한다.
 """
@@ -105,44 +111,43 @@ def _parse_json(text):
 def brief_keyword(kw, analysis, serp_meta=None, blog_power=None, my_rank=None):
     """
     키워드 하나에 대한 판단 브리핑.
-    측정된 값만 넘긴다. 없는 항목은 '측정 안 됨'으로 명시해서 추측을 막는다.
+
+    ⚠️⚠️ 2026-09-22: 여기 넘기는 항목을 마음대로 늘리면 약관 위반이다.
+       네이버 API 서비스 이용약관(시행 2026-09-07) 2.3은 <검색 API>로 받은
+       데이터를 "가공·파생물을 포함하여" AI에 입력·평가·활용하는 것을 금지한다.
+       우리 화면의 숫자는 출처가 두 갈래다 —
+
+         · 검색광고 API (별개 약관, AI 금지 조항 없음)
+             월 검색량, PC/모바일 비, 광고 경쟁도, 최소노출입찰가(단가)
+         · 검색 API (금지 대상)
+             누적 문서수, 최근 30일 새 글, 그리고 그것으로 만든 경쟁률·
+             경쟁률 등급·기회 점수·상위권 판정·상위글 나이·내 순위
+         · 우리가 직접 잰 것 (제3자 데이터 아님)
+             내 블로그 공개 RSS의 발행 리듬
+
+       그래서 앞쪽 두 갈래 중 <검색 API> 쪽은 프롬프트에 넣지 않는다.
+       문서수·경쟁률은 화면에서 사람이 직접 보게 두고, AI는 '이 자리가
+       돈이 되는가'만 판단한다 — 어차피 지금 제품의 방향이 그쪽이다.
+       serp_meta / my_rank 인자는 호출부 호환을 위해 남겨두지만 쓰지 않는다.
     """
-    opp = analysis.get("opportunity") or {}
     facts = {
         "키워드": kw,
         "월 검색량": analysis.get("total_search"),
         "PC 대 모바일": f"{analysis.get('monthly_pc')} / {analysis.get('monthly_mobile')}",
-        "이미 쓰인 글(누적)": analysis.get("doc_count"),
-        # ⚠️ 1000건을 넘으면 정확히 못 센다(검색 API 한계).
-        #    그냥 1000이라고 넘기면 AI가 '정확히 1000건'으로 오해한다.
-        "최근 30일 새 글": (
-            f"약 {analysis.get('recent_docs'):,}건 (발행 속도로 추정)"
-            if analysis.get("recent_estimated")
-            else (f"{analysis.get('recent_docs')}건 이상 "
-                  "(너무 많아 정확히 못 셈)"
-                  if analysis.get("recent_capped")
-                  else analysis.get("recent_docs"))),
-        "경쟁률(문서수÷검색량)": analysis.get("comp_ratio"),
-        "경쟁률 등급": analysis.get("comp_grade"),
-        "최근 발행 강도": analysis.get("recent_grade"),
-        "기회 점수(0~100)": opp.get("score"),
-        "진단": opp.get("label"),
-        "광고 경쟁도": analysis.get("pl_avg_depth"),
+        "클릭당 최소노출입찰가(원)": analysis.get("min_bid"),
+        "광고 경쟁도(상위 노출 광고 수)": analysis.get("pl_avg_depth"),
     }
-    if serp_meta:
-        facts["상위권 판정"] = serp_meta.get("verdict")
-        facts["상위글 나이 중앙값(일)"] = serp_meta.get("median_age")
-        facts["상위 10개 중 최근 3개월 글"] = serp_meta.get("fresh_90")
-        facts["상위 10개 중 1년 이상 된 글"] = serp_meta.get("old_365")
     if blog_power:
         facts["내 블로그 주당 발행"] = blog_power.get("posts_per_week")
         facts["내 블로그 활동 등급"] = blog_power.get("level")
         facts["내 블로그 마지막 글(일 전)"] = blog_power.get("days_since_last")
-    facts["이 키워드 내 순위"] = f"{my_rank}위" if my_rank else "상위 30위 밖"
 
     lines = [f"- {k}: {v if v is not None else '측정 안 됨'}" for k, v in facts.items()]
     prompt = ("아래는 네이버 블로그 키워드 '%s'의 측정값입니다.\n"
-              "이 키워드로 글을 써야 할지 판단해주세요.\n\n%s" % (kw, "\n".join(lines)))
+              "광고주가 이 검색어에 거는 금액과 검색 수요를 보고, "
+              "이 키워드로 글을 써서 돈이 될 자리인지 판단해주세요.\n"
+              "문서수·경쟁률은 이 목록에 없습니다 — 없는 값을 추측하지 말고, "
+              "주어진 값만으로 판단하세요.\n\n%s" % (kw, "\n".join(lines)))
 
     text, err = _call(prompt)
     if err:
@@ -161,22 +166,21 @@ def brief_tracking(rows):
     if not rows:
         return None, "추적 데이터가 없습니다."
 
+    # ⚠️ 순위·문서수·경쟁률은 검색 API 파생물이라 프롬프트에 넣지 않는다
+    #    (brief_keyword의 주석 참고). 대신 검색광고 API 값으로 판단하게 한다.
     lines = []
     for r in rows:
-        fr, lr = r.get("first_rank"), r.get("last_rank")
-        move = "기록 부족"
-        if fr and lr:
-            d = fr - lr
-            move = f"{fr}위→{lr}위 ({'상승' if d > 0 else '하락' if d < 0 else '유지'} {abs(d)})"
-        elif lr:
-            move = f"현재 {lr}위"
-        elif fr:
-            move = "순위권 밖으로 이탈"
-        lines.append(f"- {r['keyword']}: {move}, 기회점수 {r.get('opportunity')}, "
-                     f"경쟁률등급 {r.get('comp_grade')}, 기록 {r.get('records')}회")
+        bid = r.get("min_bid")
+        lines.append(
+            f"- {r['keyword']}: 월 검색량 {r.get('total_search') or '측정 안 됨'}, "
+            f"클릭당 최소노출입찰가 {f'{bid:,}원' if bid else '측정 안 됨'}, "
+            f"추적 {r.get('records')}회")
 
-    prompt = ("아래는 제가 추적 중인 블로그 키워드들의 순위 변화입니다.\n"
-              "무엇이 잘되고 있고, 다음에 무엇에 집중해야 할지 판단해주세요.\n\n"
+    prompt = ("아래는 제가 추적 중인 블로그 키워드들입니다.\n"
+              "검색 수요와 광고주가 거는 금액을 보고, 다음에 어디에 힘을 "
+              "쏟아야 할지 판단해주세요.\n"
+              "순위·문서수는 이 목록에 없습니다 — 추측하지 말고 주어진 값만 "
+              "쓰세요.\n\n"
               + "\n".join(lines))
 
     text, err = _call(prompt)

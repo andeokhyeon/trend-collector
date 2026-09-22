@@ -127,8 +127,7 @@ def _detail(summary, hdf, pick):
     rows = (hdf[hdf['keyword'] == pick].sort_values('dt')
             if not hdf.empty else pd.DataFrame())
     if rows.empty:
-        out.append(render(ui.note,
-                          "아직 기록이 없습니다. 다음 수집 때 첫 기록이 만들어집니다."))
+        out.append(render(ui.tip, "아직 기록이 없습니다 — 다음 수집 때 첫 기록이 쌓입니다."))
         out.append('</div>')
         return "".join(out)
     latest = rows.iloc[-1]
@@ -165,21 +164,18 @@ def _detail(summary, hdf, pick):
 
     if not info.get("visits"):
         if info.get("has_post"):
-            out.append(render(ui.note,
-                              "이 키워드로 쓴 <b>내 글</b>이 아직 상위에 노출되지 않아 "
-                              "<b>예상 방문자를 집계할 수 없습니다.</b> "
+            out.append(render(ui.tip,
+                              "내 글이 아직 상위에 없어 예상 방문자를 낼 수 없습니다. "
                               "순위가 올라오면 자동으로 표시됩니다."))
         else:
-            out.append(render(ui.note,
-                              "아직 이 키워드로 쓴 <b>내 글</b>이 없어서 "
-                              "<b>예상 방문자를 집계할 수 없습니다.</b> "
-                              "글을 발행한 뒤 위에서 "
-                              "<b>내가 쓴 키워드로 전환</b>해주세요.", True))
+            out.append(render(ui.tip,
+                              "이 키워드로 쓴 내 글이 없습니다. 발행 후 "
+                              "<b>내가 쓴 키워드</b>로 바꾸면 방문자를 집계합니다."))
     if info.get("opp_breakdown"):
         out.append(render(ui.score_breakdown, info["opp_breakdown"],
                           info["opportunity"]))
     if info.get("opp_note"):
-        out.append(render(ui.note,
+        out.append(render(ui.tip,
                           f"<b>{info.get('opp_label', '')}</b> — {info['opp_note']}"))
     out.append('</div>')
     return "".join(out)
@@ -190,9 +186,9 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
                   "저장해두면 순위 변화를 자동으로 기록합니다 · "
                   "최소 하루가 지나야 변화 정보가 제공됩니다")]
     if not my_blog_id:
-        out.append(render(ui.note,
-                          "블로그를 등록하면 <b>내 글의 순위 변화</b>까지 함께 기록합니다. "
-                          "등록하지 않아도 검색량·문서수 변화는 추적됩니다.", True))
+        out.append(render(ui.tip,
+                          '<a href="/me">블로그를 등록</a>하면 내 글의 순위 변화까지 '
+                          "함께 기록합니다."))
     if flash:
         from html import escape as _esc
         out.append(f'<div class="kh-flash">{_esc(flash)}</div>')
@@ -217,9 +213,9 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
         return "".join(out)
     if not tracked:
         out.append(render(ui.note,
-                          "아직 추적 중인 키워드가 없습니다. 위에서 추가해보세요.<br>"
-                          "기록은 2시간마다 자동으로 쌓이며, 변화 비교는 "
-                          "<b>최소 하루</b>가 지나야 의미 있는 정보가 나옵니다."))
+                          "아직 추적 중인 키워드가 없습니다 — 위에서 추가해보세요."))
+        out.append(render(ui.tip,
+                          "기록은 자동으로 쌓이고, 변화 비교는 하루 뒤부터 의미가 있습니다."))
         return "".join(out)
 
     summary, hdf = summarize(tracked, history)
@@ -233,10 +229,9 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
         #    읽힌다 (2026-08-28 피드백). 왜 비었는지를 말해준다.
         why = ("블로그를 등록하면" if not my_blog_id
                else "다음 수집부터")
-        out.append(render(ui.note,
-                          "발행한 글의 <b>실제 순위가 아직 기록되지 않았습니다</b>. "
-                          f"{why} 내 글의 순위를 재서 점수 적중률을 보여드립니다. "
-                          "(기록은 수집기가 돌 때마다 쌓입니다)", True))
+        out.append(render(ui.tip,
+                          f"발행한 글의 실제 순위가 아직 기록되지 않았습니다. {why} "
+                          "순위를 재서 점수 적중률을 보여드립니다."))
     elif len(judged) >= 3:
         def _hit(x):
             return x.get("rank") is not None and x["rank"] <= 30
@@ -253,10 +248,9 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
             "avg_rank": (sum(ranked) / len(ranked)) if ranked else None,
             "buckets": rows_b}))
     elif judged:
-        out.append(render(ui.note,
-                          f"발행한 키워드가 <b>{len(judged)}개</b> 모였습니다. "
-                          "<b>3개</b>부터 우리 점수의 적중률을 계산해 보여드립니다.",
-                          True))
+        out.append(render(ui.tip,
+                          f"발행한 키워드 <b>{len(judged)}개</b> — 3개부터 점수 적중률을 "
+                          "계산해 보여드립니다."))
 
     mine_list = [x for x in summary if x.get("has_post")]
     watch_list = [x for x in summary if not x.get("has_post")]
@@ -264,9 +258,9 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
 
     out.append(render(ui.section, "추적 중인 키워드",
                       f"{len(ordered)}개 · 내가 쓴 것 {len(mine_list)}개를 앞에 둡니다"))
-    out.append(render(ui.note,
-                      "글을 발행했다면 카드 밑 <b>변경</b>을 눌러 "
-                      "<b>내가 쓴 키워드</b>로 바꿔주세요. 그때부터 순위를 추적합니다."))
+    out.append(render(ui.tip,
+                      "글을 발행했다면 카드 밑 <b>변경</b> → <b>내가 쓴 키워드</b>. "
+                      "그때부터 순위를 추적합니다."))
 
     # --- 카드 그리드 — 카드 본체는 ui.py 그대로, 버튼만 폼으로 ---
     cards = []
@@ -295,15 +289,22 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
                 '<a class="kh-ai-cta" id="ai" href="/tracker?ai=1#ai">'
                 '<span class="kh-ai-badge">AI</span>'
                 '<span class="kh-ai-main">AI 진단 보기</span>'
-                '<span class="kh-ai-sub">순위 변화를 읽고 '
-                '<b>지금 어디에 집중할지</b> 알려드립니다</span></a>')
+                '<span class="kh-ai-sub">검색 수요와 단가를 읽고 '
+                '<b>지금 어디에 집중할지</b></span></a>')
         else:
+            # ⚠️ 순위·문서수·경쟁률은 검색 API 파생물이라 AI에 넘기지 않는다
+            #    (약관 2.3 — ai_brief.brief_keyword 주석 참고).
+            #    대신 검색광고 API의 검색량·단가를 넘긴다.
             try:
+                _kws = tuple(x["keyword"] for x in has_record[:20])
+                try:
+                    _bids = db.cached_min_bids(_kws) or {}
+                except Exception:
+                    _bids = {}
                 tb, terr = ai_brief.brief_tracking([
-                    {"keyword": x["keyword"], "first_rank": x["first_rank"],
-                     "last_rank": x["last_rank"], "records": x["records"],
-                     "opportunity": x["opportunity"],
-                     "comp_grade": x["comp_grade"]}
+                    {"keyword": x["keyword"], "records": x["records"],
+                     "total_search": x.get("search"),
+                     "min_bid": _bids.get(x["keyword"])}
                     for x in has_record])
             except Exception as e:
                 tb, terr = None, str(e)

@@ -68,19 +68,17 @@ def build(logged_in=False):
                      "변화 비교는 최소 하루가 지나야 의미가 있습니다. "
                      "마이페이지에서 블로그 주소를 한 번 등록해두면 모든 화면에서 "
                      "내 글이 표시됩니다."))
-    out.append(render(ui.note,
-                      "계정 관련(크레딧·플랜·블로그 주소·로그아웃)은 탭이 아니라 "
-                      "<b>오른쪽 위 내 이름</b>을 누르면 나옵니다. "
-                      "휴대폰에서는 아래쪽 <b>내 정보</b>입니다."))
+    out.append(render(ui.tip,
+                      "계정·크레딧·플랜은 <b>오른쪽 위 내 이름</b>에서 "
+                      "(휴대폰은 아래쪽 <b>내 정보</b>)."))
 
     # 크레딧 규칙
     out.append('<div class="box">')
     out.append(render(ui.section, "크레딧", "요금이 굴러가는 규칙"))
-    out.append(render(ui.note,
-                      "키워드 조회 1회 = 크레딧 1개 · <b>같은 키워드는 그날 다시 봐도 "
-                      "무료</b> (분석·상위노출·글감 어디서 봐도 하루 1개만) · "
-                      "가입하면 무료 3회 · 플랜별 차이는 "
-                      '<a href="/pricing">요금 안내</a>에서 볼 수 있습니다.'))
+    out.append(render(ui.tip,
+                      "조회 1회 = 크레딧 1개 · <b>같은 키워드는 그날 무료</b> · "
+                      "가입 시 무료 3회 · "
+                      '<a href="/pricing">플랜별 차이</a>'))
     out.append('</div>')
 
     if not logged_in:
