@@ -7,6 +7,7 @@
    여기서 새로 정하는 건 '어느 부품을 어느 칸에 놓는가' 하나뿐이다.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from html import escape as _esc
 from urllib.parse import quote
 
 import pandas as pd
@@ -87,8 +88,6 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
     """키워드 하나를 재서 화면 HTML을 돌려준다."""
     kw = (kw or "").strip()
     out = []
-    out.append(render(ui.section, "단일 키워드 진단", "이 키워드, 지금 뛰어들어도 될까"))
-
     r = analyze_keyword(kw)
 
     # 추이와 광고 단가는 서로 다른 서버 — 동시에 던진다 (app.py와 같은 이유)
@@ -119,33 +118,66 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
     recent_grade = r.get("recent_grade", "정보없음")
     opp = r.get("opportunity") or {"score": 0, "label": "정보없음", "note": ""}
 
-    # --- KPI 4칸 ---
-    # ⚠️ 2026-09-22 순서를 바꿨다. 예전엔 월 검색량이 첫 칸이었는데,
-    #    제품이 약속하는 게 "돈이 되는지"라 첫 칸도 단가여야 말이 맞는다.
-    #    검색량은 둘째 칸으로 내렸다 (없어진 게 아니다).
-    if bid:
-        k1 = render(ui.kpi, "예상 클릭단가", f"{bid:,}원",
-                    "광고주가 한 번 클릭에 내는 돈 · 최소노출입찰가")
-    else:
-        k1 = render(ui.kpi, "예상 클릭단가", "—",
-                    "입찰가를 가져오지 못했습니다")
-    # 돈 숫자는 화면에서 하나만 강조한다 (kh.css의 .kh-money)
-    k1 = '<div class="kh-money">' + k1 + '</div>'
-    k2 = render(ui.kpi, "월 검색량", compact_num(r["total_search"]),
-                f"PC {r['monthly_pc']:,} · 모바일 {r['monthly_mobile']:,}")
-    k3 = render(ui.kpi, "이미 쓰인 글", compact_num(r["doc_count"]),
-                f"{r['doc_count']:,}편" if r["doc_count"] is not None else "조회 실패")
+    # --- 판정 슬랩 ---
+    # ⚠️ 2026-09-22 3차. 예전엔 흰 카드 네 장(단가·검색량·문서수·새글)이었다.
+    #    네 장이 같은 무게로 나란히 서 있으니 무엇이 결론인지 알 수 없었고,
+    #    화면이 '어느 SaaS에나 있는 관리자 페이지'처럼 보였다.
+    #    이제는 어두운 판 하나에 다 담고, 그 안에서 단가만 크게 키운다.
+    #    이 제품이 파는 게 단가라서 머릿수도 단가여야 말이 맞는다.
+    #    ⚠️ 어두운 판은 한 화면에 하나만. 둘이 되면 다시 다크 테마가 된다.
+    def _cell(val, label, money=False):
+        cls = "slab-cell money" if money else "slab-cell"
+        return f'<div class="{cls}"><div class="v">{val}</div><div class="l">{label}</div></div>'
+
+    try:
+        _inc = estimate_monthly_income(r.get("total_search"), 3)
+    except Exception:
+        _inc = None
+    _money_l = "클릭단가 · 광고주가 한 번 클릭에 내는 돈"
+    if bid and _inc:
+        _lo = _inc[0] if isinstance(_inc, (list, tuple)) and len(_inc) > 1 else None
+        _hi = _inc[1] if isinstance(_inc, (list, tuple)) and len(_inc) > 1 else None
+        if _lo and _hi:
+            _money_l = f"클릭단가 · 3위 시 월 {int(_lo):,}~{int(_hi):,}원 예상"
+    elif not bid:
+        _money_l = "클릭단가 · 가져오지 못했습니다"
+    cells = [_cell(f"{bid:,}원" if bid else "—", _money_l, money=True),
+             _cell(compact_num(r["total_search"]),
+                   f"월 검색량 · PC {r['monthly_pc']:,} / 모바일 {r['monthly_mobile']:,}"),
+             _cell(compact_num(r["doc_count"]) if r["doc_count"] is not None else "—",
+                   "이미 쓰인 글")]
     if recent_docs is not None:
         if r.get("recent_estimated"):
-            val, sub = f"약 {compact_num(recent_docs)}", f"발행 속도로 추정 · {recent_grade}"
+            rv, rl = f"약 {compact_num(recent_docs)}", f"최근 30일 새 글 · {recent_grade}"
         elif r.get("recent_capped"):
-            val, sub = f"{recent_docs:,}+", f"너무 많아 정확히 못 셈 · {recent_grade}"
+            rv, rl = f"{compact_num(recent_docs)}+", f"최근 30일 새 글 · {recent_grade}"
         else:
-            val, sub = f"{recent_docs:,}", f"요즘 분위기 · {recent_grade}"
-        k4 = render(ui.kpi, "최근 30일 새 글", val, sub)
+            rv, rl = f"{recent_docs:,}", f"최근 30일 새 글 · {recent_grade}"
     else:
-        k4 = render(ui.kpi, "최근 30일 새 글", "—", "조회 실패")
-    out.append(_row([k1, k2, k3, k4]))
+        rv, rl = "—", "최근 30일 새 글"
+    cells.append(_cell(rv, rl))
+
+    verdict = _esc(opp.get("label") or "")
+    vnote = _esc(opp.get("note") or "")
+    try:
+        _se = seasonality_note(trend) if trend else None
+    except Exception:
+        _se = None
+    lines = []
+    if verdict:
+        lines.append(f'<b>{verdict}</b>' + (f" — {vnote}" if vnote else ""))
+    if _se:
+        lines.append(f'<b>{_esc(_se[0])}</b> — {_esc(_se[1])}')
+    foot = ('<div class="slab-foot">'
+            + "".join(f'<p>{x}</p>' for x in lines) + '</div>') if lines else ""
+    out.append(
+        '<div class="kh-slab">'
+        f'<div class="slab-top">'
+        f'<div class="slab-kw"><i>단일 키워드 진단</i>{_esc(kw)}</div>'
+        f'<div class="slab-score"><b>{int(opp.get("score") or 0)}</b><i>기회 점수</i></div>'
+        f'</div>'
+        f'<div class="slab-grid">{"".join(cells)}</div>'
+        f'{foot}</div>')
 
     # --- 도넛 + 점수 구성 ---
     donut = render(ui.donut,
@@ -162,13 +194,12 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
                           title="1년 검색 추이",
                           change_pct=trend.get("change_pct"),
                           abs_points=trend.get("abs")))
-    gold = calc_gold_score(r.get("total_search"), r.get("doc_count"),
-                           bid, r.get("comp_ratio"))
-    if gold:
-        out.append(render(
-            ui.gold_card, gold, min_bid=bid,
-            income=estimate_monthly_income(r.get("total_search"), 3),
-            season=seasonality_note(trend) if trend else None))
+    # ⚠️ '황금 키워드 점수' 카드를 뺐다 (2026-09-22 3차).
+    #    입찰가와 월 수익 추정이 슬랩과 글자까지 똑같았고, 한 화면에 점수가
+    #    둘(기회 78 / 황금 80)이라 무엇을 보고 판단하라는 건지 알 수 없었다.
+    #    낱개 키워드 화면의 점수는 '기회 점수' 하나다.
+    #    황금 점수는 여러 개를 줄 세우는 자리(/discover?v=money)에 남아 있다.
+    #    이 카드가 혼자 들고 있던 성수기 한 줄은 슬랩 바닥으로 옮겼다.
 
     # --- 경쟁률 눈금 + 기회 점수 ---
     if r.get("comp_ratio") is not None:
@@ -178,11 +209,10 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
              (2, "보통", ui.WARN), (10, "나쁨", ui.BAD), (None, "최악", ui.BAD)],
             title="경쟁률 — 쓰인 글 ÷ 찾는 사람",
             note="낮을수록 유리합니다. 1이면 찾는 사람 수만큼 글이 있다는 뜻"))
-    out.append(render(ui.gauge, "기회 점수", opp["score"], ("불리", "보통", "유리")))
-
-    # --- 진단 매트릭스 ---
-    out.append(render(ui.diagnosis_matrix, r["comp_grade"], recent_grade,
-                      opp["label"], opp.get("note", "")))
+    # ⚠️ '기회 점수' 게이지를 뺐다 (2026-09-22 3차).
+    #    같은 숫자가 슬랩 오른쪽 · 점수 구성 · 게이지까지 세 번 나왔다.
+    #    진단 매트릭스의 판정 문장도 슬랩 바닥과 같은 말이라 비웠다.
+    out.append(render(ui.diagnosis_matrix, r["comp_grade"], recent_grade, "", ""))
 
     # --- 내 승산 (app.py L1327~ 이식) ---
     if my_blog_id:

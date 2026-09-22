@@ -24,17 +24,28 @@
       1) 바탕을 순백이 아니라 살짝 낮춰 카드가 '떠 보이게'
       2) 테두리를 두르지 말고 옅은 그림자로 띄우기
       3) 액센트는 하나만, 나머지는 회색으로 조용히 */
-  --bg:#FBFBFD;          /* 페이지 바닥 — 순백보다 반 톤 낮다 */
-  --bg2:#F7F8FB;         /* 푸터 */
-  --surf:#FFFFFF;        /* 카드·표 — 바닥보다 밝아서 뜬다 */
-  --surf2:#F5F6F9;       /* 표 머리글·인셋 */
-  --surf3:#EDEFF4;       /* 트랙(막대 바탕) */
-  --edge:#E8EBF0;        /* 헤어라인 */
-  --edge2:#D7DCE5;       /* 강조 경계 */
+  /* ⚠️ 2026-09-22 3차: "밝은 건 괜찮은데 개성이 없다 / 너무 밝지 않았으면".
+     원인은 색이 아니라 '바닥이 카드와 같은 흰색'이었다.
+     흰 바탕에 흰 카드를 놓으면 테두리만 남고 아무것도 떠 보이지 않아서
+     어느 SaaS에나 있는 기본 관리자 화면처럼 보인다.
+     바닥을 한 단 내려 깔면(#EDEFF4) 흰 카드가 진짜로 뜬다 —
+     밝기도 낮아지고 깊이도 생긴다. 한 번에 두 불만을 없애는 지점. */
+  --bg:#EDEFF4;          /* 페이지 바닥 — 카드보다 확실히 낮다 */
+  --bg2:#E7EAF1;         /* 푸터 */
+  --surf:#FFFFFF;        /* 카드·표 — 바닥 위로 뜬다 */
+  --surf2:#F4F5F9;       /* 표 머리글·인셋 */
+  --surf3:#E6E9F1;       /* 트랙(막대 바탕) */
+  --edge:#DFE3EB;        /* 헤어라인 */
+  --edge2:#C9D0DD;       /* 강조 경계 */
+  /* 잉크 — 화면에 딱 하나 놓는 어두운 판(판정 슬랩)에만 쓴다 */
+  --ink:#14171C; --ink2:#1B1F26;
+  --on-ink:#E9ECF1; --on-ink2:#8A94A1; --on-ink3:#79828F;
+  --iris-lit:#8B7CFF;    /* 잉크 위에서만 쓰는 밝은 아이리스 */
+  --mint-lit:#3DDC97;    /* 잉크 위에서만 쓰는 밝은 민트 */
   --hi:rgba(16,24,40,.04);
   /* 그림자 — 테두리 대신 이걸로 띄운다 */
-  --sh:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
-  --sh-lg:0 4px 12px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.05);
+  --sh:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.07);
+  --sh-lg:0 6px 18px rgba(16,24,40,.09), 0 1px 3px rgba(16,24,40,.06);
   /* 글자 — 대비를 넉넉히 */
   --txt:#0E1117;
   --txt2:#4A5262;
@@ -1674,4 +1685,138 @@ tbody tr:hover td{background:var(--surf2)}
 .tc-btn{background:var(--surf)}
 @media (max-width:640px){
   .tc-grid{grid-template-columns:1fr}
+}
+
+/* ============================================================
+   개성 넣기  (2026-09-22 3차)
+
+   ⚠️ 밝게 바꿨더니 "깔끔한데 개성이 없다"는 말이 나왔다. 맞는 말이었다.
+      흰 카드 여덟 개가 같은 테두리·같은 여백·같은 그림자로 쌓여 있으면
+      그건 디자인이 아니라 기본값이다. 어느 제품인지 알 수가 없다.
+      그래서 셋을 넣는다 —
+        1) 화면마다 '주인공' 하나를 어두운 판(슬랩)으로 못 박는다.
+           이 제품이 파는 건 단가라서, 단가가 그 판의 머릿수다.
+        2) 제목에 액센트 레일을 달아 눈이 걸릴 곳을 만든다.
+        3) 숫자 타이포를 키우고 자간을 조인다 — 계측기처럼 보이게.
+      어두운 판은 화면에 하나만. 둘이 되는 순간 다시 다크 테마가 된다.
+   ============================================================ */
+
+/* ── 판정 슬랩 — 이 제품의 얼굴 ──────────────────── */
+.kh-slab{
+  position:relative; overflow:hidden;
+  background:var(--ink); border-radius:20px;
+  padding:26px 28px 22px; margin:0 0 16px;
+  box-shadow:0 12px 32px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.10);
+}
+.kh-slab::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(85% 130% at 10% 0%,rgba(139,124,255,.18),transparent 62%);
+}
+.kh-slab > *{position:relative}
+.slab-top{
+  display:flex; justify-content:space-between; align-items:flex-start;
+  gap:18px; margin-bottom:22px;
+}
+.slab-kw{font-size:1.1rem;font-weight:600;color:var(--on-ink);letter-spacing:-.035em;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slab-kw i{
+  display:block; font-style:normal; font-family:var(--mono); font-size:.64rem;
+  letter-spacing:.15em; text-transform:uppercase; color:var(--on-ink3);
+  margin-bottom:7px;
+}
+.slab-score{text-align:right;flex:0 0 auto;font-family:var(--mono)}
+.slab-score b{
+  display:block; font-size:1.7rem; font-weight:600; line-height:1;
+  color:var(--iris-lit); letter-spacing:-.04em; font-variant-numeric:tabular-nums;
+}
+.slab-score i{
+  font-style:normal; font-size:.62rem; letter-spacing:.15em;
+  text-transform:uppercase; color:var(--on-ink3);
+}
+.slab-grid{
+  display:grid; grid-template-columns:1.55fr 1fr 1fr 1fr; gap:20px; align-items:end;
+}
+.slab-cell{min-width:0}
+.slab-cell .v{
+  font-family:var(--mono); font-size:1.32rem; font-weight:600; line-height:1.05;
+  color:var(--on-ink); letter-spacing:-.04em; font-variant-numeric:tabular-nums;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.slab-cell .l{margin-top:8px;font-size:.73rem;color:var(--on-ink2);line-height:1.5}
+.slab-cell.money .v{font-size:2.15rem;color:var(--mint-lit)}
+.slab-foot{
+  margin-top:20px; padding-top:15px; border-top:1px solid rgba(255,255,255,.09);
+  font-size:.86rem; color:var(--on-ink2); line-height:1.7;
+}
+.slab-foot b{color:var(--on-ink);font-weight:600}
+@media (max-width:820px){
+  .kh-slab{padding:20px 20px 18px;border-radius:16px}
+  .slab-grid{grid-template-columns:1fr 1fr;gap:17px 14px}
+  .slab-cell.money{grid-column:1/-1}
+  .slab-cell.money .v{font-size:1.85rem}
+  .slab-score b{font-size:1.4rem}
+}
+
+/* ── 제목에 액센트 레일 ──────────────────────────── */
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px;
+  letter-spacing:.15em;
+}
+.eyebrow::before{
+  content:""; width:14px; height:2px; border-radius:2px;
+  background:var(--iris); flex:none;
+}
+.section-title{letter-spacing:-.035em}
+
+/* ── 숫자는 계측기처럼 ───────────────────────────── */
+.kpi-val,.gk-n,.tc-rank,.sc-row,.hb-score,.tr-chg{letter-spacing:-.035em}
+.kpi-val{font-size:1.44rem}
+td.num,th.num{font-variant-numeric:tabular-nums}
+
+/* ── 바닥이 내려갔으니 카드가 덜 애써도 뜬다 ───────── */
+.box,.chart-box,.trend-box,.gk-box,.hr-box,.ws-box,.gauge-wrap,
+.brief-box,.outline-card,.serp-box,.kh-tw,.track-card,.kpi,
+.pr-card,.gd-card,.lp-card{border-color:var(--edge)}
+.masthead{background:rgba(237,239,244,.82)}
+@media (max-width:640px){.kh-tabbar{background:rgba(255,255,255,.94)}}
+#kh-busy{background:rgba(237,239,244,.88)}
+.tc-btn{background:var(--surf)}
+.slab-foot p{margin:0}
+.slab-foot p + p{margin-top:7px}
+
+/* ── 첫 화면 잉크 슬랩 (지금 가장 비싼 키워드) ────── */
+.slab-lp{margin:44px 0 0}
+.slab-lp .slab-kw{font-size:1rem;white-space:normal}
+.slab-more{
+  flex:none; font-size:.8rem; color:var(--on-ink2) !important;
+  text-decoration:none !important; white-space:nowrap;
+  border-bottom:1px solid rgba(255,255,255,.16); padding-bottom:2px;
+}
+.slab-more:hover{color:var(--on-ink) !important;border-color:rgba(255,255,255,.4)}
+.slab-rank{display:flex;flex-direction:column;gap:2px}
+.sr-item{
+  display:flex; align-items:center; gap:14px;
+  padding:13px 4px; text-decoration:none !important;
+  border-top:1px solid rgba(255,255,255,.07);
+  transition:background .14s ease;
+}
+.sr-item:first-child{border-top:0}
+.sr-item:hover{background:rgba(255,255,255,.04)}
+.sr-n{
+  flex:none; font-family:var(--mono); font-size:.68rem; color:var(--on-ink3);
+  width:16px;
+}
+.sr-kw{
+  flex:1; min-width:0; font-size:.98rem; font-weight:500; color:var(--on-ink);
+  letter-spacing:-.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.sr-bid{
+  flex:none; font-family:var(--mono); font-size:1.24rem; font-weight:600;
+  color:var(--mint-lit); letter-spacing:-.04em; font-variant-numeric:tabular-nums;
+}
+.sr-bid i{font-style:normal;font-size:.78rem;margin-left:2px;opacity:.7}
+@media (max-width:640px){
+  .slab-lp{margin-top:32px}
+  .sr-kw{font-size:.9rem}
+  .sr-bid{font-size:1.06rem}
 }

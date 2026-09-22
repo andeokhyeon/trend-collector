@@ -352,3 +352,36 @@ def build_news(period="최근"):
         df, db.latest_snapshot(df[df['source'] == 'naver_news'], hours=h),
         show_docs=False, show_volume=False, source='naver_news', label="뉴스"))
     return "".join(out)
+
+def top_money(n=3, hours=24):
+    """지금 가장 비싼 키워드 n개 — 첫 화면 잉크 슬랩용. (2026-09-22)
+
+    ⚠️ 여기서 가짜 숫자를 만들지 않는다. 수집 데이터가 없거나 단가를 못
+       가져오면 빈 리스트를 돌려주고, 첫 화면은 슬랩 없이 그려진다.
+       단가 조회는 db.cached_min_bids가 6시간 기억하므로 첫 화면이
+       매번 외부 API를 부르지는 않는다.
+    """
+    try:
+        df = db.load_data()
+        if df.empty or '총 검색량' not in df.columns:
+            return []
+        pool = df[(df['source'] != 'naver_news') & (df['총 검색량'].fillna(0) > 0)]
+        pool = db.latest_snapshot(pool, hours=hours)
+        if pool.empty:
+            return []
+        pool = pool.sort_values('총 검색량', ascending=False).head(60)
+        bids = db.cached_min_bids(tuple(pool['keyword'].tolist())) or {}
+        if not bids:
+            return []
+        pool = pool.copy()
+        pool['광고단가'] = pool['keyword'].map(bids)
+        pool = pool[pool['광고단가'].notna() & (pool['광고단가'] > 0)]
+        if pool.empty:
+            return []
+        pool = pool.sort_values('광고단가', ascending=False).head(n)
+        return [{"keyword": str(r['keyword']),
+                 "bid": int(r['광고단가']),
+                 "search": int(r['총 검색량'] or 0)}
+                for _, r in pool.iterrows()]
+    except Exception:
+        return []

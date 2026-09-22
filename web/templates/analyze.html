@@ -47,6 +47,29 @@
   <span class="hs-part hs-src">구글 트렌드 · 네이버 검색광고 · 데이터랩</span>
 </div>
 
+{% if top_money %}
+<!-- 잉크 슬랩 — 첫 화면의 얼굴. 말로 설명하는 대신 제품이 내놓는 답을
+     그대로 보여준다. 수집 데이터가 없으면 이 블록째로 빠진다
+     (가짜 숫자를 걸지 않는다). -->
+<section class="kh-slab slab-lp">
+  <div class="slab-top">
+    <div class="slab-kw"><i>지금 가장 비싼 키워드</i>광고주가 제일 많이 거는 검색어</div>
+    <a class="slab-more" href="/discover?v=money">전체 보기 →</a>
+  </div>
+  <div class="slab-rank">
+    {% for m in top_money %}
+    <a class="sr-item" href="/?q={{ m.keyword | urlencode }}">
+      <span class="sr-n">{{ loop.index }}</span>
+      <span class="sr-kw">{{ m.keyword }}</span>
+      <span class="sr-bid">{{ "{:,}".format(m.bid) }}<i>원</i></span>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="slab-foot"><p>클릭 한 번에 광고주가 내는 최소 금액입니다 ·
+    눌러서 바로 진단해볼 수 있습니다</p></div>
+</section>
+{% endif %}
+
 <section class="lp">
   <div class="lp-card">
     <span class="lp-n">01</span>

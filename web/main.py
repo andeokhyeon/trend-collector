@@ -181,9 +181,21 @@ def _page(request, template, active_tab, active_sub, q, result,
         "meta": meta,
         "q": q, "result": result, "page_title": title,
         "chips": ["삼성전자", "주말날씨", "에어프라이어", "점심메뉴추천"],
+        # 첫 화면 잉크 슬랩 — '지금 가장 비싼 키워드'. 검색창에 키워드가
+        # 있는 화면에서는 슬랩이 이미 하나라서 만들지 않는다 (잉크는 한 화면에 하나).
+        "top_money": (_top_money() if (template == "analyze.html" and not q) else []),
         # ⚠️ 한때 "6분 전"으로 박혀 있었다 — 실제 수집 시각을 쓴다
         "freshness": (_fresh_short() or "수집 대기"),
     })
+
+
+def _top_money():
+    """첫 화면에 걸 '지금 가장 비싼 키워드' 셋. 실패하면 조용히 빈 목록."""
+    try:
+        import discover as _dis
+        return _dis.top_money(3)
+    except Exception:
+        return []
 
 
 def _fresh_short():

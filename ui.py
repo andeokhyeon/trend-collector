@@ -2546,7 +2546,11 @@ def diagnosis_matrix(total_grade, recent_grade, label, note):
     html.append('</div>')
     html.append('<div class="diag-axis"><span>← 누적 문서 적음 / 많음 →</span>'
                 '<span>위: 요즘 조용함 · 아래: 요즘 활발함</span></div>')
-    html.append(f'<div class="diag-note"><b>{_esc(label)}</b> — {_esc(note)}</div>')
+    # 판정 문장은 호출부가 비워 보낼 수 있다 (같은 말이 슬랩 바닥에 이미 있을 때)
+    if label or note:
+        sep = " — " if (label and note) else ""
+        html.append(f'<div class="diag-note"><b>{_esc(label)}</b>{sep}'
+                    f'{_esc(note)}</div>')
     html.append('</div>')
     st.markdown("".join(html), unsafe_allow_html=True)
 
