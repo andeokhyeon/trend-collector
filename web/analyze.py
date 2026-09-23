@@ -144,32 +144,41 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
     cells = [_cell(f"{bid:,}원" if bid else "—", _money_l, money=True),
              _cell(compact_num(r["total_search"]),
                    f"월 검색량 · PC {r['monthly_pc']:,} / 모바일 {r['monthly_mobile']:,}"),
-             _cell(compact_num(r["doc_count"]) if r["doc_count"] is not None else "—",
-                   "이미 쓰인 글")]
-    if recent_docs is not None:
-        if r.get("recent_estimated"):
-            rv, rl = f"약 {compact_num(recent_docs)}", f"최근 30일 새 글 · {recent_grade}"
-        elif r.get("recent_capped"):
-            rv, rl = f"{compact_num(recent_docs)}+", f"최근 30일 새 글 · {recent_grade}"
-        else:
-            rv, rl = f"{recent_docs:,}", f"최근 30일 새 글 · {recent_grade}"
-    else:
-        rv, rl = "—", "최근 30일 새 글"
-    cells.append(_cell(rv, rl))
-
-    verdict = _esc(opp.get("label") or "")
-    vnote = _esc(opp.get("note") or "")
+    ]
+    # ⚠️ 2026-09-23 (31번 Peach Fuzz 시안): 셋째·넷째 칸을 문서수·최근 새 글에서
+    #    모바일 비율·성수기로 바꿨다. 문서수·새 글은 네이버 검색 API 값이라
+    #    회신(9/22)대로 더 앞세울 수 없다. 모바일 비율은 검색광고 API,
+    #    성수기는 검색어트렌드 값이다.
+    _pc, _mo = int(r.get("monthly_pc") or 0), int(r.get("monthly_mobile") or 0)
+    _mob = f"{round(_mo * 100 / (_pc + _mo))}%" if (_pc + _mo) else "—"
+    cells.append(_cell(_mob, "모바일 비율"))
     try:
         _se = seasonality_note(trend) if trend else None
     except Exception:
         _se = None
-    lines = []
-    if verdict:
-        lines.append(f'<b>{verdict}</b>' + (f" — {vnote}" if vnote else ""))
+    import re as _re
     if _se:
-        lines.append(f'<b>{_esc(_se[0])}</b> — {_esc(_se[1])}')
-    foot = ('<div class="slab-foot">'
-            + "".join(f'<p>{x}</p>' for x in lines) + '</div>') if lines else ""
+        _kind = _se[2] if len(_se) > 2 else ""
+        _m = _re.search(r"(\d+)일", _se[0])
+        if _kind == "now":
+            sv, sl = "지금", "성수기"
+        elif _kind == "soon" and _m:
+            sv, sl = f"{_m.group(1)}일 뒤", "성수기"
+        else:
+            _mm = _re.search(r"(\d+월)", _se[0])
+            sv, sl = (_mm.group(1) if _mm else "—"), "성수기 · 지금은 비수기"
+    else:
+        sv, sl = "—", "성수기"
+    cells.append(_cell(sv, sl))
+
+    # 판정 한 줄 — 문구 H 결: "해볼 만함 · 작년 고점 10월 · 지금 써두면 선점됩니다"
+    verdict = _esc(opp.get("label") or "")
+    bits = []
+    if verdict:
+        bits.append(f"<b>{verdict}</b>")
+    if _se and len(_se) > 1:
+        bits.append(_esc(_se[1]))
+    foot = f'<div class="slab-foot"><p>{" · ".join(bits)}</p></div>' if bits else ""
     out.append(
         '<div class="kh-slab">'
         f'<div class="slab-top">'
@@ -182,7 +191,7 @@ def build(kw, rank=False, only_contains=True, min_vol=0, my_blog_id="", ai=False
     # --- 도넛 + 점수 구성 ---
     donut = render(ui.donut,
                    [("모바일", r["monthly_mobile"], ui.DEEP),
-                    ("PC", r["monthly_pc"], ui.GOLD)],
+                    ("PC", r["monthly_pc"], ui.WARN)],
                    compact_num(r["total_search"]), "월 검색량")
     breakdown = (render(ui.score_breakdown, opp["breakdown"], opp["score"])
                  if opp.get("breakdown") else "")

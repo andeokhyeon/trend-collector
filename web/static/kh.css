@@ -1820,3 +1820,146 @@ td.num,th.num{font-variant-numeric:tabular-nums}
   .sr-kw{font-size:.9rem}
   .sr-bid{font-size:1.06rem}
 }
+
+/* ============================================================
+   31 · PEACH FUZZ  (2026-09-23) — 최종 층. 여기가 이긴다.
+
+   ⚠️ 60개 시안 중 덕현님이 직접 고른 방향 (31번 + 문구 H).
+      복숭아빛 바닥 · 코랄 하나 · 크게 둥근 흰 카드.
+      어두운 판(잉크 슬랩)은 버렸다 — 판정도 흰 카드 위 코랄 숫자로 띄운다.
+      색을 바꿀 땐 아래 :root 한 곳만 고치면 된다.
+      차트·칩의 인라인 색은 ui.py 상단 토큰 10줄이 따로 맡는다 (같이 맞출 것).
+   ============================================================ */
+:root{
+  --bg:#FFF1EA;  --bg2:#FDE9E0;
+  --surf:#FFFFFF; --surf2:#FFF7F3; --surf3:#FCE6DC;
+  --edge:#F7D9CD; --edge2:#EEC2B1;
+  --txt:#3A2320; --txt2:#6B4E47; --txt3:#A07F76; --txt4:#C3A69D;
+  /* 액센트는 이름만 iris로 남아 있다 — 사이트 전체의 '행동' 색이 이 변수를 쓴다 */
+  --iris:#F2604E; --iris2:#FF6B5A; --iris-dim:#F9C3B6;
+  --iris-wash:rgba(255,107,90,.08); --iris-wash2:rgba(255,107,90,.15);
+  --coral:#B42C45; --coral-wash:rgba(180,44,69,.09);
+  --sh:0 1px 2px rgba(58,35,32,.04), 0 4px 14px rgba(255,107,90,.08);
+  --sh-lg:0 10px 28px rgba(255,107,90,.16), 0 2px 6px rgba(58,35,32,.05);
+  --r:20px; --r-sm:14px;
+  --sans:'Plus Jakarta Sans','Pretendard','IBM Plex Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+}
+html,body,.stApp{background:var(--bg)}
+
+/* ── 상단바 · 탭 ── */
+.masthead{background:rgba(255,241,234,.86);border-bottom-color:var(--edge)}
+.mast-me{background:var(--surf);border-color:var(--edge);border-radius:999px}
+[role="tablist"]{border-bottom-color:var(--edge)}
+[role="tab"]{border-radius:999px}
+[role="tab"]:hover{background:rgba(255,255,255,.7)}
+[role="tab"][aria-selected="true"]{background:var(--surf);color:var(--txt);box-shadow:var(--sh)}
+[role="tabpanel"] [role="tablist"]{background:rgba(255,255,255,.55);border-color:var(--edge);border-radius:999px}
+[role="tabpanel"] [role="tab"]{border-radius:999px}
+[role="tabpanel"] [role="tab"][aria-selected="true"]{background:var(--surf);color:var(--txt) !important;box-shadow:var(--sh)}
+
+/* ── 히어로 — 문구 H ── */
+.hero::before{
+  top:-180px; width:900px; height:520px;
+  background:radial-gradient(50% 50% at 50% 50%,rgba(255,160,120,.42),transparent 70%);
+}
+.hero-kick{background:var(--surf);border-color:var(--edge);color:var(--iris) !important}
+.hero-kick i{background:var(--iris);box-shadow:0 0 0 3px rgba(255,107,90,.18)}
+.hero .hero-h{font-weight:800;letter-spacing:-.05em;color:var(--txt)}
+.hero .hero-h em{color:var(--iris);font-weight:800}
+.hero-cap{color:var(--txt2)}
+.hero-cap b{color:var(--txt)}
+.hero-chip{background:var(--surf);border-color:var(--edge);color:var(--txt2)}
+.hero-chip:hover{border-color:var(--iris-dim);color:var(--txt)}
+
+/* ── 검색창 · 버튼 — 알약 ── */
+.search-box{border-radius:999px;border-color:var(--edge);background:var(--surf);
+  box-shadow:0 10px 28px rgba(255,107,90,.14),0 1px 2px rgba(58,35,32,.04)}
+.search-box:focus-within{border-color:var(--iris);box-shadow:0 0 0 4px rgba(255,107,90,.14),0 10px 28px rgba(255,107,90,.16)}
+.search-box .stButton button{border-radius:999px;margin:5px;height:auto;padding:0 24px}
+.stButton button,.kh-btn-primary{background:var(--iris);border-color:var(--iris);color:#fff !important}
+.stButton button:hover,.kh-btn-primary:hover{background:#E0503F;border-color:#E0503F}
+.kh-btn{border-radius:999px}
+.kh-pill{border-radius:999px;background:var(--surf);border-color:var(--edge)}
+.kh-pill.on{background:var(--iris);border-color:var(--iris);color:#fff !important;box-shadow:none}
+.search-box.kh-track-add{border-radius:0;box-shadow:none;background:transparent}
+.search-box.kh-track-add .stTextInput{border-radius:999px;border-color:var(--edge)}
+.search-box.kh-track-add .stButton button{margin:0;height:46px}
+
+/* ── 카드 — 크게 둥글고, 테두리는 복숭아 헤어라인 ── */
+.box,.chart-box,.trend-box,.gk-box,.hr-box,.ws-box,.gauge-wrap,.brief-box,
+.outline-card,.serp-box,.kh-tw,.track-card,.kpi,.pr-card,.gd-card,.lp-card{
+  border-color:var(--edge); border-radius:var(--r); box-shadow:var(--sh);
+}
+.tc-cell > .track-card{border-radius:var(--r) var(--r) 0 0}
+.tc-btns{border-color:var(--edge);border-radius:0 0 var(--r) var(--r)}
+.lp-n{background:var(--iris-wash2);color:var(--iris) !important;border-radius:999px}
+.eyebrow::before{background:var(--iris)}
+.note{background:var(--surf);border-color:var(--edge);border-left-color:var(--iris)}
+
+/* ── 판정 슬랩 — 잉크판 대신 흰 카드 + 코랄 숫자 ── */
+.kh-slab{
+  background:var(--surf); border:1px solid var(--edge); border-radius:24px;
+  box-shadow:0 12px 32px rgba(255,107,90,.16),0 2px 6px rgba(58,35,32,.05);
+}
+.kh-slab::before{background:radial-gradient(80% 120% at 0% 0%,rgba(255,160,120,.16),transparent 60%)}
+.slab-kw{color:var(--txt)}
+.slab-kw i{color:var(--txt3)}
+.slab-score b{color:var(--iris)}
+.slab-score i{color:var(--txt3)}
+.slab-cell .v{color:var(--txt)}
+.slab-cell .l{color:var(--txt3)}
+.slab-cell.money .v{color:var(--iris)}
+.slab-foot{border-top-color:var(--edge);color:var(--txt2)}
+.slab-foot b{color:var(--txt)}
+/* 첫 화면 '지금 가장 비싼 키워드' */
+.slab-more{color:var(--txt3) !important;border-bottom-color:var(--edge2)}
+.slab-more:hover{color:var(--iris) !important;border-bottom-color:var(--iris)}
+.sr-item{border-top-color:var(--edge)}
+.sr-item:hover{background:var(--surf2)}
+.sr-n{color:var(--txt4)}
+.sr-kw{color:var(--txt)}
+.sr-bid{color:var(--iris)}
+
+/* ── AI 진단 버튼 — 복숭아 종이 ── */
+.kh-ai-cta{background:linear-gradient(135deg,#FFF7F3 0%,#FFE9E0 100%);border-color:var(--iris-dim);border-radius:var(--r)}
+.kh-ai-cta:hover{border-color:var(--iris);box-shadow:0 8px 22px rgba(255,107,90,.16)}
+.kh-ai-badge{background:var(--surf);border-color:var(--iris-dim)}
+.kh-ai-badge,.kh-ai-sub b{color:var(--iris) !important}
+
+/* ── 표 ── */
+thead th,.kh-th{background:var(--surf2) !important}
+tbody tr:hover td{background:#FFFAF7}
+.mast-meta .kh-cr{color:var(--iris);background:var(--iris-wash);border-color:var(--iris-dim)}
+
+/* ── 모바일 하단 탭바 ── */
+@media (max-width:640px){
+  .kh-tabbar{background:rgba(255,255,255,.94);border-top-color:var(--edge)}
+  .kh-tabbar a.on{color:var(--iris)}
+  .search-box{border-radius:22px}
+  .search-box .stButton button{margin:0 5px 5px;padding:13px 0}
+}
+
+/* ── 푸터 — 항목마다 한 줄 (2026-09-23 요청) ──
+   예전엔 사업자 정보 여덟 개를 가운데점으로 두 줄에 몰아 써서
+   작은 글씨가 줄줄이 붙어 읽히지 않았다. 이름표 + 값 한 쌍씩 한 줄. */
+.kh-foot{border-top-color:var(--edge);padding-top:34px}
+.kh-foot-links{gap:6px 10px;margin-bottom:22px}
+.kh-foot-links a{color:var(--txt2)}
+.kh-foot-links a:hover{color:var(--iris)}
+.kh-foot-links span{color:var(--edge2)}
+dl.kh-foot-biz{
+  display:flex; flex-direction:column; gap:5px;
+  width:fit-content; max-width:100%; margin:0 auto; padding:0;
+  font-family:var(--sans); font-size:.78rem; line-height:1.6;
+  color:var(--txt2); text-align:left;
+}
+dl.kh-foot-biz > div{display:flex;gap:14px;align-items:baseline}
+dl.kh-foot-biz dt{flex:0 0 9.8em;color:var(--txt3);font-size:.74rem;margin:0;white-space:nowrap}
+dl.kh-foot-biz dd{margin:0;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+dl.kh-foot-biz dd b{color:var(--txt);font-weight:700}
+.kh-foot-copy{color:var(--txt4);margin-top:22px}
+@media (max-width:640px){
+  dl.kh-foot-biz{width:100%;font-size:.76rem}
+  dl.kh-foot-biz > div{gap:10px}
+  dl.kh-foot-biz dt{flex-basis:9.2em;font-size:.7rem}
+}

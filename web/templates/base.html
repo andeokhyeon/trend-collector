@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light">
-<meta name="theme-color" content="#FBFBFD">
+<meta name="theme-color" content="#FFF1EA">
 <title>{% block title %}키워드 헌터{% endblock %}</title>
 <meta name="description" content="{% block desc %}검색량만 보면 돈이 되는지 알 수 없습니다. 광고주가 거는 금액까지 함께 재는 네이버 키워드 도구.{% endblock %}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +16,7 @@
      Pretendard는 서버가 직접 들고 있다 (static/fonts/pretendard). -->
 <link href="/static/fonts/pretendard/pretendard.css"
       rel="stylesheet" media="print" onload="this.media='all'">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap"
       rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="/static/fonts/pretendard/pretendard.css" rel="stylesheet"></noscript>
 <!-- ⚠️ 2026-09-22: app.css(ui.py 자동추출) + bridge.css + parity.css 세 갈래를
@@ -35,14 +35,14 @@
            currentColor를 쓰지 않고 토큰 색을 직접 박아 어느 배경에서도 같다. -->
       <svg class="mast-logo" viewBox="0 0 32 32" width="26" height="26"
            fill="none" aria-hidden="true">
-        <circle cx="14.5" cy="17.5" r="11" stroke="#5B4BD6" stroke-width="2"
-                opacity=".28"/>
-        <circle cx="14.5" cy="17.5" r="6.5" stroke="#5B4BD6" stroke-width="2"
+        <circle cx="14.5" cy="17.5" r="11" stroke="#FF6B5A" stroke-width="2"
+                opacity=".30"/>
+        <circle cx="14.5" cy="17.5" r="6.5" stroke="#FF6B5A" stroke-width="2"
                 opacity=".62"/>
-        <circle cx="14.5" cy="17.5" r="2.3" fill="#5B4BD6"/>
-        <path d="M14.5 17.5 L28 4" stroke="#A8690A" stroke-width="2.6"
+        <circle cx="14.5" cy="17.5" r="2.3" fill="#FF6B5A"/>
+        <path d="M14.5 17.5 L28 4" stroke="#3A2320" stroke-width="2.6"
               stroke-linecap="round"/>
-        <path d="M28 4 L28 10 M28 4 L22 4" stroke="#A8690A" stroke-width="2.6"
+        <path d="M28 4 L28 10 M28 4 L22 4" stroke="#3A2320" stroke-width="2.6"
               stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <span class="mast-name">키워드<b>헌터</b></span>
@@ -73,19 +73,19 @@
       <a href="/terms">이용약관</a><span>·</span>
       <a href="/privacy"><b>개인정보처리방침</b></a>
     </nav>
+    {#- 2026-09-23: 한 줄에 몰아 쓰던 사업자 정보를 항목마다 한 줄로.
+        비어 있는 항목은 줄째로 빠진다 (가짜 번호를 내걸지 않는다). -#}
     {% if biz %}
-    <p class="kh-foot-biz">
-      {%- if biz.name %}<b>{{ biz.name }}</b>{% endif -%}
-      {%- if biz.owner %}<i>·</i>대표 {{ biz.owner }}{% endif -%}
-      {%- if biz.reg %}<i>·</i>사업자등록번호 {{ biz.reg }}{% endif -%}
-      {%- if biz.mail %}<i>·</i>통신판매업신고 {{ biz.mail }}{% endif -%}
-    </p>
-    <p class="kh-foot-biz">
-      {%- if biz.addr %}{{ biz.addr }}{% endif -%}
-      {%- if biz.phone %}<i>·</i>Tel {{ biz.phone }}{% endif -%}
-      {%- if biz.email %}<i>·</i>{{ biz.email }}{% endif -%}
-      {%- if biz.owner %}<i>·</i>개인정보보호책임자 {{ biz.owner }}{% endif -%}
-    </p>
+    <dl class="kh-foot-biz">
+      {%- if biz.name %}<div><dt>상호</dt><dd><b>{{ biz.name }}</b></dd></div>{% endif -%}
+      {%- if biz.owner %}<div><dt>대표</dt><dd>{{ biz.owner }}</dd></div>{% endif -%}
+      {%- if biz.reg %}<div><dt>사업자등록번호</dt><dd>{{ biz.reg }}</dd></div>{% endif -%}
+      {%- if biz.mail %}<div><dt>통신판매업신고</dt><dd>{{ biz.mail }}</dd></div>{% endif -%}
+      {%- if biz.addr %}<div><dt>주소</dt><dd>{{ biz.addr }}</dd></div>{% endif -%}
+      {%- if biz.phone %}<div><dt>전화</dt><dd>{{ biz.phone }}</dd></div>{% endif -%}
+      {%- if biz.email %}<div><dt>이메일</dt><dd>{{ biz.email }}</dd></div>{% endif -%}
+      {%- if biz.owner %}<div><dt>개인정보보호책임자</dt><dd>{{ biz.owner }}</dd></div>{% endif -%}
+    </dl>
     {% endif %}
     <p class="kh-foot-copy">Copyright © 2026 AD SoftWare. All rights reserved.</p>
   </footer>
