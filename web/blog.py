@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""내 블로그 — app.py L2243~ 이식. 문구·판정 원본 그대로."""
+"""발행 진단 — 내 블로그의 공개 RSS만 본다.
+
+⚠️ 2026-09-23: 아래에 있던 '골든타임 대조(내 승산)'를 뺐다. 경쟁률(블로그 검색
+   문서수, 검색 API 값)로 승산을 매기던 것이라 네이버 회신(9/22)대로 못 쓴다.
+   이 화면은 본인 블로그의 공개 RSS(발행 리듬·요일·최근 글)만 쓴다.
+"""
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -9,7 +14,7 @@ from tables import table_html
 import db
 
 from naver_api import (
-    get_my_blog_feed, estimate_blog_power, extract_blog_id, calc_win_score,
+    get_my_blog_feed, estimate_blog_power, extract_blog_id,
 )
 
 
@@ -116,28 +121,6 @@ def build(user, my_blog_id="", profile=None):
         pdf.index = pdf.index + 1
         out.append(table_html(pdf))
 
-    out.append(render(ui.section, "골든타임 대조",
-                      "지금 뜨는 키워드 중 내가 노려볼 만한 것"))
-    df = db.load_data()
-    golden = (db.latest_snapshot(df[df['source'] == 'golden_time'], hours=24)
-              if not df.empty else pd.DataFrame())
-    if golden.empty:
-        out.append(render(ui.note, "골든타임 데이터가 아직 없습니다."))
-    else:
-        top = golden.sort_values('rise_score', ascending=False).head(10)
-        rows = []
-        for _, row in top.iterrows():
-            ratio = row.get('comp_ratio') or None
-            win = calc_win_score(ratio if ratio else None, power["score"])
-            rows.append({"키워드": row['keyword'],
-                         "월 검색량": int(row['총 검색량']),
-                         "경쟁률": row.get('comp_grade', '정보없음'),
-                         "내 승산": (f"{win['score']}점"
-                                   if win["score"] is not None else "—"),
-                         "판단": win["verdict"]})
-        wdf = pd.DataFrame(rows)
-        wdf.index = wdf.index + 1
-        out.append(table_html(wdf))
     return "".join(out)
 
 

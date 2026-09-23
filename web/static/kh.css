@@ -1963,3 +1963,27 @@ dl.kh-foot-biz dd b{color:var(--txt);font-weight:700}
   dl.kh-foot-biz > div{gap:10px}
   dl.kh-foot-biz dt{flex-basis:9.2em;font-size:.7rem}
 }
+
+/* ── 돈 판정 칩 (슬랩 오른쪽 위) — 2026-09-23, 기회 점수 자리를 대신한다 ── */
+.slab-verdict{
+  flex:none; align-self:flex-start; border-radius:999px;
+  padding:6px 14px; font-size:.84rem; font-weight:700; letter-spacing:-.02em;
+  white-space:nowrap;
+}
+.slab-verdict.tone-good{background:#DCEFE9;color:#175247}
+.slab-verdict.tone-warn{background:#FBF2E1;color:#8A6420}
+.slab-verdict.tone-bad{background:#FAEAE5;color:#9E3E28}
+@media (max-width:640px){.slab-verdict{font-size:.76rem;padding:5px 11px}}
+
+/* ── 관심 키워드 카드 (2026-09-23, 예전 순위 추적) — 큰 숫자는 단가 ── */
+.tc-rank.tc-money{color:var(--iris)}
+.tc-verdict{font-size:.72rem;font-weight:700;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.tc-verdict.tone-good{background:#DCEFE9;color:#175247}
+.tc-verdict.tone-warn{background:#FBF2E1;color:#8A6420}
+.tc-verdict.tone-bad{background:#FAEAE5;color:#9E3E28}
+.track-card{min-height:0}
+/* 카드 버튼 줄 — 폼으로 감싼 버튼('빼기')도 링크 버튼과 같은 폭으로 늘린다 */
+.tc-btns > form{flex:1;display:flex;min-width:0}
+.tc-btns > form .tc-btn{flex:1;width:100%}
+.tc-btns > *{flex:1 1 0;min-width:0}
+.tc-btns > a.tc-btn{padding-left:0;padding-right:0}

@@ -39,6 +39,43 @@ def get_naver_headers(method, uri):
     }
 
 
+
+# ============================================================
+# ⛔ 검색 API · 자동완성 차단 스위치  (2026-09-23)
+# ============================================================
+# 네이버 개발자센터 회신(2026-09-22) 요지 —
+#   · 검색 API로 수익을 얻는 구조 불가 (유료 구독 범위에 포함되면 불가)
+#   · 검색결과를 집계해 수치를 만드는 것 자체가 '가공' → 문서수·경쟁률 불가
+#   · 그렇게 만든 수치는 임시보관(21일) 대상도 아님 → 저장 불가
+# 그래서 블로그 검색 기반 함수 전부를 여기서 막는다.
+# 자동완성(ac.search.naver.com)은 공식 API가 아니라 검색창 내부 주소라 같이 막는다.
+#
+# ⚠️ 이 스위치를 켜기 전에 반드시 네이버의 서면 허가를 먼저 받을 것.
+#    켜면 웹 화면·수집기 양쪽에서 다시 호출이 나간다.
+# 남아 있는 것: 검색광고 API(검색량·연관어·경쟁정도·최소노출입찰가),
+#               검색어트렌드(데이터랩) — 둘 다 이 특약의 대상이 아니다.
+SEARCH_API_ENABLED = False
+AUTOCOMPLETE_ENABLED = False
+
+
+def _blocked(default_factory, flag="search"):
+    """스위치가 꺼져 있으면 원래 함수를 부르지 않고 기본값을 돌려준다."""
+    def deco(fn):
+        def wrapper(*a, **k):
+            on = SEARCH_API_ENABLED if flag == "search" else AUTOCOMPLETE_ENABLED
+            if not on:
+                return default_factory()
+            return fn(*a, **k)
+        wrapper.__name__ = fn.__name__
+        wrapper.__doc__ = fn.__doc__
+        wrapper.blocked = True
+        return wrapper
+    return deco
+
+
+_NO_BLOG_STATS = lambda: {"total_docs": None, "recent": None,          # noqa: E731
+                          "capped": False, "estimated": False}
+
 def get_naver_stat(keyword):
     """키워드의 월간 검색량(PC/모바일) 및 광고경쟁 지표 조회."""
     path = "/keywordstool"
@@ -119,6 +156,7 @@ def get_related_keywords(keyword, limit=15):
     return related
 
 
+@_blocked(lambda: None)
 def get_blog_doc_count(keyword):
     """
     💡 핵심 신규 지표: 그 키워드로 이미 발행된 '전체 블로그 문서 수'.
@@ -632,6 +670,7 @@ def get_keyword_data(keyword, related_limit=200):
         return _cache_fail(ck, _empty(type(e).__name__))
 
 
+@_blocked(_NO_BLOG_STATS)
 def get_blog_stats(keyword, days=30, exact=True, light=False):
     """
     블로그 검색 한 번으로 '누적 문서수'와 '최근 N일 새 글 수'를 함께 얻는다.
@@ -910,6 +949,7 @@ def analyze_keyword(keyword, with_recent=True, exact_recent=True,
         "recent_grade": recent_grade,
         "opportunity": opportunity,
         "pl_avg_depth": stat["pl_avg_depth"],
+        "comp_level": stat.get("comp_level", "-"),   # 검색광고 경쟁정도 (광고주 수)
         "related": related,
         "hints": data.get("hints", []),
     }
@@ -1039,6 +1079,7 @@ def check_post_exposure(post_title, blog_id, max_words=6):
     return {"query": query, "rank": rank}
 
 
+@_blocked(lambda: None)
 def check_my_rank(keyword, blog_id, display=100):
     """
     그 키워드 블로그 검색 상위 결과에 내 블로그가 실제로 있는지 확인 (실측값).
@@ -1126,6 +1167,7 @@ def extract_blog_id(raw):
 RECENT_FETCH_MAX = 100  # 검색 API 1회 최대 조회 건수
 
 
+@_blocked(lambda: None)
 def _fetch_serp_page(keyword, start=1, display=1, sort="date"):
     """검색 API 한 페이지. 실패 시 None."""
     if not NAVER_HUB_CLIENT_ID or not NAVER_HUB_CLIENT_SECRET:
@@ -1163,6 +1205,7 @@ def _postdate_age(item, now=None):
 MAX_START = 1000  # 검색 API가 허용하는 최대 시작 위치
 
 
+@_blocked(lambda: None)
 def get_recent_doc_count(keyword, days=30, exact=True):
     """
     최근 N일 안에 발행된 블로그 글 수를 센다.
@@ -1504,6 +1547,7 @@ def _strip_tags(text):
     return t.strip()
 
 
+@_blocked(list)
 def get_serp(keyword, display=30, sort="sim"):
     """
     키워드의 블로그 검색 상위 결과를 정돈해서 돌려준다.
@@ -1859,6 +1903,7 @@ def _judge_since(search_pct, docs_pct):
 AC_URL = "https://ac.search.naver.com/nx/ac"
 
 
+@_blocked(list, "ac")
 def _ac_fetch(query):
     """자동완성 한 번 조회. 실패하면 빈 리스트."""
     try:
@@ -1913,6 +1958,7 @@ def _ac_parse(data):
     return uniq
 
 
+@_blocked(list, "ac")
 def autocomplete_keywords(keyword, expand=True, limit=60):
     """
     자동완성으로 연관 검색어를 모은다.
@@ -2346,3 +2392,48 @@ def weak_spots(serp, keyword, top_n=10):
         verdict = "빈 자리가 없습니다"
     return {"slots": slots, "open": open_n, "total": len(slots),
             "verdict": verdict}
+
+
+# ============================================================
+# 💰 돈 판정 (2026-09-23) — 기회 점수의 후임
+# ============================================================
+# 기회 점수는 문서수·최근 새 글(검색 API)이 절반을 차지해서 더 못 쓴다.
+# 여기는 검색광고 API 값(최소노출입찰가·월 검색량)과 검색어트렌드 방향만 쓴다.
+# 숫자 점수를 만들지 않고 '판정 한 마디 + 이유 한 줄'만 낸다 —
+# 검색광고 API 약관 회신 전이라 가공을 최소로 두기 위함이다.
+#
+# 기준선 (최소노출입찰가, 원 / 월 검색량):
+#   단가  높음 ≥ 1,000  ·  보통 ≥ 300  ·  낮음 < 300 (70원이 바닥값)
+#   수요  많음 ≥ 10,000 ·  보통 ≥ 1,000 ·  적음 < 1,000
+BID_HIGH, BID_MID = 1000, 300
+VOL_HIGH, VOL_MID = 10000, 1000
+
+
+def calc_money_verdict(min_bid, total_search, change_pct=None):
+    """반환: {"label", "note", "tone": good|warn|bad}"""
+    vol = int(total_search or 0)
+    if not min_bid:
+        return {"label": "단가 없음", "tone": "warn",
+                "note": "광고주가 거는 돈이 없는 검색어입니다. 수익보다 방문자용으로 보세요."}
+    b = "high" if min_bid >= BID_HIGH else ("mid" if min_bid >= BID_MID else "low")
+    v = "high" if vol >= VOL_HIGH else ("mid" if vol >= VOL_MID else "low")
+
+    if b == "high" and v != "low":
+        label, tone, note = "돈 되는 자리", "good", "단가도 높고 찾는 사람도 충분합니다."
+    elif b == "high":
+        label, tone, note = "비싸지만 좁음", "warn", "클릭 값은 높은데 찾는 사람이 적습니다."
+    elif b == "mid" and v != "low":
+        label, tone, note = "해볼 만함", "good", "단가와 수요가 고르게 받쳐줍니다."
+    elif b == "mid":
+        label, tone, note = "작게 해볼 만함", "warn", "단가는 괜찮지만 수요가 작습니다."
+    elif v == "high":
+        label, tone, note = "방문자용", "warn", "사람은 많지만 광고 단가가 낮습니다."
+    else:
+        label, tone, note = "피하세요", "bad", "단가도 수요도 낮습니다."
+
+    if change_pct is not None:
+        if change_pct >= 15:
+            note += " 검색이 늘고 있습니다."
+        elif change_pct <= -15:
+            note += " 검색이 줄고 있습니다."
+    return {"label": label, "tone": tone, "note": note}

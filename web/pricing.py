@@ -11,7 +11,7 @@ def _card(key, cur_key, trial):
     per = "" if not p["price"] else '<span class="pr-per">/월</span>'
     feats = [
         f"키워드 조회 <b>{'가입 시 ' if key == 'free' else '월 '}{p['credits']:,}회</b>",
-        f"추적 키워드 <b>{p['track']}개</b>",
+        f"관심 키워드 <b>{p['track']}개</b>",
         ("CSV 내려받기" if p["csv"] else
          '<span class="pr-no">CSV 내려받기</span>'),
         ("AI 진단" if p["ai"] else

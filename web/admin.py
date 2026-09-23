@@ -302,17 +302,13 @@ def pool_view(sort="최근 추가순"):
     out.append(_kpirow([
         render(ui.kpi, "쌓인 키워드", compact_num(stats["total"]),
                f"오늘 +{stats['today']:,}개"),
-        render(ui.kpi, "문서수 잰 키워드", compact_num(stats["with_docs"]),
-               "조회된 것만 채워집니다"),
         render(ui.kpi, "오늘 API 호출", f"{u['calls']:,}",
                f"한도 {u['limit']:,}회의 {u['pct']}%"),
         render(ui.kpi, "남은 조회", f"{u['remaining']:,}",
                f"{cache.reset_time()} 초기화"),
     ]))
-    out.append(render(ui.note,
-                      "<b>검색량</b>은 한 번 호출에 연관어 20개가 딸려와 빠르게 쌓입니다. "
-                      "<b>문서수</b>는 키워드마다 따로 불러야 해서, "
-                      "실제로 조회된 것만 채워집니다. 두 숫자가 크게 차이나는 건 정상입니다."))
+    # ⚠️ 2026-09-23: '문서수 잰 키워드' 칸과 설명을 뺐다 — 문서수는 네이버 블로그
+    #    검색(검색 API) 값이라 회신(9/22)대로 더 재지도, 보관하지도 않는다.
     out.append(render(ui.gauge, "오늘 사용량", min(100, int(u["pct"])),
                       ("여유", "보통", "한도"),
                       color=(ui.BAD if u["pct"] >= 70 else
@@ -334,7 +330,6 @@ def pool_view(sort="최근 추가순"):
             "키워드": r["keyword"],
             "월 검색량": (r.get("monthly_pc") or 0) + (r.get("monthly_mobile") or 0),
             "경쟁": r.get("comp_level") or "-",
-            "문서수": r.get("blog_total_docs") or None,
             "쌓인 시각": (r.get("updated_at") or "")[:16].replace("T", " "),
         } for r in rows])
         dfp.index = dfp.index + 1

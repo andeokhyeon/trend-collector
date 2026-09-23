@@ -121,34 +121,23 @@ from naver_api import (get_blog_doc_count, calc_competition, analyze_keyword,
 
 def track_saved_keywords():
     """
-    키워드 추적기 — 저장해둔 키워드의 오늘 상태를 기록한다.
+    관심 키워드 — 담아둔 키워드의 오늘 검색량을 기록한다.
 
-    ⚠️ 호출을 크게 줄인 구조.
-    예전에는 사용자마다 analyze_keyword를 따로 불렀다.
-    100명이 '제습기 추천'을 추적하면 같은 검색량을 100번 조회한 셈이다.
-
-    검색량과 문서수는 '그 키워드의 값'이지 '내 값'이 아니다.
-    그래서 키워드별로 딱 한 번만 재고, 그 결과를 모두가 나눠 쓴다.
-    사람마다 다른 건 '내 글의 순위'뿐이라 그것만 개별로 조회한다.
-
-      이전: 사람수 × 추적수 × 3회
-      이후: (고유 키워드 수 × 2회) + (글 쓴 항목 수 × 1회)
+    ⚠️ 2026-09-23: 순위·문서수·최근 새 글·경쟁률·기회 점수 기록을 뺐다.
+       전부 블로그 검색(검색 API) 값이라 네이버 회신(9/22)대로 재지도, 저장하지도 않는다.
+       남긴 건 검색광고 API의 월 검색량 하나 — 키워드마다 한 번만 잰다.
     """
     try:
         res = supabase.table("tracked_keywords").select("*").execute()
         targets = res.data or []
     except Exception as e:
-        print(f"⚠️ 추적 목록을 불러오지 못했습니다: {e}")
-        print("   (DB설정_전체.sql 을 Supabase에서 실행했는지 확인해주세요)")
+        print(f"⚠️ 관심 키워드 목록을 불러오지 못했습니다: {e}")
         return []
-
     if not targets:
-        print("   추적 중인 키워드가 없습니다. 대시보드에서 추가해주세요.")
+        print("   담아둔 키워드가 없습니다.")
         return []
 
-    # ① 고유 키워드만 추려서 한 번씩만 조회
-    unique_kw = []
-    seen = set()
+    unique_kw, seen = [], set()
     for t in targets:
         kw = (t.get("keyword") or "").strip()
         if kw and kw not in seen:
@@ -157,61 +146,35 @@ def track_saved_keywords():
 
     kw_data = {}
     for kw in unique_kw:
-        if not cache or not cache.can_call(2):
+        if cache and not cache.can_call(1):
             print(f"   ⚠️ 한도에 가까워 여기서 멈춥니다 (조회 {len(kw_data)}개 완료)")
             break
         try:
-            kw_data[kw] = analyze_keyword(kw, with_recent=True)
+            kw_data[kw] = analyze_keyword(kw, with_recent=False, with_related=False)
         except Exception as e:
             print(f"   · {kw} 조회 실패: {e}")
         time.sleep(0.12)
 
-    print(f"   (추적 조회: 등록 {len(targets)}건 → 고유 키워드 {len(unique_kw)}개, "
-          f"실제 조회 {len(kw_data)}개)")
-
-    # ② 순위는 사람마다 다르므로 개별 조회 (글을 쓴 항목만)
     rows = []
     for t in targets:
         kw = (t.get("keyword") or "").strip()
-        blog_id = t.get("blog_id") or ""
         a = kw_data.get(kw)
         if not kw or a is None:
             continue
-
-        has_post = bool(t.get("has_post"))
-        rank = None
-        if blog_id and has_post:
-            if cache and not cache.can_call(1):
-                pass                       # 한도가 빠듯하면 순위는 건너뛴다
-            else:
-                try:
-                    rank = check_my_rank(kw, blog_id)
-                except Exception:
-                    rank = None
-                time.sleep(0.1)
-
-        opp = (a.get("opportunity") or {}).get("score", 0)
         rows.append({
             "keyword": kw,
-            "blog_id": blog_id,
-            "my_rank": rank,
+            "blog_id": t.get("blog_id") or "",
             "total_search": a.get("total_search", 0),
-            "blog_total_docs": a.get("doc_count") or 0,
-            # 1000건에서 잘린 경우 그대로 저장하면 나중에 계산이 헐거워진다.
-            # 실제로는 그보다 많다는 뜻이므로 여유를 얹어 남긴다.
-            "recent_docs": (int((a.get("recent_docs") or 0) * 1.5)
-                            if a.get("recent_capped")
-                            else (a.get("recent_docs") or 0)),
-            "comp_ratio": a.get("comp_ratio") or 0,
-            "opportunity": opp,
         })
-        mark = f"{rank}위" if rank else ("순위밖" if has_post else "지켜보는 중")
-        print(f"   · {kw} — {mark}, 기회 {opp}")
-
+    print(f"   (관심 키워드: 등록 {len(targets)}건 · 고유 {len(unique_kw)}개 · "
+          f"기록 {len(rows)}건)")
     return rows
 
 
 def enrich_with_competition(results, label=""):
+    # ⛔ 2026-09-23: 블로그 검색(검색 API)을 직접 부르는 경로 — 네이버 회신대로 막는다.
+    #    naver_api의 차단 스위치를 거치지 않는 곳이라 여기서 따로 막는다.
+    return results
     """
     💡 신규: 수집 결과에 '블로그 총 문서수'와 '진짜 경쟁률'을 붙여준다.
 
@@ -253,6 +216,9 @@ def get_naver_headers(method, uri):
 
 
 def get_blog_competition(keyword):
+    # ⛔ 2026-09-23: 블로그 검색(검색 API)을 직접 부르는 경로 — 네이버 회신대로 막는다.
+    #    naver_api의 차단 스위치를 거치지 않는 곳이라 여기서 따로 막는다.
+    return None
     """
     💡 신규: NAVER API HUB(네이버클라우드)로 '경쟁 블로그 분석'.
 
@@ -299,92 +265,50 @@ def get_blog_competition(keyword):
 
 def fetch_golden_time_keywords():
     """
-    골든타임 — 검색이 늘고 있는데 아직 글은 안 쌓인 키워드.
+    골든타임 — 오늘 뜬 검색어(구글 트렌드)와 그 연관어 중 검색량이 받쳐주는 것.
 
-    고정 시드를 쓰지 않는다. 오늘의 구글 트렌드와 그 연관검색어(공용 풀)에서
-    아래 관문을 통과한 것만 남긴다.
-      1) 직전 수집 대비 검색량이 늘었는가
-      2) 최근 30일 새 글이 적은가
-      3) 4축 기회 점수가 일정 수준 이상인가
-    카테고리는 임의 목록이 아니라 '어디서 나왔는지'(트렌드 본체 / 파생 세부어)로 나눈다.
+    ⚠️ 2026-09-23 재정의. 예전엔 '최근 30일 새 글이 적은가'를 블로그 검색
+       (검색 API)으로 세서 걸렀는데, 네이버 회신(9/22)대로 더 못 센다.
+       이제 관문은 검색광고 API 값뿐이다:
+         1) 월 검색량이 있다
+         2) 직전 수집보다 검색량이 줄지 않았다 (rise_score ≥ 0)
+       '돈이 되는가'(최소노출입찰가)는 화면이 열릴 때 붙인다 — 저장하지 않는다.
     """
-    if not NAVER_HUB_CLIENT_ID or not NAVER_HUB_CLIENT_SECRET:
-        print("⚠️ 골든타임: NAVER_HUB_CLIENT_ID/SECRET이 설정되지 않아 건너뜁니다.")
-        return []
-
     pool = build_keyword_pool()
     cutoff = datetime.now(timezone.utc) - timedelta(hours=20)
 
     results = []
-    api_fail = crowded = no_rise = 0
-
+    no_rise = no_vol = 0
     for kw, stat in pool.items():
         total = stat["monthly_pc"] + stat["monthly_mobile"]
-
-        # ⚠️ 예전에는 '검색량이 늘어야만' 통과시켰다.
-        # 그런데 네이버가 주는 검색량은 한 달 단위 집계라
-        # 하루 이틀로는 값이 거의 안 변한다. 그래서 대부분 0이 나오고
-        # 전부 탈락해서 골든타임이 늘 비어 있었다.
-        #
-        # 이제 상승은 '순위를 매기는 재료'로만 쓰고, 탈락 조건에서 뺀다.
-        # 대신 '새 글이 적은가'와 '기회 점수'로 거른다.
+        if total <= 0:
+            no_vol += 1
+            continue
         rise = get_rise_score(kw, stat, cutoff)
         if rise < 0:
             no_rise += 1
             continue
-
-        rc = get_recent_doc_count(kw)
-        if rc is None:
-            api_fail += 1
-            continue
-        recent = rc["count"]
-
-        # ⚠️ 트렌드 본체(구글 트렌드에 뜬 키워드 그 자체)는 이미 다들 쓰고 있어서
-        # 세부 키워드와 같은 잣대로 재면 거의 전부 탈락한다.
-        # (그래서 '오늘 트렌드' 탭이 늘 비어 있었다.)
-        # 카테고리별로 관문을 따로 둔다.
         is_trend = stat.get("origin") == "trend"
-        max_recent = 200 if is_trend else 50
-        min_score = 30 if is_trend else 40
+        results.append({
+            "keyword": kw,
+            "source": "golden_time",
+            "monthly_pc": stat["monthly_pc"],
+            "monthly_mobile": stat["monthly_mobile"],
+            "comp_level": stat["comp_level"],
+            "rise_score": rise,
+            "keyword_category": "트렌드" if is_trend else "세부",
+        })
 
-        docs = get_blog_doc_count(kw)
-        ratio, _ = calc_competition(total, docs)
-        opp = calc_opportunity(ratio, (recent / total) if total else None,
-                               total_search=total)
+    print(f"   (골든타임: 풀 {len(pool)}개 중 검색량없음 {no_vol} / "
+          f"검색량하락 {no_rise} / 통과 {len(results)}건)")
 
-        # 최근 글이 적고, 종합 판단도 나쁘지 않은 것만.
-        # ⚠️ 기준이 빡빡하면 하루에 서너 건밖에 안 나와 화면이 비어 보인다.
-        # 최근 글 30개 → 50개, 점수 45 → 40으로 조금 넓혔다.
-        if recent <= max_recent and opp["score"] >= min_score:
-            results.append({
-                "keyword": kw,
-                "source": "golden_time",
-                "monthly_pc": stat["monthly_pc"],
-                "monthly_mobile": stat["monthly_mobile"],
-                "comp_level": stat["comp_level"],
-                "rise_score": rise,
-                "blog_competition": recent,
-                "blog_total_docs": docs or 0,
-                "comp_ratio": ratio or 0,
-                "comp_grade": opp["label"],
-                "opportunity": opp["score"],
-                "keyword_category": "트렌드" if is_trend else "세부",
-            })
-        else:
-            crowded += 1
-        time.sleep(0.1)
-
-    print(f"   (골든타임 진단: 풀 {len(pool)}개 중 검색량하락 {no_rise} / "
-          f"API실패 {api_fail} / 조건미달 {crowded} / 통과 {len(results)}건)")
-
-    # 상승폭이 있으면 그걸 먼저, 없으면 기회 점수로 줄 세운다
     def _rank(x):
-        return (x["rise_score"] > 0, x["rise_score"], x["opportunity"])
+        return (x["rise_score"], x["monthly_pc"] + x["monthly_mobile"])
 
     trend_rows = sorted([r for r in results if r["keyword_category"] == "트렌드"],
                         key=_rank, reverse=True)[:20]
     detail_rows = sorted([r for r in results if r["keyword_category"] == "세부"],
-                         key=_rank, reverse=True)[:20]
+                         key=_rank, reverse=True)[:40]
     return trend_rows + detail_rows
 
 
@@ -1067,6 +991,9 @@ def fetch_weekly_event_keywords():
 
 
 def fetch_naver_news_headlines_30():
+    # ⛔ 2026-09-23: news.naver.com 랭킹 페이지 크롤링 — 공식 API가 아니라서 끈다.
+    #    COLLECT["news"]를 실수로 True로 돌려도 여기서 멈춘다.
+    return []
     url = "https://news.naver.com/main/ranking/popularDay.naver"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     results = []
@@ -1101,7 +1028,7 @@ COLLECT = {
     "google_trend":  True,   # 구글 트렌드      · 약 20회
     "golden_time":   True,   # 골든타임         · 약 60회
     "weekly_event":  True,   # 주간 캘린더      · 약 40회 (공공데이터 5종)
-    "news":          True,   # 네이버 뉴스      · 약 0회 (크롤링, API 안 씀)
+    "news":          False,  # 네이버 뉴스 — 2026-09-23 중단 (news.naver.com 크롤링)
     "tracking":      True,   # 추적기 기록      · 고유 키워드 수 × 2회
 
     # 아래는 대시보드에서 탭을 내렸다. 필요하면 True로 켜고

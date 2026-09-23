@@ -10,6 +10,7 @@
 """
 import base64
 import os
+from urllib.parse import quote
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -121,11 +122,10 @@ TABS = [
     ("키워드 찾기", "/discover"),  # 시스템이 후보를 준다
     ("내 블로그", "/tracker"),     # 내 키워드·내 글을 본다
 ]
-SUB_RESEARCH = [
-    ("진단", "/"),
-    ("상위노출 해부", "/serp"),
-    ("글감 만들기", "/ideas"),
-]
+# ⚠️ 2026-09-23: '상위노출 해부'·'글감 만들기'는 네이버 블로그 검색(검색 API)
+#    결과를 분석하는 화면이라 네이버 회신(9/22)대로 내렸다. 검사 화면은 하나뿐이라
+#    하위 탭 줄도 그리지 않는다 (템플릿이 빈 목록이면 줄째로 뺀다).
+SUB_RESEARCH = []
 # 쓸모 순서로 다시 세웠다 — 구글 트렌드는 출처 이름이라 맨 뒤로.
 # ⚠️ '돈 되는 키워드'가 맨 앞이다. 이 제품이 약속하는 게 그거라서,
 #    발굴 탭을 열면 제일 먼저 보여야 한다 (2026-09-22 방향 전환).
@@ -134,11 +134,11 @@ SUB_DISCOVER = [
     ("골든타임", "golden"),
     ("주간 캘린더", "weekly"),
     ("구글 트렌드", "trend"),
-    ("뉴스", "news"),
+    # 뉴스 탭은 2026-09-23에 내렸다 — news.naver.com 크롤링이라 공식 API가 아니다
 ]
 # '내 블로그' 아래 둘 — 추적과 진단
 SUB_MINE = [
-    ("순위 추적", "/tracker"),
+    ("관심 키워드", "/tracker"),   # 2026-09-23: 순위(검색 API)를 빼고 검색량·단가로
     ("발행 진단", "/blog"),
 ]
 
@@ -324,37 +324,18 @@ def _spend(user, kw):
     return ok, left, why
 
 
-@app.get("/serp", response_class=HTMLResponse)
-def serp_page(request: Request, q: str = "", sort: str = "sim"):
-    import serp
+# ⚠️ 2026-09-23: 두 화면 모두 내렸다 (위 SUB_RESEARCH 주석).
+#    예전 링크·북마크로 들어와도 길을 잃지 않게 같은 키워드의 검사 화면으로 보낸다.
+@app.get("/serp")
+def serp_page(q: str = ""):
     q = _clean_kw(q)
-    user = auth.current_user(request) if q.strip() else None
-    if q.strip() and not user:
-        result_html = _login_box(f"/serp?q={q.strip()}")
-    elif q.strip() and not (_sp := _spend(user, q.strip()))[0]:
-        # ⚠️ 스트림릿 때 규칙 그대로: 조회한(과금된) 키워드만 본다.
-        #    같은 날 분석에서 이미 낸 키워드면 여기선 안 깎인다.
-        result_html = _no_credit_box(_sp[2])
-    else:
-        result_html = _safe(serp.build, q, sort=sort,
-                            my_blog_id=_blog_of(request))
-    return _page(request, "research.html", "/", "/serp", q.strip(), result_html,
-                 title=(f"{q.strip()} — 상위노출 해부" if q.strip() else "상위노출 해부"))
+    return RedirectResponse(f"/?q={quote(q)}" if q else "/", status_code=301)
 
 
-@app.get("/ideas", response_class=HTMLResponse)
-def ideas_page(request: Request, q: str = ""):
-    import ideas
+@app.get("/ideas")
+def ideas_page(q: str = ""):
     q = _clean_kw(q)
-    user = auth.current_user(request) if q.strip() else None
-    if q.strip() and not user:
-        result_html = _login_box(f"/ideas?q={q.strip()}")
-    elif q.strip() and not (_sp := _spend(user, q.strip()))[0]:
-        result_html = _no_credit_box(_sp[2])
-    else:
-        result_html = _safe(ideas.build, q)
-    return _page(request, "research.html", "/", "/ideas", q.strip(), result_html,
-                 title=(f"{q.strip()} — 글감 만들기" if q.strip() else "글감 만들기"))
+    return RedirectResponse(f"/?q={quote(q)}" if q else "/", status_code=301)
 
 
 # ------------------------------------------------------------
@@ -557,7 +538,7 @@ def tracker_page(request: Request, detail: str = "", flash: str = "",
         if ai and not ai_ok:
             html = plans.upgrade_box("ai") + html
     return _page(request, "discover.html", "/tracker", "/tracker", "", html,
-                 title="순위 추적", subs=SUB_MINE)
+                 title="관심 키워드", subs=SUB_MINE)
 
 
 @app.post("/tracker/add")
@@ -578,12 +559,12 @@ def tracker_add(request: Request, kw: str = Form(""), wrote: str = Form("")):
         if cur >= limit:
             return RedirectResponse(
                 "/tracker?flash=" + _q(
-                    f"추적은 지금 플랜에서 {limit}개까지예요. "
+                    f"관심 키워드는 지금 플랜에서 {limit}개까지예요. "
                     "요금 안내에서 플랜을 올리면 더 담을 수 있습니다."),
                 status_code=303)
         import db as _db
         row = {"keyword": kw.strip(), "blog_id": _blog_of(request) or "",
-               "has_post": bool(wrote), "user_id": user["id"]}
+               "has_post": False, "user_id": user["id"]}
         try:
             _db.client().table("tracked_keywords").insert(row).execute()
         except Exception as e:
@@ -801,11 +782,9 @@ def discover_page(request: Request, v: str = "money", p: str = "",
     if v == "money":
         html = _safe(discover.build_money, p or "일별", t or "전체")
     elif v == "golden":
-        html = _safe(discover.build_golden, p or "일별", t or "파생 키워드")
+        html = _safe(discover.build_golden, p or "6시간", t or "전체")
     elif v == "weekly":
         html = _safe(discover.build_weekly)
-    elif v == "news":
-        html = _safe(discover.build_news, p or "최근")
     elif v == "trend":
         html = _safe(discover.build_trend, p or "최근")
     else:
@@ -857,24 +836,22 @@ def csv_rel(request: Request, q: str = "", contains: int = 1, min: int = 0):
     if blocked:
         return blocked
     from naver_api import analyze_keyword
-    r = analyze_keyword(q.strip())
+    r = analyze_keyword(q.strip(), with_recent=False)
     rows = [{"키워드": i["keyword"],
-             "월 검색량": (i["monthly_pc"] + i["monthly_mobile"]
-                        if i.get("source") != "자동완성" else None),
-             "경쟁": i.get("comp_level") or "-",
-             "출처": i.get("source", "검색광고")}
+             "월 검색량": i["monthly_pc"] + i["monthly_mobile"],
+             "광고 경쟁": i.get("comp_level") or "-"}
             for i in (r.get("related") or [])
             if (i.get("contains", True) or not contains)
-            and (i.get("source") == "자동완성"
-                 or (i["monthly_pc"] + i["monthly_mobile"]) >= min)]
-    df = pd.DataFrame(rows).sort_values("월 검색량", ascending=False,
-                                        na_position="last")
+            and (i["monthly_pc"] + i["monthly_mobile"]) >= min]
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values("월 검색량", ascending=False)
     return _csv(df, f"연관키워드_{q.strip()}")
 
 
 @app.get("/csv/rank")
 def csv_rank(request: Request, q: str = ""):
-    import pandas as pd
+    """돈 되는 연관 키워드 (단가 순). 주소는 예전 그대로 둔다."""
     import analyze as _an
     q = _clean_kw(q)
     if not q:
@@ -883,22 +860,6 @@ def csv_rank(request: Request, q: str = ""):
     if blocked:
         return blocked
     from naver_api import analyze_keyword
-    r = analyze_keyword(q.strip())
-    rel = r.get("related") or []
-    pool_rel = sorted([i for i in rel if i.get("contains", True)],
-                      key=lambda x: (-(x["monthly_pc"] + x["monthly_mobile"]),
-                                     x.get("source") == "자동완성"))
-    known = {i["keyword"]: {"monthly_pc": i["monthly_pc"],
-                            "monthly_mobile": i["monthly_mobile"],
-                            "comp_level": i.get("comp_level", "-"),
-                            "pl_avg_depth": 0}
-             for i in pool_rel if (i["monthly_pc"] + i["monthly_mobile"]) > 0}
-    subs, _f, _n = _an.measure_batch(
-        tuple(i["keyword"] for i in pool_rel[:10]), known)
-    rows = [{"키워드": s["keyword"], "월 검색량": s["total_search"],
-             "누적 문서수": s["doc_count"] or 0,
-             "기회 점수": (s.get("opportunity") or {}).get("score", 0),
-             "진단": (s.get("opportunity") or {}).get("label", "정보없음")}
-            for s in subs]
-    df = pd.DataFrame(rows).sort_values("기회 점수", ascending=False)
-    return _csv(df, f"기회키워드_{q.strip()}")
+    r = analyze_keyword(q.strip(), with_recent=False)
+    df = _an.money_related(r.get("related") or [])
+    return _csv(df, f"돈되는연관키워드_{q.strip()}")

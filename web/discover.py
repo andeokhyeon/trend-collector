@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""키워드 발굴 — app.py L2412~ 이식. 문구·판정 원본 그대로."""
+"""키워드 찾기.
+
+⚠️ 2026-09-23: 네이버 회신(9/22)대로 검색 API 값(문서수·경쟁률·최근 30일 글)과
+   그걸 쓰던 황금 점수를 전부 뺐다. 뉴스 탭(news.naver.com 랭킹 크롤링)도 내렸다.
+   남은 재료: 검색광고 API(검색량·최소노출입찰가) · 구글 트렌드 RSS · 공공데이터 ·
+   검색어트렌드. 판정은 naver_api.calc_money_verdict 하나로 통일한다.
+"""
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
@@ -79,10 +85,7 @@ def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit
     if show_volume:
         cols += ['총 검색량', '검색량 등급']
         names += ['월 검색량', '검색량']
-    if show_docs:
-        for c, lb in [('blog_total_docs', '문서수'), ('comp_grade', '경쟁률')]:
-            if c in d.columns:
-                cols.append(c); names.append(lb)
+    # show_docs는 예전 호출부 호환용 — 문서수·경쟁률 열은 더 그리지 않는다 (검색 API 값)
     for c, lb in (extra_cols or []):
         if c in d.columns:
             cols.append(c); names.append(lb)
@@ -96,8 +99,8 @@ def build_money(period="일별", part="전체"):
     """돈 되는 키워드 — 단가 순으로 세운다.
 
     ⚠️ 골든타임과 다른 질문이다.
-       골든타임 = "지금 선점하기 좋은 곳" (뜨는데 아직 안 붐빔, 복합 점수 순)
-       여기     = "유입당 값이 비싼 곳"   (광고 단가 순)
+       골든타임 = "오늘 뜬 것 중 돈 되는 것" (최근 몇 시간 트렌드만)
+       여기     = "수집해둔 전체 중 유입당 값이 비싼 곳" (광고 단가 순)
        검색량 4만에 단가 300원인 키워드보다 3천에 8천원인 쪽이 나을 때가 있다.
        그 판단을 하려면 단가만으로 세운 줄이 따로 있어야 한다.
 
@@ -105,7 +108,7 @@ def build_money(period="일별", part="전체"):
        검색 API 특약조건(저장·AI·수익화 제한)의 사정권 밖이라,
        유료화까지 가려면 이 방향이 가장 안전하다.
     """
-    from naver_api import calc_gold_score
+    from naver_api import calc_money_verdict
     df = db.load_data()
     h = PERIOD_HOURS.get(period, 24)
     out = [render(ui.section, "돈 되는 키워드",
@@ -145,10 +148,8 @@ def build_money(period="일별", part="전체"):
     if pool.empty:
         out.append(render(ui.note, EMPTY))
         return "".join(out)
-    pool['황금 점수'] = [
-        (calc_gold_score(row['총 검색량'], row.get('blog_total_docs'),
-                         row.get('광고단가'), row.get('comp_ratio')) or {}).get('score')
-        for _, row in pool.iterrows()]
+    pool['판정'] = [calc_money_verdict(row['광고단가'], row['총 검색량'])['label']
+                  for _, row in pool.iterrows()]
     pool = pool.sort_values('광고단가', ascending=False)
 
     # 세부/트렌드 갈라보기 — 세부 키워드가 대개 단가가 높고 경쟁이 낮다
@@ -172,9 +173,9 @@ def build_money(period="일별", part="전체"):
     data = data.copy()
     data['광고단가'] = data['광고단가'].astype(int)
     out.append(_render_table(
-        df, data, sort_col='광고단가', show_docs=True, limit=lim,
+        df, data, sort_col='광고단가', limit=lim,
         lead_cols=[('광고단가', '클릭단가(원)')],
-        extra_cols=[('황금 점수', '황금 점수')],
+        extra_cols=[('판정', '판정')],
         empty_msg=EMPTY))
     out.append(render(ui.tip,
                       "단가 = 네이버 검색광고 <b>최소노출입찰가</b> · "
@@ -193,63 +194,70 @@ def build_trend(period="최근"):
     return "".join(out)
 
 
-def build_golden(period="일별", part="파생 키워드"):
-    from naver_api import calc_gold_score
+def build_golden(period="6시간", part="전체"):
+    """골든타임 — 오늘 뜬 검색어 중 광고주가 돈을 거는 것.
+
+    ⚠️ 2026-09-23 재정의. 예전 정의는 "뜨는데 아직 블로그 글이 적은 것"이었고,
+       '글이 적다'를 블로그 검색(검색 API)으로 셌다 — 이제 못 센다.
+       새 정의는 두 재료로만 선다:
+         · 오늘 떴다  = 구글 트렌드 RSS에 오른 검색어와 그 연관어(검색광고 API)
+         · 돈이 된다  = 최소노출입찰가가 붙어 있다
+       기간 기본값을 6시간으로 둔다 — '오늘 뜬 것'이 이 탭의 존재 이유라서.
+    """
+    from naver_api import calc_money_verdict
     df = db.load_data()
-    h = PERIOD_HOURS.get(period, 24)
-    out = [render(ui.section, "골든타임", "뜨고 있는데 아직 안 붐비는 선점 구간"),
-           render(ui.pitch, "찾는 사람은 있는데", "아직 아무도 안 썼습니다",
-                  "먼저 쓰면 선점 효과를 기대할 수 있습니다. "
-                  "검색량이 오르는 중이면 위로 올라옵니다."),
+    h = PERIOD_HOURS.get(period, 6)
+    out = [render(ui.section, "골든타임", "오늘 뜬 것 중 돈 되는 것"),
+           render(ui.pitch, "오늘 뜬 검색어 중",
+                  "광고주가 돈을 거는 것만",
+                  "구글 트렌드에 오른 검색어와 그 연관어 중 광고 단가가 붙는 것을 "
+                  "<b>비싼 순</b>으로 세웁니다. 뜰 때 먼저 쓰는 게 이 탭의 쓰임입니다."),
            _pills(f"/discover?v=golden&t={quote(part)}", "p",
                   PERIOD_SETS["slow"], period)]
-    golden = db.latest_snapshot(df[df['source'] == 'golden_time'], hours=h)
-
-    money_first = True
-    if not golden.empty:
-        kws = golden['keyword'].head(100).tolist()
-        bids = db.cached_min_bids(tuple(kws))
-        if bids:
-            golden = golden.copy()
-            golden['광고단가'] = golden['keyword'].map(bids)
-            golden['황금 점수'] = [
-                (calc_gold_score(row['총 검색량'], row.get('blog_total_docs'),
-                                 bids.get(row['keyword']),
-                                 row.get('comp_ratio')) or {}).get('score')
-                for _, row in golden.iterrows()]
-            golden = golden.sort_values('황금 점수', ascending=False)
-        else:
-            out.append(render(ui.tip, "광고 단가를 가져오지 못해 검색량 순으로 보여드립니다."))
-            money_first = False
-
-    GT_EMPTY = "추천할만한 키워드가 아직은 없습니다."
-    if golden.empty:
-        out.append(render(ui.note, GT_EMPTY))
-    else:
-        extra = [('blog_competition', '최근 30일 글')]
-        sort = 'rise_score'
-        if money_first and '황금 점수' in golden.columns:
-            extra = [('황금 점수', '황금 점수'), ('광고단가', '광고단가')] + extra
-            sort = '황금 점수'
-        parts = ["파생 키워드", "오늘 트렌드", "전체"]
-        chosen = part if part in ("파생 키워드", "오늘 트렌드", "전체") else "파생 키워드"
-        pill = ['<div class="kh-filter">']
-        for p in parts:
-            plain = p
-            cls = "kh-pill on" if plain == chosen else "kh-pill"
-            pill.append(f'<a class="{cls}" href="/discover?v=golden'
-                        f'&p={quote(period)}&t={quote(plain)}">{p}</a>')
-        pill.append('</div>')
-        out.append("".join(pill))
-        if chosen == "파생 키워드":
-            data, lim = golden[golden['keyword_category'] == '세부'], 20
-        elif chosen == "오늘 트렌드":
-            data, lim = golden[golden['keyword_category'] == '트렌드'], 20
-        else:
-            data, lim = golden, 40
-        out.append(_render_table(df, data, sort_col=sort, show_docs=False,
-                                 limit=lim, extra_cols=extra,
-                                 empty_msg=GT_EMPTY))
+    EMPTY = "이 기간에 뜬 검색어 중 단가가 붙은 것이 없습니다 — 기간을 넓혀보세요."
+    if df.empty or '총 검색량' not in df.columns:
+        out.append(render(ui.note, EMPTY))
+        return "".join(out)
+    src = df[df['source'].isin(['google_trend', 'golden_time'])
+             & (df['총 검색량'].fillna(0) > 0)]
+    pool = db.latest_snapshot(src, hours=h)
+    if pool.empty:
+        out.append(_empty_note(df, 'google_trend', "골든타임"))
+        return "".join(out)
+    pool = pool.sort_values('총 검색량', ascending=False).head(100)
+    bids = db.cached_min_bids(tuple(pool['keyword'].tolist())) or {}
+    if not bids:
+        out.append(render(ui.note, "광고 단가를 가져오지 못했습니다 — 잠시 후 다시 시도해주세요."))
+        return "".join(out)
+    pool = pool.copy()
+    pool['광고단가'] = pool['keyword'].map(bids)
+    pool = pool[pool['광고단가'].notna() & (pool['광고단가'] > 0)]
+    if pool.empty:
+        out.append(render(ui.note, EMPTY))
+        return "".join(out)
+    pool['광고단가'] = pool['광고단가'].astype(int)
+    pool['판정'] = [calc_money_verdict(row['광고단가'], row['총 검색량'])['label']
+                  for _, row in pool.iterrows()]
+    # 트렌드 본체(구글에 뜬 그 검색어) / 파생(그 연관어) 갈라보기
+    is_trend = (pool['source'] == 'google_trend')
+    if 'keyword_category' in pool.columns:
+        is_trend = is_trend | (pool['keyword_category'] == '트렌드')
+    parts = ["전체", "오늘 트렌드", "파생 키워드"]
+    chosen = part if part in parts else "전체"
+    pill = ['<div class="kh-filter">']
+    for p in parts:
+        cls = "kh-pill on" if p == chosen else "kh-pill"
+        pill.append(f'<a class="{cls}" href="/discover?v=golden'
+                    f'&p={quote(period)}&t={quote(p)}">{p}</a>')
+    pill.append('</div>')
+    out.append("".join(pill))
+    data = (pool[is_trend] if chosen == "오늘 트렌드"
+            else pool[~is_trend] if chosen == "파생 키워드" else pool)
+    out.append(_render_table(df, data, sort_col='광고단가', limit=30,
+                             lead_cols=[('광고단가', '클릭단가(원)')],
+                             extra_cols=[('판정', '판정')], empty_msg=EMPTY))
+    out.append(render(ui.tip, "단가 = 네이버 검색광고 <b>최소노출입찰가</b> · "
+                              "목록 보기는 크레딧이 들지 않습니다."))
     return "".join(out)
 
 
@@ -343,15 +351,9 @@ def build_weekly():
     return "".join(out)
 
 
-def build_news(period="최근"):
-    df = db.load_data()
-    h = PERIOD_HOURS.get(period, 3)
-    out = [render(ui.section, "뉴스", "지금 많이 읽히는 기사"),
-           _pills("/discover?v=news", "p", PERIOD_SETS["trend"], period)]
-    out.append(_render_table(
-        df, db.latest_snapshot(df[df['source'] == 'naver_news'], hours=h),
-        show_docs=False, show_volume=False, source='naver_news', label="뉴스"))
-    return "".join(out)
+# ⚠️ 2026-09-23: 뉴스 탭(build_news)을 지웠다. news.naver.com 랭킹 페이지를
+#    크롤링하던 것이라 공식 API가 아니다. "위험 감수하지 않는다"는 원칙대로 내렸다.
+
 
 def top_money(n=3, hours=24):
     """지금 가장 비싼 키워드 n개 — 첫 화면 잉크 슬랩용. (2026-09-22)
