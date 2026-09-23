@@ -2229,24 +2229,25 @@ def seasonality_note(trend):
 #
 # 국내 키워드 도구 중 이 값을 '키워드 발굴'에 쓰는 곳이 없다.
 
-def get_min_bids(keywords, device="PC"):
-    """
-    여러 키워드의 최소노출입찰가(원)를 한 번에. 반환 {키워드: 입찰가}.
-    실패하면 빈 dict — 없으면 없는 대로 화면이 돌아가야 한다.
-    """
-    items = [k.strip() for k in (keywords or []) if k and k.strip()][:100]
-    if not items:
-        return {}
-    if not NAVER_API_KEY or not NAVER_SECRET_KEY or not NAVER_CUSTOMER_ID:
-        return {}
+_BID_KW_OK = re.compile(r"^[0-9A-Za-z가-힣]{1,25}$")
 
-    ck = ("minbid", device, "|".join(sorted(items)))
-    cached = _cache_get(ck)
-    if cached is not None:
-        return cached
 
+def _bid_norm(k):
+    """입찰가 조회용 키워드 모양 — 검색광고 키워드는 공백·기호를 받지 않는다.
+
+    ⚠️ 2026-09-23 사고: 골든타임(구글 트렌드 검색어)만 '광고 단가를 가져오지
+       못했습니다'가 떴다. 구글 트렌드 검색어는 '손흥민 경기', 'LG vs KT'처럼
+       공백·기호가 섞여 있는데, 한 묶음(최대 100개)에 그런 게 하나만 있어도
+       요청 전체가 거절되고 → 빈 결과가 6시간 기억됐다.
+       돈 되는 키워드 탭은 검색광고가 돌려준 키워드(공백 없음)만 써서 멀쩡했다.
+    """
+    k = re.sub(r"[^0-9A-Za-z가-힣]", "", (k or "").strip())
+    return k if _BID_KW_OK.match(k) else None
+
+
+def _bid_post(items, device):
+    """한 묶음 조회. 반환 (결과 dict, 성공 여부, 상태 설명)."""
     path = "/estimate/exposure-minimum-bid/keyword"
-    out = {}
     try:
         _count_call(quota=False)
         res = requests.post(
@@ -2255,18 +2256,82 @@ def get_min_bids(keywords, device="PC"):
                      "Content-Type": "application/json; charset=UTF-8"},
             json={"device": device, "keywordplus": False, "items": items},
             timeout=10)
-        if res.status_code == 200:
-            body = res.json()
-            rows = body.get("estimate") or body.get("estimates") or []
-            for i, row in enumerate(rows):
-                # 응답이 키워드를 안 돌려주는 버전이 있어서 순서로도 맞춘다
-                k = row.get("keyword") or (items[i] if i < len(items) else None)
-                bid = row.get("bid")
-                if k and bid is not None:
-                    out[k] = int(bid)
+    except Exception as e:
+        return {}, False, f"{type(e).__name__}"
+    if res.status_code != 200:
+        return {}, False, f"HTTP {res.status_code} {res.text[:160]}"
+    out = {}
+    try:
+        body = res.json()
     except Exception:
+        return {}, False, "JSON 아님"
+    rows = body.get("estimate") or body.get("estimates") or []
+    for i, row in enumerate(rows):
+        # 응답이 키워드를 안 돌려주는 버전이 있어서 순서로도 맞춘다
+        k = row.get("keyword") or (items[i] if i < len(items) else None)
+        bid = row.get("bid")
+        if k and bid is not None:
+            out[k] = int(bid)
+    return out, True, "ok"
+
+
+def get_min_bids(keywords, device="PC"):
+    """
+    여러 키워드의 최소노출입찰가(원)를 한 번에. 반환 {원래 키워드: 입찰가}.
+    실패하면 빈 dict — 없으면 없는 대로 화면이 돌아가야 한다.
+
+    · 공백·기호는 빼고 묻는다 ('캠핑 의자' → '캠핑의자'). 결과는 원래 글자로 돌려준다.
+    · 묶음이 거절되면 반으로 쪼개 다시 묻는다 — 나쁜 키워드 하나가 나머지를 막지 않게.
+      (쪼개기는 최대 24번까지. 그 이상은 포기하고 받은 만큼만 돌려준다)
+    · 전부 실패하면 공용 캐시에 남기지 않는다 (_cache_fail, 5분).
+    """
+    raw = [k.strip() for k in (keywords or []) if k and k.strip()]
+    if not raw:
         return {}
-    return _cache_put(ck, out)
+    if not NAVER_API_KEY or not NAVER_SECRET_KEY or not NAVER_CUSTOMER_ID:
+        return {}
+    back = {}                       # 정규화 → [원래 글자들]
+    for k in raw:
+        n = _bid_norm(k)
+        if n:
+            back.setdefault(n, []).append(k)
+    items = list(back)[:100]
+    if not items:
+        return {}
+
+    ck = ("minbid2", device, "|".join(sorted(items)))
+    cached = _cache_get(ck)
+    if cached is None:
+        got, any_ok, budget = {}, False, [24]
+        last_err = ""
+
+        def run(chunk):
+            nonlocal any_ok, last_err
+            res, ok, why = _bid_post(chunk, device)
+            if ok:
+                any_ok = True
+                got.update(res)
+                return
+            last_err = why
+            if len(chunk) == 1 or budget[0] <= 0:
+                return
+            budget[0] -= 1
+            mid = len(chunk) // 2
+            run(chunk[:mid])
+            run(chunk[mid:])
+
+        run(items)
+        if not any_ok:
+            print(f"[min_bid] 조회 실패 {len(items)}개 — {last_err}", flush=True)
+            _cache_fail(ck, {})
+            return {}
+        cached = _cache_put(ck, got)
+
+    out = {}
+    for n, bid in (cached or {}).items():
+        for orig in back.get(n, [n]):
+            out[orig] = bid
+    return out
 
 
 # 애드포스트 1,000회 노출당 대략 수익(원). 주제·계절에 따라 크게 흔들리므로

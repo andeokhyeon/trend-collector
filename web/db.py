@@ -131,4 +131,9 @@ def cached_min_bids(keywords):
             return get_min_bids(list(keywords)) or {}
         except Exception:
             return {}
-    return _memo(key, 6 * 3600, _fn)
+    val = _memo(key, 6 * 3600, _fn)
+    # ⚠️ 빈 결과(대개 조회 실패)는 6시간 기억하지 않는다 — 5분 뒤 다시 묻는다.
+    #    (2026-09-23: 골든타임이 한 번 실패하면 반나절 '못 가져왔습니다'로 굳었다)
+    if not val and key in _CACHE:
+        _CACHE[key] = (val, time.time() - 6 * 3600 + 300)
+    return val

@@ -2065,3 +2065,9 @@ dl.kh-foot-biz dd b{color:var(--txt);font-weight:700}
   display:grid; place-items:center; font-weight:800; font-size:1rem;
   background:linear-gradient(145deg,#FDE3E3 0%,#F9CDD2 100%); color:var(--coral);
 }
+
+/* ── 푸터 왼쪽 정렬 (2026-09-23 요청) — 링크·사업자 정보·저작권 모두 왼쪽 끝에 맞춘다 ── */
+.kh-foot{text-align:left}
+.kh-foot-links{justify-content:flex-start;padding:0}
+dl.kh-foot-biz{margin:0}
+.kh-foot-copy{text-align:left}
