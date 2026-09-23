@@ -30,9 +30,9 @@ def build(user, my_blog_id="", profile=None):
     # 주소 입력은 마이페이지로 옮겼다 (2026-08-28) — 매번 치지 않게 계정에 저장
     if not my_blog_id:
         out.append(render(ui.note,
-                          "아직 블로그 주소가 등록되지 않았습니다. "
-                          '<a href="/me">마이페이지</a>에서 한 번만 등록하면 '
-                          "여기서 바로 진단해드립니다.", True))
+                          "마이페이지에서 한 번만 등록하면 여기서 바로 진단해드립니다.",
+                          kind="empty", title="아직 블로그 주소가 없어요",
+                          actions=[("블로그 주소 등록하기", "/me")]))
         return "".join(out)
     out.append(render(ui.tip,
                       f"진단 대상 <code>{my_blog_id}</code> · "

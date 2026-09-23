@@ -269,8 +269,11 @@ def _safe(build, *a, **k):
     try:
         return build(*a, **k)
     except Exception as e:
-        return (f'<div class="note">불러오지 못했습니다. '
-                f'<small>{type(e).__name__}: {e}</small></div>')
+        from html import escape as _e
+        from uihtml import ui, render
+        return render(ui.note, f"이 화면을 불러오지 못했습니다 — 잠시 후 새로고침해주세요. "
+                               f"<small>{_e(type(e).__name__)}: {_e(str(e))[:160]}</small>",
+                      kind="error")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -559,8 +562,8 @@ def tracker_add(request: Request, kw: str = Form(""), wrote: str = Form("")):
         if cur >= limit:
             return RedirectResponse(
                 "/tracker?flash=" + _q(
-                    f"관심 키워드는 지금 플랜에서 {limit}개까지예요. "
-                    "요금 안내에서 플랜을 올리면 더 담을 수 있습니다."),
+                    f"관심 키워드는 지금 플랜에서 {limit}개까지예요 — "
+                    "플랜을 올리면 더 담을 수 있습니다."),
                 status_code=303)
         import db as _db
         row = {"keyword": kw.strip(), "blog_id": _blog_of(request) or "",

@@ -2149,9 +2149,76 @@ def social_links(items):
     st.markdown("".join(out), unsafe_allow_html=True)
 
 
-def note(text, gold=False):
-    cls = "note note-gold" if gold else "note"
-    st.markdown(f'<div class="{cls}">{text}</div>', unsafe_allow_html=True)
+# 안내 카드 아이콘 — 선 하나짜리 SVG (색은 CSS의 currentColor가 정한다)
+_NOTE_ICON = {
+    # 비었다 — 빈 상자
+    "empty": '<path d="M4 13.5 6.6 6.3A2 2 0 0 1 8.5 5h7a2 2 0 0 1 1.9 1.3L20 13.5"/>'
+             '<path d="M4 13.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.5h-4.5l-1.2 2h-4.6l-1.2-2Z"/>',
+    # 기다린다 — 시계
+    "wait": '<circle cx="12" cy="12" r="8"/><path d="M12 7.8V12l2.8 1.8"/>',
+    # 안 됐다 — 느낌표
+    "error": '<circle cx="12" cy="12" r="8"/><path d="M12 7.8v4.9"/><path d="M12 16.2h.01"/>',
+    # 됐다 — 체크
+    "ok": '<circle cx="12" cy="12" r="8"/><path d="m8.6 12.2 2.3 2.3 4.6-4.8"/>',
+    # 알려준다 — 반짝
+    "info": '<path d="M12 4.5 13.6 9a2 2 0 0 0 1.4 1.4l4.5 1.6-4.5 1.6a2 2 0 0 0-1.4 1.4L12 19.5'
+            'l-1.6-4.5A2 2 0 0 0 9 13.6L4.5 12 9 10.4A2 2 0 0 0 10.4 9Z"/>',
+}
+_NOTE_ERR = ("못했", "못 했", "못합니다", "실패", "맞지 않", "오류", "없어 현황")
+_NOTE_OK = ("했습니다", "담았", "저장했", "바꿨", "지정했", "완료")
+_NOTE_EMPTY = ("없습니다", "없어요", "아직")
+
+
+def _note_kind(text, gold):
+    import re as _re
+    plain = _re.sub(r"<[^>]+>", "", str(text))
+    if gold:
+        return "wait"
+    if any(w in plain for w in _NOTE_ERR):
+        return "error"
+    if any(w in plain for w in _NOTE_EMPTY):
+        return "empty"
+    if any(w in plain for w in _NOTE_OK):
+        return "ok"
+    return "info"
+
+
+def note(text, gold=False, kind=None, title=None, actions=None):
+    """안내 카드 — 빈 상태·에러·알림 (2026-09-23 개편).
+
+    ⚠️ 예전엔 왼쪽에 색 줄 하나 긋고 회색 글을 띄운 '공지 상자'였다.
+       덕현님 판정: 촌스럽다 → 전부 걷어냈다.
+       지금은 흰 카드 + 둥근 아이콘 + 굵은 한 줄 + 흐린 한 줄 + (있으면) 알약 버튼.
+    · kind   : empty(비었다) / wait(기다린다) / error(안 됐다) / ok(됐다) / info
+               안 주면 글 내용으로 고른다. gold=True는 예전 호출 호환 → wait.
+    · title  : 굵은 줄. 안 주면 text를 첫 ' — '에서 잘라 앞을 굵게, 뒤를 흐리게.
+    · actions: [(글자, 주소), ...] — 다음에 누를 곳. 첫 번째가 코랄.
+    """
+    kind = kind if kind in _NOTE_ICON else _note_kind(text, gold)
+    body = str(text)
+    if title is None and " — " in body:
+        title, body = body.split(" — ", 1)
+    t_html = f'<p class="ks-t">{title}</p>' if title else ""
+    if title:
+        b_html = f'<p class="ks-s">{body}</p>'
+    else:
+        # 제목 없이 긴 글(관리자 안내 등)은 굵게 두면 무겁다 — 보통 굵기로
+        import re as _re
+        long_ = len(_re.sub(r"<[^>]+>", "", body)) > 56
+        b_html = f'<p class="{"ks-p" if long_ else "ks-t"}">{body}</p>'
+    a_html = ""
+    if actions:
+        a_html = '<div class="ks-act">' + "".join(
+            f'<a class="ks-btn{" on" if i == 0 else ""}" href="{href}">{label}</a>'
+            for i, (label, href) in enumerate(actions)) + '</div>'
+    role = ' role="alert"' if kind == "error" else ' role="status"'
+    st.markdown(
+        f'<div class="kh-state ks-{kind}"{role}>'
+        f'<span class="ks-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" '
+        f'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        f'stroke-linejoin="round">{_NOTE_ICON[kind]}</svg></span>'
+        f'<div class="ks-body">{t_html}{b_html}{a_html}</div></div>',
+        unsafe_allow_html=True)
 
 
 def tip(text):

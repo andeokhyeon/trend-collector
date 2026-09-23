@@ -1987,3 +1987,81 @@ dl.kh-foot-biz dd b{color:var(--txt);font-weight:700}
 .tc-btns > form .tc-btn{flex:1;width:100%}
 .tc-btns > *{flex:1 1 0;min-width:0}
 .tc-btns > a.tc-btn{padding-left:0;padding-right:0}
+
+/* ============================================================
+   안내 카드 (2026-09-23) — '왼쪽 색 줄 + 회색 글' 공지 상자를 전부 걷어냈다.
+   ui.note()가 이 모양 하나만 뱉는다:
+     흰 카드 · 복숭아빛 둥근 아이콘 · 굵은 한 줄 · 흐린 한 줄 · 알약 버튼
+   종류(ks-empty / ks-wait / ks-error / ks-ok / ks-info)는 아이콘 색만 바꾼다.
+   ============================================================ */
+.kh-state{
+  position:relative; overflow:hidden;
+  display:flex; align-items:flex-start; gap:16px;
+  background:var(--surf); border:0; border-radius:24px;
+  padding:20px 22px; margin:0 0 14px;
+  box-shadow:0 1px 2px rgba(58,35,32,.04), 0 10px 30px rgba(255,107,90,.10);
+}
+/* 오른쪽으로 갈수록 아주 옅게 물든다 — '공지'가 아니라 화면의 한 조각으로 보이게.
+   (둥근 빛 번짐은 화면에서 얼룩처럼 보여서 버렸다) */
+.kh-state{background:linear-gradient(100deg,#FFFFFF 55%,#FFF5F0 100%)}
+.ks-ic{
+  flex:none; width:46px; height:46px; border-radius:16px;
+  display:grid; place-items:center;
+  background:linear-gradient(145deg,#FFE3D8 0%,#FFD0C0 100%);
+  color:var(--iris);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.6);
+}
+.ks-ic svg{width:23px;height:23px}
+.ks-body{flex:1;min-width:0;position:relative;z-index:1;align-self:center}
+.ks-t{margin:0;font-size:1.02rem;font-weight:700;letter-spacing:-.03em;
+  color:var(--txt);line-height:1.45}
+.ks-s,.ks-p{margin:4px 0 0;font-size:.88rem;color:var(--txt2);line-height:1.65}
+.ks-p{margin-top:2px}
+.ks-t b,.ks-s b,.ks-p b{color:var(--iris);font-weight:700}
+.ks-s small,.ks-p small,.ks-t small{display:block;margin-top:6px;font-size:.74rem;
+  color:var(--txt4);font-family:var(--mono);word-break:break-all;font-weight:400}
+.ks-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.ks-btn{
+  display:inline-flex; align-items:center; gap:6px;
+  border-radius:999px; padding:8px 16px;
+  font-size:.84rem; font-weight:600; letter-spacing:-.02em;
+  background:var(--surf2); color:var(--txt2) !important;
+  text-decoration:none !important; transition:all .15s ease;
+}
+.ks-btn::after{content:"→";font-weight:500;transition:transform .15s ease}
+.ks-btn:hover{background:var(--surf3);color:var(--txt) !important}
+.ks-btn:hover::after{transform:translateX(2px)}
+.ks-btn.on{background:var(--iris);color:#fff !important;box-shadow:0 6px 16px rgba(242,96,78,.25)}
+.ks-btn.on:hover{background:#E0503F}
+
+/* 종류별 아이콘 색 */
+.ks-wait  .ks-ic{background:linear-gradient(145deg,#FFE9DC 0%,#FFD9C4 100%);color:#E8743F}
+.ks-error .ks-ic{background:linear-gradient(145deg,#FDE3E3 0%,#F9CDD2 100%);color:var(--coral)}
+.ks-ok    .ks-ic{background:linear-gradient(145deg,#DDF3EA 0%,#C7EBDD 100%);color:#0A8A5E}
+.ks-info  .ks-ic{background:linear-gradient(145deg,#FFF0E0 0%,#FFE2C8 100%);color:#C9771A}
+
+/* 모달·박스 안에서는 그림자 없이 살짝 물든 바탕 (카드 안에 카드가 뜨지 않게) */
+.box .kh-state,.kh-modal .kh-state{box-shadow:none;background:var(--surf2);border-radius:20px}
+
+@media (max-width:640px){
+  .kh-state{gap:13px;padding:17px 16px;border-radius:20px}
+  .ks-ic{width:40px;height:40px;border-radius:14px}
+  .ks-ic svg{width:21px;height:21px}
+  .ks-t{font-size:.95rem}
+  .ks-s,.ks-p{font-size:.84rem}
+  .ks-act{gap:6px;margin-top:12px}
+  .ks-btn{padding:8px 14px;font-size:.8rem}
+}
+
+/* 예전 공지 상자 — 혹시 남은 호출이 있어도 왼쪽 줄은 절대 안 나온다 */
+.note,.note-gold,.kh-flash{border:0 !important;border-radius:20px;background:var(--surf);
+  box-shadow:var(--sh);padding:16px 20px}
+
+/* 회원 탈퇴 경고 — 왼쪽 빨간 줄 대신 경고 머리 */
+.wd-box{border:0 !important;border-radius:24px;padding:24px 24px 22px;box-shadow:var(--sh)}
+.wd-warn{position:relative;padding-left:46px;min-height:32px;font-size:.98rem;line-height:1.6;padding-top:4px}
+.wd-warn::before{
+  content:"!"; position:absolute; left:0; top:0; width:32px; height:32px; border-radius:11px;
+  display:grid; place-items:center; font-weight:800; font-size:1rem;
+  background:linear-gradient(145deg,#FDE3E3 0%,#F9CDD2 100%); color:var(--coral);
+}

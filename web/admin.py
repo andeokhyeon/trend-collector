@@ -61,8 +61,8 @@ def login_box(wrong=False):
                           "비밀번호 없이 바로 들어옵니다. 아니면 아래 비밀번호로 "
                           "들어간 뒤 회원 탭에서 지정해두세요."))
     if wrong:
-        out.append('<div class="note" style="border-left-color:#E02424">'
-                   '비밀번호가 맞지 않습니다.</div>')
+        out.append(render(ui.note, "비밀번호가 맞지 않습니다 — 다시 입력해주세요.",
+                          kind="error"))
     out.append('''
 <form class="search-box" method="post" action="/admin/login" style="max-width:460px">
   <div class="stTextInput"><input type="password" name="pw" placeholder="비밀번호"></div>
@@ -95,7 +95,9 @@ def members_view(flash=""):
     out = [render(ui.section, "관리자 콘솔", "회원 · 비용 · 사용량 한 화면에"),
            _subnav("members")]
     if flash:
-        out.append(f'<div class="kh-flash">{flash}</div>')
+        # 주소창으로 들어오는 글이라 반드시 이스케이프 (누구나 링크를 만들 수 있다)
+        from html import escape as _e
+        out.append(render(ui.note, _e(flash)))
     if not accounts.table_ready():
         out.append(render(ui.pitch, "회원 테이블이 아직 없습니다",
                           "SQL 한 번만 실행하면 됩니다",

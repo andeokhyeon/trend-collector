@@ -50,30 +50,42 @@ def _pills(base, param, options, chosen):
     return "".join(out)
 
 
-def _empty_note(df, source, label=""):
-    """왜 비었는지 알려준다 (app.py empty_note)."""
+def _empty_note(df, source, label="", actions=None):
+    """왜 비었는지 알려준다 (app.py empty_note).
+
+    actions: [(글자, 주소)] — '기간 넓히기' 알약. 호출부가 지금 기간보다 긴 것만 넘긴다.
+    """
     all_rows = df[df['source'] == source] if not df.empty else df
     if all_rows.empty:
         return render(ui.note,
                       f"아직 {label or '이 항목'} 데이터가 없습니다 — "
-                      "다음 수집 회차에 자동으로 채워집니다.")
+                      "다음 수집 회차에 자동으로 채워집니다.", kind="wait")
     last = all_rows['created_at_dt'].max()
     mins = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
     ago = f"{mins}분 전" if mins < 120 else f"{mins // 60}시간 전"
     return render(ui.note,
-                  f"이 기간에는 수집된 것이 없습니다 (최근 수집 <b>{ago}</b>) — "
-                  "위에서 기간을 넓혀보세요.", True)
+                  f"마지막 수집 <b>{ago}</b> · "
+                  + ("더 긴 기간으로 보면 나옵니다." if actions else "위에서 기간을 넓혀보세요."),
+                  kind="wait", title="이 기간에는 새로 수집된 게 없어요",
+                  actions=actions)
+
+
+def _wider(base, options, current, param="p"):
+    """지금 기간보다 긴 기간들 → 빈 상태 카드의 알약 버튼."""
+    opts = list(options)
+    rest = opts[opts.index(current) + 1:] if current in opts else []
+    return [(f"{o} 보기", f"{base}&{param}={quote(o)}") for o in rest[:2]]
 
 
 def _render_table(df_all, data, sort_col='총 검색량', extra_cols=None, limit=30,
                   show_docs=True, show_volume=True, source=None, label="",
-                  empty_msg=None, lead_cols=None):
+                  empty_msg=None, lead_cols=None, empty_actions=None):
     """app.py render_table 이식 — HTML을 돌려준다."""
     if data.empty:
         if empty_msg:
-            return render(ui.note, empty_msg)
+            return render(ui.note, empty_msg, actions=empty_actions)
         if source:
-            return _empty_note(df_all, source, label)
+            return _empty_note(df_all, source, label, empty_actions)
         return render(ui.note, "아직 수집된 데이터가 없습니다.")
     d = data.sort_values(by=sort_col, ascending=False).head(limit)
     d = d.reset_index(drop=True)
@@ -121,17 +133,18 @@ def build_money(period="일별", part="전체"):
            _pills("/discover?v=money&t=" + quote(part), "p",
                   PERIOD_SETS["slow"], period)]
 
-    EMPTY = "아직 볼 수 있는 키워드가 없습니다. 수집기가 한 번 돌면 채워집니다."
+    EMPTY = "아직 볼 수 있는 키워드가 없습니다 — 수집기가 한 번 돌면 채워집니다."
+    MORE = _wider("/discover?v=money&t=" + quote(part), PERIOD_SETS["slow"], period)
     # ⚠️ 수집 데이터가 아예 없을 때 열 이름을 찾으면 터진다 — 먼저 막는다
     if df.empty or '총 검색량' not in df.columns:
-        out.append(render(ui.note, EMPTY))
+        out.append(render(ui.note, EMPTY, actions=MORE))
         return "".join(out)
 
     # 최근 수집분 전체에서 검색량이 있는 것만 — 뉴스는 키워드가 아니라 제외
     pool = df[(df['source'] != 'naver_news') & (df['총 검색량'].fillna(0) > 0)]
     pool = db.latest_snapshot(pool, hours=h)
     if pool.empty:
-        out.append(render(ui.note, EMPTY))
+        out.append(render(ui.note, EMPTY, actions=MORE))
         return "".join(out)
 
     # 단가 조회는 배치로 한 번에 (6시간 캐시). 너무 많이 물으면 느려지니 상위 120개.
@@ -146,7 +159,7 @@ def build_money(period="일별", part="전체"):
     pool['광고단가'] = pool['keyword'].map(bids)
     pool = pool[pool['광고단가'].notna() & (pool['광고단가'] > 0)]
     if pool.empty:
-        out.append(render(ui.note, EMPTY))
+        out.append(render(ui.note, EMPTY, actions=MORE))
         return "".join(out)
     pool['판정'] = [calc_money_verdict(row['광고단가'], row['총 검색량'])['label']
                   for _, row in pool.iterrows()]
@@ -176,7 +189,7 @@ def build_money(period="일별", part="전체"):
         df, data, sort_col='광고단가', limit=lim,
         lead_cols=[('광고단가', '클릭단가(원)')],
         extra_cols=[('판정', '판정')],
-        empty_msg=EMPTY))
+        empty_msg=EMPTY, empty_actions=MORE))
     out.append(render(ui.tip,
                       "단가 = 네이버 검색광고 <b>최소노출입찰가</b> · "
                       "목록 보기는 크레딧이 들지 않습니다."))
@@ -190,7 +203,8 @@ def build_trend(period="최근"):
            _pills("/discover?v=trend", "p", PERIOD_SETS["trend"], period)]
     out.append(_render_table(
         df, db.latest_snapshot(df[df['source'] == 'google_trend'], hours=hours),
-        show_docs=False, source='google_trend', label="구글 트렌드"))
+        show_docs=False, source='google_trend', label="구글 트렌드",
+        empty_actions=_wider("/discover?v=trend", PERIOD_SETS["trend"], period)))
     return "".join(out)
 
 
@@ -214,15 +228,18 @@ def build_golden(period="6시간", part="전체"):
                   "<b>비싼 순</b>으로 세웁니다. 뜰 때 먼저 쓰는 게 이 탭의 쓰임입니다."),
            _pills(f"/discover?v=golden&t={quote(part)}", "p",
                   PERIOD_SETS["slow"], period)]
-    EMPTY = "이 기간에 뜬 검색어 중 단가가 붙은 것이 없습니다 — 기간을 넓혀보세요."
+    EMPTY = "이 기간에 뜬 검색어 중 단가가 붙은 게 없어요 — 더 긴 기간으로 보면 나옵니다."
+    MORE = _wider(f"/discover?v=golden&t={quote(part)}", PERIOD_SETS["slow"], period)
     if df.empty or '총 검색량' not in df.columns:
-        out.append(render(ui.note, EMPTY))
+        out.append(render(ui.note, EMPTY, actions=MORE))
         return "".join(out)
     src = df[df['source'].isin(['google_trend', 'golden_time'])
              & (df['총 검색량'].fillna(0) > 0)]
     pool = db.latest_snapshot(src, hours=h)
     if pool.empty:
-        out.append(_empty_note(df, 'google_trend', "골든타임"))
+        out.append(_empty_note(df, 'google_trend', "골든타임",
+                               _wider(f"/discover?v=golden&t={quote(part)}",
+                                      PERIOD_SETS["slow"], period)))
         return "".join(out)
     pool = pool.sort_values('총 검색량', ascending=False).head(100)
     bids = db.cached_min_bids(tuple(pool['keyword'].tolist())) or {}
@@ -233,7 +250,7 @@ def build_golden(period="6시간", part="전체"):
     pool['광고단가'] = pool['keyword'].map(bids)
     pool = pool[pool['광고단가'].notna() & (pool['광고단가'] > 0)]
     if pool.empty:
-        out.append(render(ui.note, EMPTY))
+        out.append(render(ui.note, EMPTY, actions=MORE))
         return "".join(out)
     pool['광고단가'] = pool['광고단가'].astype(int)
     pool['판정'] = [calc_money_verdict(row['광고단가'], row['총 검색량'])['label']
@@ -255,7 +272,7 @@ def build_golden(period="6시간", part="전체"):
             else pool[~is_trend] if chosen == "파생 키워드" else pool)
     out.append(_render_table(df, data, sort_col='광고단가', limit=30,
                              lead_cols=[('광고단가', '클릭단가(원)')],
-                             extra_cols=[('판정', '판정')], empty_msg=EMPTY))
+                             extra_cols=[('판정', '판정')], empty_msg=EMPTY, empty_actions=MORE))
     out.append(render(ui.tip, "단가 = 네이버 검색광고 <b>최소노출입찰가</b> · "
                               "목록 보기는 크레딧이 들지 않습니다."))
     return "".join(out)

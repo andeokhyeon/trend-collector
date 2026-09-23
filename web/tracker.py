@@ -169,7 +169,9 @@ def build(uid, my_blog_id="", detail_kw="", flash="", ai=False):
     out = [render(ui.section, "관심 키워드",
                   "찍어둔 키워드의 검색량을 매일 기록하고, 지금 단가와 함께 보여줍니다")]
     if flash:
-        out.append(f'<div class="kh-flash">{_esc(flash)}</div>')
+        # 한도 안내면 요금 화면으로 가는 버튼을 붙인다
+        act = [("요금 안내 보기", "/pricing")] if "플랜" in flash else None
+        out.append(render(ui.note, _esc(flash), actions=act))
 
     out.append('''
 <form class="search-box kh-track-add" method="post" action="/tracker/add">

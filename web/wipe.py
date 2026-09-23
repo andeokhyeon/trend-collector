@@ -25,7 +25,7 @@ def confirm_page(prof, tracked_count=0):
         f'<p class="wd-warn"><b>{name}</b>님, 탈퇴하면 아래 정보가 '
         '<b>즉시 영구 삭제</b>되며 복구할 수 없습니다.</p>'
         '<ul class="wd-list">'
-        f'<li>추적 중인 키워드 <b>{tracked_count}개</b>와 그동안 쌓인 기록</li>'
+        f'<li>관심 키워드 <b>{tracked_count}개</b>와 그동안 쌓인 기록</li>'
         f'<li>남은 크레딧 <b>{credits:,}개</b> (환불되지 않습니다)</li>'
         '<li>등록한 블로그 주소와 계정 정보</li>'
         '<li>카카오 계정 연결 (자동 해제) · 구글 연결은 '
