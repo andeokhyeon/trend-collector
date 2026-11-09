@@ -866,3 +866,18 @@ def csv_rank(request: Request, q: str = ""):
     r = analyze_keyword(q.strip(), with_recent=False)
     df = _an.money_related(r.get("related") or [])
     return _csv(df, f"돈되는연관키워드_{q.strip()}")
+
+
+# ------------------------------------------------------------
+# 관제탑(ops) 운영 요약 — 비밀키로만 열린다 (web/ops_summary.py)
+# ------------------------------------------------------------
+@app.get("/api/ops/summary")
+def ops_summary(request: Request):
+    from fastapi.responses import JSONResponse
+    import ops_summary as _ops
+    if not _ops.authorized(request.headers.get("authorization", "")):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        return JSONResponse(_ops.build(), headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)[:200]}, status_code=500)
